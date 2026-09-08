@@ -5,6 +5,7 @@ import {
 	loadRecipes,
 	saveRecipe,
 	setExpandedRecipe,
+	toggleFavoriteRecipe,
 	toStoredRecipe,
 	updateRecipe,
 } from "./recipes-storage";
@@ -33,6 +34,7 @@ describe("toStoredRecipe", () => {
 		expect(recipe.difficulty).toBe("quick_and_easy");
 		expect(recipe.estimatedMinutes).toBe(25);
 		expect(recipe.expanded).toBe(false);
+		expect(recipe.favorite).toBe(false);
 		expect(recipe.ingredients[0]).toMatchObject({
 			text: "shrimp",
 			quantity: 300,
@@ -124,6 +126,20 @@ describe("loadRecipes / saveRecipe", () => {
 		expect(loaded[0].difficulty).toBeUndefined();
 		expect(loaded[0].estimatedMinutes).toBeUndefined();
 	});
+
+	it("defaults favorite to false for recipes saved before it existed", () => {
+		const legacyRecipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const { favorite, ...withoutFavorite } = legacyRecipe;
+		window.localStorage.setItem(
+			"cookerist:recipes",
+			JSON.stringify([withoutFavorite]),
+		);
+
+		const loaded = loadRecipes();
+
+		expect(loaded).toHaveLength(1);
+		expect(loaded[0].favorite).toBe(false);
+	});
 });
 
 describe("deleteRecipe", () => {
@@ -190,5 +206,37 @@ describe("setExpandedRecipe", () => {
 		const result = setExpandedRecipe(null);
 
 		expect(result.every((r) => r.expanded === false)).toBe(true);
+	});
+});
+
+describe("toggleFavoriteRecipe", () => {
+	it("flips the matching recipe's favorite state and persists it", () => {
+		const first = toStoredRecipe("first prompt", recipeInput);
+		const second = toStoredRecipe("second prompt", recipeInput);
+		saveRecipe(first);
+		saveRecipe(second);
+
+		const result = toggleFavoriteRecipe(first.id);
+
+		expect(result.find((r) => r.id === first.id)?.favorite).toBe(true);
+		expect(result.find((r) => r.id === second.id)?.favorite).toBe(false);
+		expect(loadRecipes()).toEqual(result);
+	});
+
+	it("toggles back to false on a second call", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		saveRecipe(recipe);
+
+		toggleFavoriteRecipe(recipe.id);
+		const result = toggleFavoriteRecipe(recipe.id);
+
+		expect(result[0].favorite).toBe(false);
+	});
+
+	it("is a no-op when the id isn't found", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		saveRecipe(recipe);
+
+		expect(toggleFavoriteRecipe("not-a-real-id")).toEqual([recipe]);
 	});
 });

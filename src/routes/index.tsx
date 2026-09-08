@@ -15,6 +15,7 @@ import {
 	loadRecipes,
 	saveRecipe,
 	setExpandedRecipe,
+	toggleFavoriteRecipe,
 	toStoredRecipe,
 	updateRecipe,
 } from "#/lib/recipes-storage";
@@ -67,6 +68,10 @@ export function Home() {
 
 	function handleUpdateRecipe(recipe: Recipe) {
 		setRecipes(updateRecipe(recipe));
+	}
+
+	function handleToggleFavorite(id: string) {
+		setRecipes(toggleFavoriteRecipe(id));
 	}
 
 	function submit(prompt: string, replaceId?: string) {
@@ -159,6 +164,7 @@ export function Home() {
 									recipe={recipe}
 									onDelete={handleDelete}
 									onToggleExpand={handleToggleExpand}
+									onToggleFavorite={handleToggleFavorite}
 									onUpdate={handleUpdateRecipe}
 								/>
 							))

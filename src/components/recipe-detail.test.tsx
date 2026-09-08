@@ -28,6 +28,7 @@ const baseRecipe: Recipe = {
 		{ id: "step-3", section: "Cook", text: "Saute garlic", checked: false },
 	],
 	expanded: true,
+	favorite: false,
 };
 
 describe("RecipeDetail", () => {

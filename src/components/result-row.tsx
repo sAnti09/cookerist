@@ -1,4 +1,4 @@
-import { Clock, Flame, Trash2 } from "lucide-react";
+import { ChevronDown, Clock, Flame, Star, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { RecipeDetail } from "#/components/recipe-detail";
 import { Button } from "#/components/ui/button";
@@ -52,11 +52,13 @@ export function RecipeResultRow({
 	recipe,
 	onDelete,
 	onToggleExpand,
+	onToggleFavorite,
 	onUpdate,
 }: {
 	recipe: Recipe;
 	onDelete: (id: string) => void;
 	onToggleExpand: (id: string) => void;
+	onToggleFavorite: (id: string) => void;
 	onUpdate: (recipe: Recipe) => void;
 }) {
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -69,16 +71,24 @@ export function RecipeResultRow({
 	return (
 		<div
 			className={cn(
-				"card cursor-pointer p-4 transition-colors",
+				"group card cursor-pointer p-4 transition-colors",
 				recipe.expanded ? "bg-bg2" : "bg-card hover:bg-bg2",
 			)}
 		>
 			<div className="flex items-start justify-between gap-3">
-				<button
-					type="button"
+				{/* biome-ignore lint/a11y/useSemanticElements: a nested <button> (favorite) can't live inside a <button> */}
+				<div
+					role="button"
+					tabIndex={0}
 					className="flex-1 cursor-pointer text-left"
 					aria-expanded={recipe.expanded}
 					onClick={() => onToggleExpand(recipe.id)}
+					onKeyDown={(event) => {
+						if (event.key === "Enter" || event.key === " ") {
+							event.preventDefault();
+							onToggleExpand(recipe.id);
+						}
+					}}
 				>
 					<h3 className="display-title text-lg">{recipe.title}</h3>
 					<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
@@ -92,16 +102,69 @@ export function RecipeResultRow({
 								{formatEstimatedTime(recipe.estimatedMinutes)}
 							</span>
 						) : null}
+						<Button
+							variant="secondary"
+							className={cn(
+								"group/favorite shrink-0 rounded-[10px] p-1 transition-opacity",
+								!recipe.expanded &&
+									!recipe.favorite &&
+									"opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+							)}
+							aria-label={
+								recipe.favorite
+									? `Unfavorite ${recipe.title}`
+									: `Favorite ${recipe.title}`
+							}
+							aria-pressed={recipe.favorite}
+							onClick={(event) => {
+								event.stopPropagation();
+								onToggleFavorite(recipe.id);
+							}}
+						>
+							<Star
+								className={cn(
+									"size-3 transition-colors",
+									recipe.favorite
+										? "fill-accent text-accent"
+										: "text-ink-dim group-hover/favorite:text-accent",
+								)}
+							/>
+						</Button>
 					</div>
-				</button>
-				<Button
-					variant="secondary"
-					className="group shrink-0 rounded-[10px] px-2"
-					aria-label={`Delete ${recipe.title}`}
-					onClick={() => setConfirmingDelete(true)}
+				</div>
+				<div
+					className={cn(
+						"flex shrink-0 items-center gap-1",
+						!recipe.expanded &&
+							"opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
+					)}
 				>
-					<Trash2 className="size-4 text-ink-dim transition-colors group-hover:text-warn" />
-				</Button>
+					<Button
+						variant="secondary"
+						className="group/delete shrink-0 rounded-[10px] px-2"
+						aria-label={`Delete ${recipe.title}`}
+						onClick={() => setConfirmingDelete(true)}
+					>
+						<Trash2 className="size-4 text-ink-dim transition-colors group-hover/delete:text-warn" />
+					</Button>
+					<Button
+						variant="secondary"
+						className="shrink-0 rounded-[10px] px-2"
+						aria-label={
+							recipe.expanded
+								? `Collapse ${recipe.title}`
+								: `Expand ${recipe.title}`
+						}
+						onClick={() => onToggleExpand(recipe.id)}
+					>
+						<ChevronDown
+							className={cn(
+								"size-4 text-ink-dim transition-transform",
+								recipe.expanded && "rotate-180",
+							)}
+						/>
+					</Button>
+				</div>
 			</div>
 			{recipe.expanded ? (
 				<div className="mt-4 border-line border-t pt-4">

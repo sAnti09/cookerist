@@ -35,6 +35,7 @@ export type Recipe = {
 	ingredients: Ingredient[];
 	steps: Step[];
 	expanded: boolean;
+	favorite: boolean;
 };
 
 export function formatEstimatedTime(minutes: number): string {

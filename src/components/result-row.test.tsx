@@ -20,6 +20,7 @@ const recipe: Recipe = {
 		{ id: "step-1", section: null, text: "Cook the pasta.", checked: false },
 	],
 	expanded: false,
+	favorite: false,
 };
 
 function renderRow(
@@ -29,6 +30,7 @@ function renderRow(
 		recipe,
 		onDelete: vi.fn(),
 		onToggleExpand: vi.fn(),
+		onToggleFavorite: vi.fn(),
 		onUpdate: vi.fn(),
 		...overrides,
 	};
@@ -75,6 +77,98 @@ describe("RecipeResultRow", () => {
 		await user.click(screen.getByRole("button", { name: /^Garlic Butter/i }));
 
 		expect(props.onToggleExpand).toHaveBeenCalledWith(recipe.id);
+	});
+
+	it("calls onToggleExpand when the header is activated with the keyboard", async () => {
+		const user = userEvent.setup();
+		const { props } = renderRow();
+
+		screen.getByRole("button", { name: /^Garlic Butter/i }).focus();
+		await user.keyboard("{Enter}");
+		await user.keyboard(" ");
+
+		expect(props.onToggleExpand).toHaveBeenCalledTimes(2);
+		expect(props.onToggleExpand).toHaveBeenCalledWith(recipe.id);
+	});
+
+	it("calls onToggleExpand with the recipe id when the expand icon is clicked", async () => {
+		const user = userEvent.setup();
+		const { props } = renderRow();
+
+		await user.click(
+			screen.getByRole("button", { name: `Expand ${recipe.title}` }),
+		);
+
+		expect(props.onToggleExpand).toHaveBeenCalledWith(recipe.id);
+	});
+
+	it("labels the icon as collapse, and hides it from hover-only visibility, once expanded", () => {
+		renderRow({ recipe: { ...recipe, expanded: true } });
+
+		const collapseButton = screen.getByRole("button", {
+			name: `Collapse ${recipe.title}`,
+		});
+		expect(collapseButton).toBeInTheDocument();
+		expect(collapseButton.parentElement).not.toHaveClass("opacity-0");
+	});
+
+	it("only reveals the delete and expand controls on hover while collapsed", () => {
+		renderRow();
+
+		const expandButton = screen.getByRole("button", {
+			name: `Expand ${recipe.title}`,
+		});
+		expect(expandButton.parentElement).toHaveClass("opacity-0");
+	});
+
+	it("calls onToggleFavorite with the recipe id when the favorite icon is clicked, without expanding or deleting", async () => {
+		const user = userEvent.setup();
+		const { props } = renderRow();
+
+		await user.click(
+			screen.getByRole("button", { name: `Favorite ${recipe.title}` }),
+		);
+
+		expect(props.onToggleFavorite).toHaveBeenCalledWith(recipe.id);
+		expect(props.onToggleExpand).not.toHaveBeenCalled();
+		expect(props.onDelete).not.toHaveBeenCalled();
+	});
+
+	it("shows a distinct filled indicator and unfavorite label once a recipe is favorited", () => {
+		renderRow({ recipe: { ...recipe, favorite: true } });
+
+		const favoriteButton = screen.getByRole("button", {
+			name: `Unfavorite ${recipe.title}`,
+		});
+		expect(favoriteButton).toHaveAttribute("aria-pressed", "true");
+		expect(favoriteButton.querySelector("svg")).toHaveClass("fill-accent");
+	});
+
+	it("hides the favorite control behind hover while collapsed and not yet favorited", () => {
+		renderRow();
+
+		const favoriteButton = screen.getByRole("button", {
+			name: `Favorite ${recipe.title}`,
+		});
+		expect(favoriteButton).toHaveClass("opacity-0");
+	});
+
+	it("keeps the favorite control visible without hovering once favorited", () => {
+		renderRow({ recipe: { ...recipe, favorite: true } });
+
+		const favoriteButton = screen.getByRole("button", {
+			name: `Unfavorite ${recipe.title}`,
+		});
+		expect(favoriteButton).not.toHaveClass("opacity-0");
+	});
+
+	it("keeps the favorite control visible without hovering once expanded", () => {
+		renderRow({ recipe: { ...recipe, expanded: true } });
+
+		const favoriteButton = screen.getByRole("button", {
+			name: `Favorite ${recipe.title}`,
+		});
+		expect(favoriteButton).not.toHaveClass("opacity-0");
 	});
 
 	it("renders the full recipe detail when expanded", () => {
