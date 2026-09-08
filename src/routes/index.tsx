@@ -127,6 +127,10 @@ export function Home() {
 		setGroceryLists(setExpandedGroceryList(list?.expanded ? null : id));
 	}
 
+	function handleUpdateGroceryList(list: GroceryList) {
+		setGroceryLists(updateGroceryList(list));
+	}
+
 	function handleCreateGroceryList() {
 		setCreatingGroceryList(true);
 	}
@@ -326,6 +330,7 @@ export function Home() {
 								onDelete={handleDeleteGroceryList}
 								onEdit={handleEditGroceryList}
 								onToggleExpand={handleToggleExpandGroceryList}
+								onUpdate={handleUpdateGroceryList}
 							/>
 						))
 					)}

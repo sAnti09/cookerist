@@ -64,6 +64,7 @@ function renderRow(
 		onDelete: vi.fn(),
 		onEdit: vi.fn(),
 		onToggleExpand: vi.fn(),
+		onUpdate: vi.fn(),
 		...overrides,
 	};
 	return { ...render(<GroceryListRow {...props} />), props };
@@ -135,15 +136,13 @@ describe("GroceryListRow", () => {
 	it("does not render the detail view when collapsed", () => {
 		renderRow();
 
-		expect(
-			screen.queryByText(/detail is coming soon/i),
-		).not.toBeInTheDocument();
+		expect(screen.queryByText("Items")).not.toBeInTheDocument();
 	});
 
-	it("renders a detail placeholder when expanded", () => {
+	it("renders the detail view when expanded", () => {
 		renderRow({ list: { ...list, expanded: true } });
 
-		expect(screen.getByText(/detail is coming soon/i)).toBeInTheDocument();
+		expect(screen.getByText("Items")).toBeInTheDocument();
 	});
 
 	it("calls onToggleExpand with the list id when the header is clicked", async () => {
@@ -238,5 +237,27 @@ describe("GroceryListRow", () => {
 		await user.click(screen.getByRole("button", { name: `Edit ${list.name}` }));
 
 		expect(props.onEdit).toHaveBeenCalledWith(list);
+	});
+
+	it("calls onToggleExpand when the progress bar row is clicked", async () => {
+		const user = userEvent.setup();
+		const { props } = renderRow();
+
+		await user.click(screen.getByText("0/2 checked"));
+
+		expect(props.onToggleExpand).toHaveBeenCalledWith(list.id);
+	});
+
+	it("passes item updates from the detail view through to onUpdate", async () => {
+		const user = userEvent.setup();
+		const { props } = renderRow({ list: { ...list, expanded: true } });
+
+		await user.click(screen.getByLabelText("Check all"));
+
+		expect(props.onUpdate).toHaveBeenCalledWith({
+			...list,
+			expanded: true,
+			items: list.items.map((item) => ({ ...item, checked: true })),
+		});
 	});
 });

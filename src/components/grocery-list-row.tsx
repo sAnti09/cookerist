@@ -1,5 +1,6 @@
 import { ChevronDown, CircleCheck, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { GroceryListDetail } from "#/components/grocery-list-detail";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { type GroceryList, getGroceryListProgress } from "#/lib/grocery-list";
@@ -16,12 +17,14 @@ export function GroceryListRow({
 	onDelete,
 	onEdit,
 	onToggleExpand,
+	onUpdate,
 }: {
 	list: GroceryList;
 	recipes: Recipe[];
 	onDelete: (id: string) => void;
 	onEdit: (list: GroceryList) => void;
 	onToggleExpand: (id: string) => void;
+	onUpdate: (list: GroceryList) => void;
 }) {
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const { checked, total, percent, completed } = getGroceryListProgress(list);
@@ -137,9 +140,11 @@ export function GroceryListRow({
 			</button>
 			{list.expanded ? (
 				<div className="mt-4 border-line border-t pt-4">
-					<p className="text-sm text-ink-dim">
-						Full grocery list detail is coming soon.
-					</p>
+					<GroceryListDetail
+						list={list}
+						recipes={recipes}
+						onUpdate={onUpdate}
+					/>
 				</div>
 			) : null}
 			<ConfirmDialog

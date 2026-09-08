@@ -633,21 +633,17 @@ describe("Home", () => {
 			const user = userEvent.setup();
 
 			await user.click(screen.getByRole("button", { name: "Grocery lists" }));
-			expect(
-				screen.queryByText(/detail is coming soon/i),
-			).not.toBeInTheDocument();
+			expect(screen.queryByText("Items")).not.toBeInTheDocument();
 
 			await user.click(
 				screen.getByRole("button", { name: /^Weeknight Groceries/ }),
 			);
-			expect(screen.getByText(/detail is coming soon/i)).toBeInTheDocument();
+			expect(screen.getByText("Items")).toBeInTheDocument();
 
 			await user.click(
 				screen.getByRole("button", { name: /^Weeknight Groceries/ }),
 			);
-			expect(
-				screen.queryByText(/detail is coming soon/i),
-			).not.toBeInTheDocument();
+			expect(screen.queryByText("Items")).not.toBeInTheDocument();
 		});
 
 		it("only keeps one grocery list row expanded at a time and persists it", async () => {
@@ -662,7 +658,7 @@ describe("Home", () => {
 			await user.click(screen.getByRole("button", { name: /^First List/ }));
 			await user.click(screen.getByRole("button", { name: /^Second List/ }));
 
-			expect(screen.getAllByText(/detail is coming soon/i)).toHaveLength(1);
+			expect(screen.getAllByText("Items")).toHaveLength(1);
 			expect(
 				JSON.parse(
 					window.localStorage.getItem("cookerist:grocery-lists") ?? "[]",
