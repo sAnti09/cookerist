@@ -15,6 +15,8 @@ const RECIPE_SYSTEM_PROMPT = `You are a recipe generator. Given a user's request
   "title": string,
   "overview": string (1-2 sentence description of the dish),
   "baseServings": number (servings this recipe is written for),
+  "difficulty": "quick_and_easy" | "intermediate" | "hard" (how difficult the dish is to make),
+  "estimatedMinutes": number (total time to go from start to finished dish, in minutes),
   "ingredients": [ { "text": string (ingredient name, e.g. "garlic, minced"), "quantity": number, "unit": string (e.g. "cloves", "g", "cups"; use "" if unitless) } ],
   "steps": [ { "section": string | null (e.g. "Prep", "Cook", "Plate"; null if the recipe doesn't warrant grouping), "text": string } ]
 }

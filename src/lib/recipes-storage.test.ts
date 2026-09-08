@@ -13,6 +13,8 @@ const recipeInput: RecipeResponse = {
 	title: "Garlic Butter Shrimp Pasta",
 	overview: "A quick, creamy shrimp pasta.",
 	baseServings: 2,
+	difficulty: "quick_and_easy",
+	estimatedMinutes: 25,
 	ingredients: [{ text: "shrimp", quantity: 300, unit: "g" }],
 	steps: [{ section: null, text: "Cook the pasta." }],
 };
@@ -28,6 +30,8 @@ describe("toStoredRecipe", () => {
 		expect(recipe.prompt).toBe("shrimp pasta for 2");
 		expect(recipe.title).toBe(recipeInput.title);
 		expect(recipe.currentServings).toBe(recipeInput.baseServings);
+		expect(recipe.difficulty).toBe("quick_and_easy");
+		expect(recipe.estimatedMinutes).toBe(25);
 		expect(recipe.expanded).toBe(false);
 		expect(recipe.ingredients[0]).toMatchObject({
 			text: "shrimp",
@@ -104,6 +108,21 @@ describe("loadRecipes / saveRecipe", () => {
 		);
 
 		expect(loadRecipes()).toEqual([]);
+	});
+
+	it("loads pre-existing recipes saved before difficulty/estimatedMinutes existed", () => {
+		const legacyRecipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const { difficulty, estimatedMinutes, ...withoutNewFields } = legacyRecipe;
+		window.localStorage.setItem(
+			"cookerist:recipes",
+			JSON.stringify([withoutNewFields]),
+		);
+
+		const loaded = loadRecipes();
+
+		expect(loaded).toHaveLength(1);
+		expect(loaded[0].difficulty).toBeUndefined();
+		expect(loaded[0].estimatedMinutes).toBeUndefined();
 	});
 });
 

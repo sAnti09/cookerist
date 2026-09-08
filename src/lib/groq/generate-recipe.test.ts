@@ -17,6 +17,8 @@ const validRecipe = {
 	title: "Garlic Butter Shrimp Pasta",
 	overview: "A quick, creamy shrimp pasta.",
 	baseServings: 2,
+	difficulty: "quick_and_easy",
+	estimatedMinutes: 25,
 	ingredients: [{ text: "shrimp", quantity: 300, unit: "g" }],
 	steps: [{ section: null, text: "Cook the pasta." }],
 };
@@ -74,6 +76,36 @@ describe("generateRecipe", () => {
 			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
 			.mockResolvedValueOnce(
 				jsonResponse({ title: "Missing everything else" }),
+			);
+
+		const result = await generateRecipe("shrimp pasta for 2");
+
+		expect(result).toEqual({
+			type: "error",
+			message: "Malformed recipe response from Groq",
+		});
+	});
+
+	it("returns an error when the recipe response is missing difficulty/estimatedMinutes", async () => {
+		const { difficulty, estimatedMinutes, ...withoutNewFields } = validRecipe;
+
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(jsonResponse(withoutNewFields));
+
+		const result = await generateRecipe("shrimp pasta for 2");
+
+		expect(result).toEqual({
+			type: "error",
+			message: "Malformed recipe response from Groq",
+		});
+	});
+
+	it("returns an error when difficulty is not one of the known values", async () => {
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(
+				jsonResponse({ ...validRecipe, difficulty: "impossible" }),
 			);
 
 		const result = await generateRecipe("shrimp pasta for 2");

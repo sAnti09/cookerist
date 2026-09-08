@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Step } from "./recipe";
-import { groupSteps } from "./recipe";
+import { formatEstimatedTime, groupSteps } from "./recipe";
 
 function step(section: string | null, text: string): Step {
 	return { id: text, section, text, checked: false };
@@ -42,5 +42,19 @@ describe("groupSteps", () => {
 
 	it("returns an empty list for no steps", () => {
 		expect(groupSteps([])).toEqual([]);
+	});
+});
+
+describe("formatEstimatedTime", () => {
+	it("formats sub-hour durations as minutes", () => {
+		expect(formatEstimatedTime(25)).toBe("25 min");
+	});
+
+	it("formats exact hours without a minutes remainder", () => {
+		expect(formatEstimatedTime(120)).toBe("2 hr");
+	});
+
+	it("formats hours with a minutes remainder", () => {
+		expect(formatEstimatedTime(90)).toBe("1 hr 30 min");
 	});
 });

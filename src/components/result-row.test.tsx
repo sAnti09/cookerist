@@ -50,6 +50,24 @@ describe("RecipeResultRow", () => {
 		expect(screen.queryByText(recipe.overview)).not.toBeInTheDocument();
 	});
 
+	it("shows a difficulty badge and estimated time when present", () => {
+		renderRow({
+			recipe: { ...recipe, difficulty: "quick_and_easy", estimatedMinutes: 25 },
+		});
+
+		expect(screen.getByText("Quick & easy")).toBeInTheDocument();
+		expect(screen.getByText("25 min")).toBeInTheDocument();
+	});
+
+	it("shows no difficulty badge or time for recipes saved before TEST-229", () => {
+		renderRow();
+
+		expect(
+			screen.queryByText(/quick|intermediate|hard/i),
+		).not.toBeInTheDocument();
+		expect(screen.queryByText(/min$/)).not.toBeInTheDocument();
+	});
+
 	it("calls onToggleExpand with the recipe id when the header is clicked", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow();

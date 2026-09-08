@@ -1,9 +1,10 @@
-import { Flame, Trash2 } from "lucide-react";
+import { Clock, Flame, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { RecipeDetail } from "#/components/recipe-detail";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
-import type { Recipe } from "#/lib/recipe";
+import { DifficultyBadge } from "#/components/ui/difficulty-badge";
+import { formatEstimatedTime, type Recipe } from "#/lib/recipe";
 import { cn } from "#/lib/utils";
 
 export type PendingRow = {
@@ -80,7 +81,18 @@ export function RecipeResultRow({
 					onClick={() => onToggleExpand(recipe.id)}
 				>
 					<h3 className="display-title text-lg">{recipe.title}</h3>
-					<p className="mt-1 text-xs text-ink-dim">{date}</p>
+					<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
+						<span>{date}</span>
+						{recipe.difficulty ? (
+							<DifficultyBadge difficulty={recipe.difficulty} />
+						) : null}
+						{recipe.estimatedMinutes != null ? (
+							<span className="inline-flex items-center gap-1 tabular-nums">
+								<Clock className="size-3" aria-hidden="true" />
+								{formatEstimatedTime(recipe.estimatedMinutes)}
+							</span>
+						) : null}
+					</div>
 				</button>
 				<Button
 					variant="secondary"

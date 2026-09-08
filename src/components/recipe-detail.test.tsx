@@ -40,6 +40,18 @@ describe("RecipeDetail", () => {
 		expect(screen.getByText(/4 cloves garlic/)).toBeInTheDocument();
 	});
 
+	it("does not repeat the difficulty badge or estimated time (already shown on the collapsed row)", () => {
+		render(
+			<RecipeDetail
+				recipe={{ ...baseRecipe, difficulty: "hard", estimatedMinutes: 90 }}
+				onUpdate={vi.fn()}
+			/>,
+		);
+
+		expect(screen.queryByText("Hard")).not.toBeInTheDocument();
+		expect(screen.queryByText("1 hr 30 min")).not.toBeInTheDocument();
+	});
+
 	it("rescales ingredient quantities in real time when servings increase", async () => {
 		const onUpdate = vi.fn();
 		const user = userEvent.setup();

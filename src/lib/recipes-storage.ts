@@ -64,6 +64,8 @@ export function toStoredRecipe(prompt: string, input: RecipeResponse): Recipe {
 		overview: input.overview,
 		baseServings: input.baseServings,
 		currentServings: input.baseServings,
+		difficulty: input.difficulty,
+		estimatedMinutes: input.estimatedMinutes,
 		ingredients: input.ingredients.map((ingredient) => ({
 			id: crypto.randomUUID(),
 			text: ingredient.text,

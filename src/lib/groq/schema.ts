@@ -4,10 +4,18 @@ export const onTopicResponseSchema = z.object({
 	on_topic: z.boolean(),
 });
 
+export const difficultySchema = z.enum([
+	"quick_and_easy",
+	"intermediate",
+	"hard",
+]);
+
 export const recipeResponseSchema = z.object({
 	title: z.string().min(1),
 	overview: z.string().min(1),
 	baseServings: z.number().positive(),
+	difficulty: difficultySchema,
+	estimatedMinutes: z.number().positive(),
 	ingredients: z
 		.array(
 			z.object({
