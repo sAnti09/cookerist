@@ -79,6 +79,20 @@ function seedRecipes(count: number) {
 	}
 }
 
+function seedRecipe(overrides: {
+	title: string;
+	prompt?: string;
+	difficulty?: "quick_and_easy" | "intermediate" | "hard";
+	favorite?: boolean;
+}) {
+	const recipe = toStoredRecipe(overrides.prompt ?? "a prompt", {
+		...validRecipe,
+		title: overrides.title,
+		difficulty: overrides.difficulty ?? validRecipe.difficulty,
+	});
+	saveRecipe({ ...recipe, favorite: overrides.favorite ?? false });
+}
+
 describe("Home", () => {
 	it("renders the Cookerist heading", () => {
 		renderHome();
@@ -289,5 +303,150 @@ describe("Home", () => {
 		expect(stored.ingredients[0].checked).toBe(true);
 		expect(stored.currentServings).toBe(3);
 		expect(screen.getByText(/450 g shrimp/)).toBeInTheDocument();
+	});
+
+	describe("search and filters", () => {
+		it("filters the list by title or prompt, case-insensitively", async () => {
+			seedRecipe({ title: "Garlic Butter Shrimp Pasta" });
+			seedRecipe({ title: "Beef Tacos", prompt: "something for date night" });
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.type(screen.getByLabelText("Search recipes"), "SHRIMP");
+
+			expect(
+				screen.getByText("Garlic Butter Shrimp Pasta"),
+			).toBeInTheDocument();
+			expect(screen.queryByText("Beef Tacos")).not.toBeInTheDocument();
+
+			await user.clear(screen.getByLabelText("Search recipes"));
+			await user.type(screen.getByLabelText("Search recipes"), "date night");
+
+			expect(screen.getByText("Beef Tacos")).toBeInTheDocument();
+			expect(
+				screen.queryByText("Garlic Butter Shrimp Pasta"),
+			).not.toBeInTheDocument();
+		});
+
+		it("filters by difficulty, and 'All difficulties' clears it", async () => {
+			seedRecipe({ title: "Easy Dish", difficulty: "quick_and_easy" });
+			seedRecipe({ title: "Hard Dish", difficulty: "hard" });
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.selectOptions(
+				screen.getByLabelText("Filter by difficulty"),
+				"Hard",
+			);
+
+			expect(screen.getByText("Hard Dish")).toBeInTheDocument();
+			expect(screen.queryByText("Easy Dish")).not.toBeInTheDocument();
+
+			await user.selectOptions(
+				screen.getByLabelText("Filter by difficulty"),
+				"All difficulties",
+			);
+
+			expect(screen.getByText("Hard Dish")).toBeInTheDocument();
+			expect(screen.getByText("Easy Dish")).toBeInTheDocument();
+		});
+
+		it("filters to favorites only when the toggle is enabled", async () => {
+			seedRecipe({ title: "Favorited Dish", favorite: true });
+			seedRecipe({ title: "Regular Dish", favorite: false });
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "Favorites" }));
+
+			expect(screen.getByText("Favorited Dish")).toBeInTheDocument();
+			expect(screen.queryByText("Regular Dish")).not.toBeInTheDocument();
+
+			await user.click(screen.getByRole("button", { name: "Favorites" }));
+
+			expect(screen.getByText("Regular Dish")).toBeInTheDocument();
+		});
+
+		it("combines filters with AND logic", async () => {
+			seedRecipe({
+				title: "Garlic Shrimp Pasta",
+				difficulty: "quick_and_easy",
+				favorite: true,
+			});
+			seedRecipe({
+				title: "Garlic Shrimp Skillet",
+				difficulty: "hard",
+				favorite: true,
+			});
+			seedRecipe({
+				title: "Garlic Shrimp Bowl",
+				difficulty: "quick_and_easy",
+				favorite: false,
+			});
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.type(screen.getByLabelText("Search recipes"), "shrimp");
+			await user.selectOptions(
+				screen.getByLabelText("Filter by difficulty"),
+				"quick_and_easy",
+			);
+			await user.click(screen.getByRole("button", { name: "Favorites" }));
+
+			expect(screen.getByText("Garlic Shrimp Pasta")).toBeInTheDocument();
+			expect(
+				screen.queryByText("Garlic Shrimp Skillet"),
+			).not.toBeInTheDocument();
+			expect(screen.queryByText("Garlic Shrimp Bowl")).not.toBeInTheDocument();
+		});
+
+		it("shows a distinct empty state for no matches vs. no recipes at all", async () => {
+			seedRecipe({ title: "Garlic Shrimp Pasta" });
+			renderHome();
+			const user = userEvent.setup();
+
+			expect(screen.queryByText(/no recipes yet/i)).not.toBeInTheDocument();
+
+			await user.type(screen.getByLabelText("Search recipes"), "tacos");
+
+			expect(
+				screen.getByText(/no recipes match your filters/i),
+			).toBeInTheDocument();
+			expect(screen.queryByText(/no recipes yet/i)).not.toBeInTheDocument();
+		});
+
+		it("clears all filters via the Clear filters control", async () => {
+			seedRecipe({ title: "Garlic Shrimp Pasta" });
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.type(screen.getByLabelText("Search recipes"), "tacos");
+			expect(
+				screen.getByText(/no recipes match your filters/i),
+			).toBeInTheDocument();
+
+			await user.click(screen.getByRole("button", { name: "Clear filters" }));
+
+			expect(screen.getByText("Garlic Shrimp Pasta")).toBeInTheDocument();
+			expect(
+				screen.queryByRole("button", { name: "Clear filters" }),
+			).not.toBeInTheDocument();
+		});
+
+		it("re-paginates from the filtered set rather than the full list", async () => {
+			seedRecipe({ title: "Beef Tacos" });
+			for (let i = 0; i < 12; i++) {
+				seedRecipe({ title: `Shrimp Dish ${i}` });
+			}
+			renderHome();
+			const user = userEvent.setup();
+
+			expect(screen.getAllByText(/^Shrimp Dish \d+$/)).toHaveLength(10);
+
+			await user.type(screen.getByLabelText("Search recipes"), "tacos");
+
+			expect(screen.getByText("Beef Tacos")).toBeInTheDocument();
+			expect(screen.queryByText(/^Shrimp Dish \d+$/)).not.toBeInTheDocument();
+		});
 	});
 });
