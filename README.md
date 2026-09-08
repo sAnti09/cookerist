@@ -1,6 +1,6 @@
 # Cookerist
 
-A single-page app that turns a cooking prompt into a structured recipe — ingredients (with adjustable servings) and step-by-step instructions, generated via Grok.
+A single-page app that turns a cooking prompt into a structured recipe — ingredients (with adjustable servings) and step-by-step instructions, generated via Groq.
 
 See [CLAUDE.md](./CLAUDE.md) for the full product spec, tech stack, and project conventions.
 
