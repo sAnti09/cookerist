@@ -4,7 +4,9 @@ import {
 	deleteRecipe,
 	loadRecipes,
 	saveRecipe,
+	setExpandedRecipe,
 	toStoredRecipe,
+	updateRecipe,
 } from "./recipes-storage";
 
 const recipeInput: RecipeResponse = {
@@ -123,5 +125,51 @@ describe("deleteRecipe", () => {
 		saveRecipe(recipe);
 
 		expect(deleteRecipe("not-a-real-id")).toEqual([recipe]);
+	});
+});
+
+describe("updateRecipe", () => {
+	it("replaces the matching recipe in place and persists it", () => {
+		const first = toStoredRecipe("first prompt", recipeInput);
+		const second = toStoredRecipe("second prompt", recipeInput);
+		saveRecipe(first);
+		saveRecipe(second);
+
+		const updatedFirst = { ...first, currentServings: 4 };
+		const result = updateRecipe(updatedFirst);
+
+		expect(result).toEqual([second, updatedFirst]);
+		expect(loadRecipes()).toEqual([second, updatedFirst]);
+	});
+
+	it("is a no-op when the id isn't found", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		saveRecipe(recipe);
+
+		expect(updateRecipe({ ...recipe, id: "not-a-real-id" })).toEqual([recipe]);
+	});
+});
+
+describe("setExpandedRecipe", () => {
+	it("expands the matching recipe and collapses every other one", () => {
+		const first = toStoredRecipe("first prompt", recipeInput);
+		const second = toStoredRecipe("second prompt", recipeInput);
+		saveRecipe({ ...first, expanded: true });
+		saveRecipe(second);
+
+		const result = setExpandedRecipe(second.id);
+
+		expect(result.find((r) => r.id === first.id)?.expanded).toBe(false);
+		expect(result.find((r) => r.id === second.id)?.expanded).toBe(true);
+		expect(loadRecipes()).toEqual(result);
+	});
+
+	it("collapses everything when passed null", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		saveRecipe({ ...recipe, expanded: true });
+
+		const result = setExpandedRecipe(null);
+
+		expect(result.every((r) => r.expanded === false)).toBe(true);
 	});
 });

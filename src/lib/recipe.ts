@@ -25,3 +25,21 @@ export type Recipe = {
 	steps: Step[];
 	expanded: boolean;
 };
+
+export type StepSection = {
+	name: string | null;
+	steps: Step[];
+};
+
+export function groupSteps(steps: Step[]): StepSection[] {
+	const sections: StepSection[] = [];
+	for (const step of steps) {
+		const last = sections[sections.length - 1];
+		if (last && last.name === step.section) {
+			last.steps.push(step);
+		} else {
+			sections.push({ name: step.section, steps: [step] });
+		}
+	}
+	return sections;
+}

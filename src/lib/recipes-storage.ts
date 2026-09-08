@@ -43,6 +43,18 @@ export function deleteRecipe(id: string): Recipe[] {
 	return next;
 }
 
+export function updateRecipe(recipe: Recipe): Recipe[] {
+	const next = loadRecipes().map((r) => (r.id === recipe.id ? recipe : r));
+	persist(next);
+	return next;
+}
+
+export function setExpandedRecipe(id: string | null): Recipe[] {
+	const next = loadRecipes().map((r) => ({ ...r, expanded: r.id === id }));
+	persist(next);
+	return next;
+}
+
 export function toStoredRecipe(prompt: string, input: RecipeResponse): Recipe {
 	return {
 		id: crypto.randomUUID(),

@@ -231,4 +231,61 @@ describe("Home", () => {
 		);
 		expect(await screen.findByText(/no recipes yet/i)).toBeInTheDocument();
 	});
+
+	it("expands a row in place and collapses it again on second click", async () => {
+		seedRecipes(1);
+		renderHome();
+		const user = userEvent.setup();
+
+		expect(
+			screen.queryByText("A quick, creamy shrimp pasta."),
+		).not.toBeInTheDocument();
+
+		await user.click(screen.getByRole("button", { name: /^Recipe 0/ }));
+		expect(
+			screen.getByText("A quick, creamy shrimp pasta."),
+		).toBeInTheDocument();
+
+		await user.click(screen.getByRole("button", { name: /^Recipe 0/ }));
+		expect(
+			screen.queryByText("A quick, creamy shrimp pasta."),
+		).not.toBeInTheDocument();
+	});
+
+	it("only keeps one row expanded at a time (accordion)", async () => {
+		seedRecipes(2);
+		renderHome();
+		const user = userEvent.setup();
+
+		await user.click(screen.getByRole("button", { name: /^Recipe 0/ }));
+		await user.click(screen.getByRole("button", { name: /^Recipe 1/ }));
+
+		const detailViews = screen.getAllByText("A quick, creamy shrimp pasta.");
+		expect(detailViews).toHaveLength(1);
+		expect(
+			JSON.parse(window.localStorage.getItem("cookerist:recipes") ?? "[]"),
+		).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ title: "Recipe 1", expanded: true }),
+				expect.objectContaining({ title: "Recipe 0", expanded: false }),
+			]),
+		);
+	});
+
+	it("persists checkbox and servings changes to localStorage immediately", async () => {
+		seedRecipes(1);
+		renderHome();
+		const user = userEvent.setup();
+
+		await user.click(screen.getByRole("button", { name: /^Recipe 0/ }));
+		await user.click(screen.getByText(/300 g shrimp/));
+		await user.click(screen.getByRole("button", { name: "Increase servings" }));
+
+		const [stored] = JSON.parse(
+			window.localStorage.getItem("cookerist:recipes") ?? "[]",
+		);
+		expect(stored.ingredients[0].checked).toBe(true);
+		expect(stored.currentServings).toBe(3);
+		expect(screen.getByText(/450 g shrimp/)).toBeInTheDocument();
+	});
 });

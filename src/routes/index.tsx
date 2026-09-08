@@ -12,7 +12,9 @@ import {
 	deleteRecipe,
 	loadRecipes,
 	saveRecipe,
+	setExpandedRecipe,
 	toStoredRecipe,
+	updateRecipe,
 } from "#/lib/recipes-storage";
 import { generateRecipe } from "#/server/generate-recipe";
 
@@ -54,6 +56,15 @@ export function Home() {
 
 	function handleDelete(id: string) {
 		setRecipes(deleteRecipe(id));
+	}
+
+	function handleToggleExpand(id: string) {
+		const recipe = recipes.find((r) => r.id === id);
+		setRecipes(setExpandedRecipe(recipe?.expanded ? null : id));
+	}
+
+	function handleUpdateRecipe(recipe: Recipe) {
+		setRecipes(updateRecipe(recipe));
 	}
 
 	function submit(prompt: string, replaceId?: string) {
@@ -121,6 +132,8 @@ export function Home() {
 								key={recipe.id}
 								recipe={recipe}
 								onDelete={handleDelete}
+								onToggleExpand={handleToggleExpand}
+								onUpdate={handleUpdateRecipe}
 							/>
 						))
 				)}
