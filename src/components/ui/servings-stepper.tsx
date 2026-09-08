@@ -36,7 +36,7 @@ export function ServingsStepper({
 				value={value}
 				onChange={handleInputChange}
 				aria-label="Servings"
-				className="w-12 border-0 bg-transparent text-center text-sm outline-none [appearance:textfield]"
+				className="w-12 border-0 bg-transparent text-center text-sm tabular-nums outline-none [appearance:textfield]"
 			/>
 			<Button
 				variant="secondary"

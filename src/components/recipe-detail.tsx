@@ -1,3 +1,4 @@
+import { Checkbox } from "#/components/ui/checkbox";
 import { ServingsStepper } from "#/components/ui/servings-stepper";
 import { groupSteps, type Recipe } from "#/lib/recipe";
 import { formatQuantity, scaleQuantity } from "#/lib/scale-servings";
@@ -46,11 +47,18 @@ export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
 	const allIngredientsChecked =
 		recipe.ingredients.length > 0 &&
 		recipe.ingredients.every((ingredient) => ingredient.checked);
+	const checkedCount = recipe.ingredients.filter(
+		(ingredient) => ingredient.checked,
+	).length;
+	const progressPercent =
+		recipe.ingredients.length > 0
+			? Math.round((checkedCount / recipe.ingredients.length) * 100)
+			: 0;
 	const sections = groupSteps(recipe.steps);
 
 	return (
 		<div className="flex flex-col gap-5">
-			<p className="text-sm text-muted-foreground">{recipe.prompt}</p>
+			<p className="text-sm text-ink-dim">{recipe.prompt}</p>
 			<p className="text-sm">{recipe.overview}</p>
 
 			<div className="flex items-center gap-3">
@@ -64,43 +72,53 @@ export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
 			<section>
 				<div className="flex items-center justify-between">
 					<h4 className="font-medium">Ingredients</h4>
-					<label className="flex items-center gap-2 text-sm">
-						<input
-							type="checkbox"
-							checked={allIngredientsChecked}
-							onChange={(event) =>
-								handleCheckAllIngredients(event.target.checked)
-							}
-						/>
-						Check all
-					</label>
+					<Checkbox
+						checked={allIngredientsChecked}
+						onChange={handleCheckAllIngredients}
+						label="Check all"
+					/>
 				</div>
-				<ul className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+				<div
+					role="progressbar"
+					aria-label="Ingredients checked"
+					aria-valuenow={progressPercent}
+					aria-valuemin={0}
+					aria-valuemax={100}
+					className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-bg2"
+				>
+					<div
+						className="h-full rounded-full bg-sage transition-[width] duration-300 ease-out"
+						style={{ width: `${progressPercent}%` }}
+					/>
+				</div>
+				<p className="mt-1 text-xs text-ink-dim tabular-nums">
+					{checkedCount}/{recipe.ingredients.length} checked
+				</p>
+				<ul className="mt-3 grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
 					{recipe.ingredients.map((ingredient) => (
 						<li key={ingredient.id}>
-							<label className="flex items-center gap-2 text-sm">
-								<input
-									type="checkbox"
-									checked={ingredient.checked}
-									onChange={() => handleToggleIngredient(ingredient.id)}
-								/>
-								<span
-									className={
-										ingredient.checked
-											? "text-muted-foreground line-through"
-											: undefined
-									}
-								>
-									{formatQuantity(
-										scaleQuantity(
-											ingredient.quantity,
-											recipe.baseServings,
-											recipe.currentServings,
-										),
-									)}{" "}
-									{ingredient.unit} {ingredient.text}
-								</span>
-							</label>
+							<Checkbox
+								checked={ingredient.checked}
+								onChange={() => handleToggleIngredient(ingredient.id)}
+								label={
+									<span
+										className={
+											ingredient.checked
+												? "tabular-nums text-ink-dim line-through"
+												: "tabular-nums"
+										}
+									>
+										{formatQuantity(
+											scaleQuantity(
+												ingredient.quantity,
+												recipe.baseServings,
+												recipe.currentServings,
+											),
+										)}{" "}
+										{ingredient.unit} {ingredient.text}
+									</span>
+								}
+							/>
 						</li>
 					))}
 				</ul>
@@ -119,23 +137,19 @@ export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
 						<ol className="mt-1 flex flex-col gap-2">
 							{section.steps.map((step) => (
 								<li key={step.id}>
-									<label className="flex items-start gap-2 text-sm">
-										<input
-											type="checkbox"
-											checked={step.checked}
-											className="mt-1"
-											onChange={() => handleToggleStep(step.id)}
-										/>
-										<span
-											className={
-												step.checked
-													? "text-muted-foreground line-through"
-													: undefined
-											}
-										>
-											{step.text}
-										</span>
-									</label>
+									<Checkbox
+										checked={step.checked}
+										onChange={() => handleToggleStep(step.id)}
+										label={
+											<span
+												className={
+													step.checked ? "text-ink-dim line-through" : undefined
+												}
+											>
+												{step.text}
+											</span>
+										}
+									/>
 								</li>
 							))}
 						</ol>

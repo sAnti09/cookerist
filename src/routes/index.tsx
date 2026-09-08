@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { Flame } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PromptForm } from "#/components/prompt-form";
 import {
@@ -7,6 +8,7 @@ import {
 	type PendingRow,
 	RecipeResultRow,
 } from "#/components/result-row";
+import { ThemeToggle } from "#/components/ui/theme-toggle";
 import type { Recipe } from "#/lib/recipe";
 import {
 	deleteRecipe,
@@ -106,39 +108,64 @@ export function Home() {
 	}
 
 	return (
-		<div className="mx-auto max-w-2xl p-8">
-			<h1 className="text-4xl font-bold">Cookerist</h1>
-			<p className="mt-4 text-lg text-muted-foreground">
-				Tell us what you want to cook, and get back the ingredients and steps.
-			</p>
-
-			<div className="mt-8">
-				<PromptForm onSubmit={submit} />
+		<>
+			<div className="sticky top-0 z-20 flex justify-end p-4">
+				<ThemeToggle />
 			</div>
-
-			<div className="mt-8 flex flex-col gap-3">
-				{pending.map((row) => (
-					<PendingResultRow key={row.localId} row={row} onRetry={submit} />
-				))}
-				{recipes.length === 0 && pending.length === 0 ? (
-					<p className="rounded-[18px] border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-						No recipes yet — describe a dish above to get started.
+			<div className="mx-auto max-w-2xl p-8 pt-0">
+				<div className="flex flex-col items-center text-center">
+					<h1 className="display-title flex items-center gap-2 text-4xl font-semibold text-ink">
+						<Flame
+							className="size-8 text-accent"
+							fill="currentColor"
+							aria-hidden="true"
+						/>
+						Cookerist
+					</h1>
+					<p className="mt-2 text-sm text-ink-dim">
+						Tell us what you want to cook — we'll handle the rest.
 					</p>
-				) : (
-					recipes
-						.slice(0, visibleCount)
-						.map((recipe) => (
-							<RecipeResultRow
-								key={recipe.id}
-								recipe={recipe}
-								onDelete={handleDelete}
-								onToggleExpand={handleToggleExpand}
-								onUpdate={handleUpdateRecipe}
-							/>
-						))
-				)}
-				{hasMore ? <div ref={sentinelRef} aria-hidden="true" /> : null}
+				</div>
+
+				<div className="mt-8">
+					<PromptForm onSubmit={submit} />
+				</div>
+
+				{recipes.length > 0 ? (
+					<h2 className="display-title mt-8 mb-4 text-xl font-semibold text-ink">
+						Your recipes
+					</h2>
+				) : null}
+				<div
+					className={
+						recipes.length > 0
+							? "flex flex-col gap-3"
+							: "mt-8 flex flex-col gap-3"
+					}
+				>
+					{pending.map((row) => (
+						<PendingResultRow key={row.localId} row={row} onRetry={submit} />
+					))}
+					{recipes.length === 0 && pending.length === 0 ? (
+						<p className="card border-dashed bg-card p-6 text-center text-sm text-ink-dim">
+							No recipes yet — describe a dish above to get started.
+						</p>
+					) : (
+						recipes
+							.slice(0, visibleCount)
+							.map((recipe) => (
+								<RecipeResultRow
+									key={recipe.id}
+									recipe={recipe}
+									onDelete={handleDelete}
+									onToggleExpand={handleToggleExpand}
+									onUpdate={handleUpdateRecipe}
+								/>
+							))
+					)}
+					{hasMore ? <div ref={sentinelRef} aria-hidden="true" /> : null}
+				</div>
 			</div>
-		</div>
+		</>
 	);
 }

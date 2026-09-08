@@ -45,6 +45,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 		<html lang="en">
 			<head>
 				<HeadContent />
+				<script
+					// biome-ignore lint/security/noDangerouslySetInnerHtml: static string, no user input; applies the persisted theme before paint to avoid a flash of the wrong color scheme
+					dangerouslySetInnerHTML={{
+						__html:
+							"(function(){try{var t=localStorage.getItem('cookerist:theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();",
+					}}
+				/>
 			</head>
 			<body>
 				<QueryClientProvider client={queryClient}>

@@ -1,3 +1,4 @@
+import { Send } from "lucide-react";
 import type { FormEvent } from "react";
 import { useState } from "react";
 import { Button } from "#/components/ui/button";
@@ -20,20 +21,27 @@ export function PromptForm({ onSubmit, disabled }: PromptFormProps) {
 	}
 
 	return (
-		<form onSubmit={handleSubmit} className="flex flex-col gap-3">
+		<form
+			onSubmit={handleSubmit}
+			className="card flex items-end gap-2 rounded-full bg-surface py-[0.4rem] pr-[0.4rem] pl-[1.3rem] focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
+		>
 			<Textarea
 				value={value}
 				onChange={(event) => setValue(event.target.value)}
-				placeholder="What do you want to cook? e.g. creamy garlic butter shrimp pasta for 2"
-				rows={3}
+				placeholder="What do you want to cook?"
+				rows={1}
 				aria-label="Describe a dish"
 				disabled={disabled}
+				className="py-2 text-base"
 			/>
-			<div>
-				<Button type="submit" disabled={disabled || value.trim().length === 0}>
-					Get recipe
-				</Button>
-			</div>
+			<Button
+				type="submit"
+				aria-label="Get recipe"
+				disabled={disabled || value.trim().length === 0}
+				className="size-10 shrink-0 rounded-full p-0"
+			>
+				<Send className="size-4" />
+			</Button>
 		</form>
 	);
 }

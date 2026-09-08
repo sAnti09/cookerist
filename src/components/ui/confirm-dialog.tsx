@@ -43,13 +43,13 @@ export function ConfirmDialog({
 				role="alertdialog"
 				aria-modal="true"
 				aria-labelledby="confirm-dialog-title"
-				className="relative w-full max-w-sm rounded-[18px] border border-border bg-card p-5 shadow-lg"
+				className="card relative w-full max-w-sm bg-card p-5"
 			>
 				<h2 id="confirm-dialog-title" className="display-title text-lg">
 					{title}
 				</h2>
 				{description ? (
-					<p className="mt-2 text-sm text-muted-foreground">{description}</p>
+					<p className="mt-2 text-sm text-ink-dim">{description}</p>
 				) : null}
 				<div className="mt-4 flex justify-end gap-2">
 					<Button variant="secondary" onClick={onCancel}>
