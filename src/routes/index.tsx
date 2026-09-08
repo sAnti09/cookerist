@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PromptForm } from "#/components/prompt-form";
 import {
 	PendingResultRow,
@@ -8,7 +8,12 @@ import {
 	RecipeResultRow,
 } from "#/components/result-row";
 import type { Recipe } from "#/lib/recipe";
-import { loadRecipes, saveRecipe, toStoredRecipe } from "#/lib/recipes-storage";
+import {
+	deleteRecipe,
+	loadRecipes,
+	saveRecipe,
+	toStoredRecipe,
+} from "#/lib/recipes-storage";
 import { generateRecipe } from "#/server/generate-recipe";
 
 export const Route = createFileRoute("/")({ component: Home });
@@ -17,10 +22,13 @@ const OFF_TOPIC_MESSAGE =
 	"That doesn't look like a cooking request — try describing a specific dish you'd like to make.";
 const GENERIC_ERROR_MESSAGE =
 	"Something went wrong generating that recipe. Please try again.";
+const PAGE_SIZE = 10;
 
 export function Home() {
 	const [recipes, setRecipes] = useState<Recipe[]>([]);
 	const [pending, setPending] = useState<PendingRow[]>([]);
+	const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+	const sentinelRef = useRef<HTMLDivElement | null>(null);
 	const mutation = useMutation({
 		mutationFn: (prompt: string) => generateRecipe({ data: prompt }),
 	});
@@ -28,6 +36,25 @@ export function Home() {
 	useEffect(() => {
 		setRecipes(loadRecipes());
 	}, []);
+
+	const hasMore = visibleCount < recipes.length;
+
+	useEffect(() => {
+		const sentinel = sentinelRef.current;
+		if (!sentinel || !hasMore) return;
+
+		const observer = new IntersectionObserver((entries) => {
+			if (entries.some((entry) => entry.isIntersecting)) {
+				setVisibleCount((count) => count + PAGE_SIZE);
+			}
+		});
+		observer.observe(sentinel);
+		return () => observer.disconnect();
+	}, [hasMore]);
+
+	function handleDelete(id: string) {
+		setRecipes(deleteRecipe(id));
+	}
 
 	function submit(prompt: string, replaceId?: string) {
 		const localId = replaceId ?? crypto.randomUUID();
@@ -82,9 +109,22 @@ export function Home() {
 				{pending.map((row) => (
 					<PendingResultRow key={row.localId} row={row} onRetry={submit} />
 				))}
-				{recipes.map((recipe) => (
-					<RecipeResultRow key={recipe.id} recipe={recipe} />
-				))}
+				{recipes.length === 0 && pending.length === 0 ? (
+					<p className="rounded-[18px] border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+						No recipes yet — describe a dish above to get started.
+					</p>
+				) : (
+					recipes
+						.slice(0, visibleCount)
+						.map((recipe) => (
+							<RecipeResultRow
+								key={recipe.id}
+								recipe={recipe}
+								onDelete={handleDelete}
+							/>
+						))
+				)}
+				{hasMore ? <div ref={sentinelRef} aria-hidden="true" /> : null}
 			</div>
 		</div>
 	);

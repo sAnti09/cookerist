@@ -1,4 +1,7 @@
+import { Trash2 } from "lucide-react";
+import { useState } from "react";
 import { Button } from "#/components/ui/button";
+import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import type { Recipe } from "#/lib/recipe";
 
 export type PendingRow = {
@@ -39,11 +42,46 @@ export function PendingResultRow({
 	);
 }
 
-export function RecipeResultRow({ recipe }: { recipe: Recipe }) {
+export function RecipeResultRow({
+	recipe,
+	onDelete,
+}: {
+	recipe: Recipe;
+	onDelete: (id: string) => void;
+}) {
+	const [confirmingDelete, setConfirmingDelete] = useState(false);
+	const date = new Date(recipe.createdAt).toLocaleDateString(undefined, {
+		year: "numeric",
+		month: "short",
+		day: "numeric",
+	});
+
 	return (
-		<div className="rounded-[18px] border border-border bg-card p-4">
-			<h3 className="display-title text-lg">{recipe.title}</h3>
-			<p className="mt-1 text-sm text-muted-foreground">{recipe.prompt}</p>
+		<div className="flex items-start justify-between gap-3 rounded-[18px] border border-border bg-card p-4">
+			<div>
+				<h3 className="display-title text-lg">{recipe.title}</h3>
+				<p className="mt-1 text-xs text-muted-foreground">{date}</p>
+			</div>
+			<Button
+				variant="secondary"
+				className="shrink-0 px-2"
+				aria-label={`Delete ${recipe.title}`}
+				onClick={() => setConfirmingDelete(true)}
+			>
+				<Trash2 className="size-4" />
+			</Button>
+			<ConfirmDialog
+				open={confirmingDelete}
+				title="Delete this recipe?"
+				description={`"${recipe.title}" will be permanently removed.`}
+				confirmLabel="Delete"
+				cancelLabel="Cancel"
+				onConfirm={() => {
+					setConfirmingDelete(false);
+					onDelete(recipe.id);
+				}}
+				onCancel={() => setConfirmingDelete(false)}
+			/>
 		</div>
 	);
 }

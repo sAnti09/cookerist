@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { RecipeResponse } from "#/lib/groq/schema";
-import { loadRecipes, saveRecipe, toStoredRecipe } from "./recipes-storage";
+import {
+	deleteRecipe,
+	loadRecipes,
+	saveRecipe,
+	toStoredRecipe,
+} from "./recipes-storage";
 
 const recipeInput: RecipeResponse = {
 	title: "Garlic Butter Shrimp Pasta",
@@ -97,5 +102,26 @@ describe("loadRecipes / saveRecipe", () => {
 		);
 
 		expect(loadRecipes()).toEqual([]);
+	});
+});
+
+describe("deleteRecipe", () => {
+	it("removes the matching recipe and persists the rest", () => {
+		const first = toStoredRecipe("first prompt", recipeInput);
+		const second = toStoredRecipe("second prompt", recipeInput);
+		saveRecipe(first);
+		saveRecipe(second);
+
+		const result = deleteRecipe(first.id);
+
+		expect(result).toEqual([second]);
+		expect(loadRecipes()).toEqual([second]);
+	});
+
+	it("is a no-op when the id isn't found", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		saveRecipe(recipe);
+
+		expect(deleteRecipe("not-a-real-id")).toEqual([recipe]);
 	});
 });

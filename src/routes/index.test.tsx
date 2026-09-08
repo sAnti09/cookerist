@@ -1,8 +1,33 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { saveRecipe, toStoredRecipe } from "#/lib/recipes-storage";
 import { Home } from "./index";
+
+class MockIntersectionObserver {
+	static instances: MockIntersectionObserver[] = [];
+	callback: IntersectionObserverCallback;
+	root = null;
+	rootMargin = "";
+	thresholds: number[] = [];
+	observe = vi.fn();
+	unobserve = vi.fn();
+	disconnect = vi.fn();
+	takeRecords = () => [];
+
+	constructor(callback: IntersectionObserverCallback) {
+		this.callback = callback;
+		MockIntersectionObserver.instances.push(this);
+	}
+
+	intersect() {
+		this.callback(
+			[{ isIntersecting: true } as IntersectionObserverEntry],
+			this as unknown as IntersectionObserver,
+		);
+	}
+}
 
 const generateRecipeMock = vi.fn();
 
@@ -36,7 +61,21 @@ async function submitPrompt(prompt: string) {
 beforeEach(() => {
 	generateRecipeMock.mockReset();
 	window.localStorage.clear();
+	MockIntersectionObserver.instances = [];
+	vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
 });
+
+afterEach(() => {
+	vi.unstubAllGlobals();
+});
+
+function seedRecipes(count: number) {
+	for (let i = 0; i < count; i++) {
+		saveRecipe(
+			toStoredRecipe(`prompt ${i}`, { ...validRecipe, title: `Recipe ${i}` }),
+		);
+	}
+}
 
 describe("Home", () => {
 	it("renders the Cookerist heading", () => {
@@ -154,5 +193,42 @@ describe("Home", () => {
 			screen.getByText(/doesn't look like a cooking request/i),
 		).toBeInTheDocument();
 		expect(screen.getByText("Second Dish")).toBeInTheDocument();
+	});
+
+	it("shows an empty-state placeholder when there are no results", () => {
+		renderHome();
+
+		expect(screen.getByText(/no recipes yet/i)).toBeInTheDocument();
+	});
+
+	it("renders only the first 10 recipes and loads more on scroll intersection", async () => {
+		seedRecipes(12);
+		renderHome();
+
+		expect(screen.getAllByText(/^Recipe \d+$/)).toHaveLength(10);
+		expect(screen.queryByText(/no recipes yet/i)).not.toBeInTheDocument();
+
+		MockIntersectionObserver.instances[0]?.intersect();
+
+		await waitFor(() =>
+			expect(screen.getAllByText(/^Recipe \d+$/)).toHaveLength(12),
+		);
+	});
+
+	it("deletes a recipe from the list and localStorage after confirming", async () => {
+		seedRecipes(1);
+		renderHome();
+		const user = userEvent.setup();
+
+		expect(screen.getByText("Recipe 0")).toBeInTheDocument();
+
+		await user.click(screen.getByRole("button", { name: "Delete Recipe 0" }));
+		await user.click(screen.getByRole("button", { name: "Delete" }));
+
+		expect(screen.queryByText("Recipe 0")).not.toBeInTheDocument();
+		expect(window.localStorage.getItem("cookerist:recipes")).not.toContain(
+			"Recipe 0",
+		);
+		expect(await screen.findByText(/no recipes yet/i)).toBeInTheDocument();
 	});
 });

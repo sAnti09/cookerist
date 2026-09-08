@@ -37,6 +37,12 @@ export function saveRecipe(recipe: Recipe): Recipe[] {
 	return next;
 }
 
+export function deleteRecipe(id: string): Recipe[] {
+	const next = loadRecipes().filter((recipe) => recipe.id !== id);
+	persist(next);
+	return next;
+}
+
 export function toStoredRecipe(prompt: string, input: RecipeResponse): Recipe {
 	return {
 		id: crypto.randomUUID(),
