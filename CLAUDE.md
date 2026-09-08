@@ -32,6 +32,40 @@ A single-page web app. A user types a prompt describing a dish (e.g. "creamy gar
 - Every generated result (including checkbox/serving state) is stored in `localStorage`, keyed by an id, so it survives reloads.
 - No server-side storage of results.
 
+## Visual design (from TEST-148 — provisional, expect refinement)
+
+Direction: warm minimalism leaning white/light in light mode — a near-white canvas (not a full cream/peach wash) with warmth carried by accent color, typography, and shape rather than the background itself. No food photography (Groq recipes are text-only); a flame mark worked into the "Cookerist" wordmark is the one illustrative touch. Mockup: https://claude.ai/code/artifact/ae0a29ee-801c-4049-a387-043c9b7cdde7 (private artifact — not a substitute for this doc if it's ever deleted/regenerated).
+
+### Tokens
+
+| Token | Light | Dark |
+|---|---|---|
+| `--bg` | `#FFFFFF` | `#221B14` |
+| `--bg2` (subtle top glow / hover / track fills) | `#F7F3EC` | `#2B2117` |
+| `--surface` (cards) | `#FFFFFF` | `#2C241B` |
+| `--ink` | `#211C16` | `#F4EBDD` |
+| `--ink-dim` (metadata, placeholders) | `#8A8072` | `#B6A891` |
+| `--line` (borders) | `#E9E4D9` | `#3E3324` |
+| `--accent` (flame — primary CTA, brand) | `#D9793A` | `#E8935A` |
+| `--sage` (checked/done state — second, nature-inspired accent) | `#63805F` | `#8FAE73` |
+| `--warn` (off-topic rejection) | `#B65A3A` | `#DD8264` |
+| `--warn-wash` (rejection card background) | `#F8EEE5` | `#3B2A21` |
+
+Cards sit on an equal-or-near-equal background and are separated by `--line` border + a soft warm shadow (`0 8px 22px -14px rgba(33,28,22,0.16)` light / darker+stronger in dark) — not by a contrasting fill. Dark mode keeps more of the original warm gradient (deeper, richer) since the "lean white" note from the user was about light mode specifically.
+
+### Typography
+- Display (wordmark, dish titles, section headings): **Fraunces** (serif, optical-size axis) — used sparingly, not for body copy.
+- Body: **Work Sans**.
+- No monospace anywhere in this direction (a deliberate change from the earlier 3-direction pitch) — numbers use `font-variant-numeric: tabular-nums` on the body face instead.
+
+### Shape & layout
+- Radius scale by role, not one flat value: pill (`999px`) for the prompt bar, stepper, and buttons; `18px` for cards; `10px` for small chips/icon buttons.
+- Ingredients render as a **2-column grid** (`grid-template-columns: 1fr 1fr`, collapsing to 1 column under 420px); steps stay single-column (sequential, longer text).
+- Checked-item styling uses a custom circular checkbox (not the browser default) filled with `--sage`.
+
+### States covered (per TEST-148 AC2)
+Prompt entry, loading (flickering flame + "Simmering your …" copy), off-topic rejection (`--warn`/`--warn-wash`, distinct from the loading/normal card), expanded detail (title, prompt echo, overview, servings stepper, ingredients w/ check-all + progress bar, steps grouped into subsections), and collapsed rows (title + date + delete icon). Expansion is accordion-style, in place — see TEST-158.
+
 ## Tech stack
 
 | Concern | Choice |
