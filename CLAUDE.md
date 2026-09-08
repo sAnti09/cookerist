@@ -111,6 +111,23 @@ type Recipe = {
 - Don't leave placeholder content (e.g. a plain-text comment standing in for a missing description) once the real templated description is applied — go back and delete it (`delete_comment`) so the ticket doesn't carry stale scaffolding.
 - `work_type="SUBTASK"` requires `parent_id`; a plain feature/overview ticket without a parent fits `work_type="STORY"` (or `TASK` if it isn't naturally an "As a ... I want ... so that ..." statement).
 
+## Local environment notes (learned this session)
+- This machine's `nvm`-installed Node ships a `pnpm` shim (via corepack) on `PATH` ahead of any other install, and that shim was broken (`Cannot find module '.../corepack/v1/pnpm/.../pnpm.cjs'`) — `corepack enable && corepack prepare pnpm@latest --activate` did not fix it. Installed `pnpm` via Homebrew instead (`brew install pnpm`) and invoke it with `/opt/homebrew/bin/pnpm` or `export PATH="/opt/homebrew/bin:$PATH"` first, since the nvm shim still shadows it by default on `PATH`.
+- `gh` (GitHub CLI) also wasn't preinstalled — installed via `brew install gh`, then the user ran `gh auth login` interactively (browser-based OAuth; must be done by the user, not the agent).
+
+## Scaffolding (done this session)
+- App scaffolded with the official TanStack CLI, **not** `create-cloudflare`/C3 — C3's `--framework=tanstack-start` errored with "Unsupported framework" on this version (2.72.5) despite being listed in its own `--help`. Command used:
+  ```
+  pnpm dlx @tanstack/cli create <name> --framework React --deployment cloudflare --toolchain biome --add-ons shadcn,tanstack-query --package-manager pnpm --no-examples --non-interactive --no-git
+  ```
+  Note: `create-tsrouter-app` (the older CLI) is deprecated in favor of `@tanstack/cli create`; the deprecated one also defaults to **router-only** mode (file-based routing without Start's SSR/server functions) unless you explicitly pass `--router-only` to the *new* tool to replicate that — so for a full Start app, use `@tanstack/cli create` without `--router-only`. Verify with `routerOnly: false` in the generated `.cta.json`.
+  Also do **not** pass `-y`/`--accept-defaults` together with `--framework` on C3, or with the TanStack CLI — it can silently override the framework choice back to a generic default; pass every option explicitly and use `--non-interactive` instead of `-y`.
+- Manually added on top of the scaffold (not covered by the CLI's add-ons): Vitest + `@testing-library/react` + `@testing-library/jest-dom` + `@testing-library/user-event` + `@vitest/coverage-v8` + `jsdom`, with `vitest.config.ts` (90% coverage thresholds) and `src/test-setup.ts`. Use `defineConfig` from `vitest/config` (not plain `vite`) so the `test` key type-checks.
+- Colocating a test file directly under `src/routes/` (e.g. `src/routes/index.test.tsx`) makes TanStack Router's file-based routing treat it as a route file and warn/skip it at build time. Fixed via `tsr.config.json`: `"routeFileIgnorePattern": "\\.test\\.(ts|tsx)$"`.
+- `biome.json`'s `files.includes` is an explicit allowlist (not just excludes) — a new root config file like `vitest.config.ts` needs to be added to it explicitly or Biome silently skips formatting/linting it.
+- Result: `pnpm check` (Biome), `pnpm exec tsc --noEmit`, `pnpm test` / `pnpm test:coverage`, `pnpm build`, and `pnpm dev` all verified working before committing.
+- Not yet done: Cloudflare account provisioning (`wrangler login`, KV/D1/R2 bindings if needed, `wrangler secret put GROQ_API_KEY`) and an actual deploy — scaffold only, no live Worker yet.
+
 ## Open items / assumptions to revisit
 - Exact Groq-hosted model(s) to call (cost/latency/quality trade-off, e.g. Llama 3.3 70B Versatile vs Llama 4 Maverick for generation, Llama 3.1 8B for the on-topic check) — decide during setup once an API key is available.
 - Unit system (metric vs. US customary) — MVP assumption: use whatever unit Groq naturally returns per-ingredient; no forced conversion system unless requested later.
