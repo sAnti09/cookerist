@@ -1,5 +1,6 @@
 import type { GroceryListItem, GroceryListItemOrigin } from "./grocery-list";
 import type { Recipe } from "./recipe";
+import { scaleQuantity } from "./scale-servings";
 
 // Units that count discrete, whole ingredients — can't take a fractional
 // (0.25) amount. Extend this list as new countable units show up from Groq.
@@ -70,16 +71,23 @@ export function aggregateGroceryItems(
 				recipeId: recipe.id,
 				ingredientId: ingredient.id,
 			};
+			// Scale to the recipe's current servings, not the base quantity, so
+			// adjusting servings before building the list changes what's on it.
+			const scaledQuantity = scaleQuantity(
+				ingredient.quantity,
+				recipe.baseServings,
+				recipe.currentServings,
+			);
 
 			const existing = groups.get(key);
 			if (existing) {
-				existing.quantity += ingredient.quantity;
+				existing.quantity += scaledQuantity;
 				existing.origins.push(origin);
 			} else {
 				groups.set(key, {
 					text: ingredient.text.trim(),
 					unit: ingredient.unit.trim(),
-					quantity: ingredient.quantity,
+					quantity: scaledQuantity,
 					origins: [origin],
 				});
 			}

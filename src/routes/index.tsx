@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Flame, Plus, Search, Star } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { GroceryListCreateForm } from "#/components/grocery-list-create-form";
 import { GroceryListRow } from "#/components/grocery-list-row";
 import { PromptForm } from "#/components/prompt-form";
 import {
@@ -17,6 +18,7 @@ import type { GroceryList } from "#/lib/grocery-list";
 import {
 	deleteGroceryList,
 	loadGroceryLists,
+	saveGroceryList,
 	setExpandedGroceryList,
 } from "#/lib/grocery-storage";
 import { DIFFICULTY_LABELS, type Difficulty, type Recipe } from "#/lib/recipe";
@@ -51,6 +53,7 @@ export function Home() {
 		"all",
 	);
 	const [favoritesOnly, setFavoritesOnly] = useState(false);
+	const [creatingGroceryList, setCreatingGroceryList] = useState(false);
 	const sentinelRef = useRef<HTMLDivElement | null>(null);
 	const mutation = useMutation({
 		mutationFn: (prompt: string) => generateRecipe({ data: prompt }),
@@ -121,9 +124,14 @@ export function Home() {
 		setGroceryLists(setExpandedGroceryList(list?.expanded ? null : id));
 	}
 
-	// The create flow (recipe selection + custom ingredients) lands in
-	// TEST-239; this button satisfies TEST-238 AC6 but isn't wired up yet.
-	function handleCreateGroceryList() {}
+	function handleCreateGroceryList() {
+		setCreatingGroceryList(true);
+	}
+
+	function handleGroceryListCreated(list: GroceryList) {
+		setGroceryLists(saveGroceryList(list));
+		setCreatingGroceryList(false);
+	}
 
 	function submit(prompt: string, replaceId?: string) {
 		const localId = replaceId ?? crypto.randomUUID();
@@ -312,6 +320,14 @@ export function Home() {
 					)}
 				</div>
 			</div>
+			{creatingGroceryList ? (
+				<GroceryListCreateForm
+					recipes={recipes}
+					onUpdateRecipe={handleUpdateRecipe}
+					onCreate={handleGroceryListCreated}
+					onClose={() => setCreatingGroceryList(false)}
+				/>
+			) : null}
 		</>
 	);
 }

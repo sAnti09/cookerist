@@ -259,6 +259,60 @@ describe("aggregateGroceryItems", () => {
 		expect(recipeItem?.quantity).toBe(1);
 	});
 
+	it("scales ingredient quantities to the recipe's current servings, not its base quantity", () => {
+		const recipe = makeRecipe({
+			id: "recipe-a",
+			baseServings: 2,
+			currentServings: 4,
+			ingredients: [
+				makeIngredient({
+					id: "ing-1",
+					text: "flour",
+					quantity: 1,
+					unit: "cup",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipe]);
+
+		expect(result[0]).toMatchObject({ text: "flour", quantity: 2 });
+	});
+
+	it("scales each recipe independently before merging matching ingredients", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			baseServings: 2,
+			currentServings: 6,
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					text: "garlic",
+					quantity: 1,
+					unit: "cloves",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			baseServings: 4,
+			currentServings: 2,
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					text: "garlic",
+					quantity: 2,
+					unit: "cloves",
+				}),
+			],
+		});
+
+		// recipeA: 1 * 6/2 = 3, recipeB: 2 * 2/4 = 1 → merged 4
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result[0]).toMatchObject({ text: "garlic", quantity: 4 });
+	});
+
 	it("returns an empty array for no recipes and no custom ingredients", () => {
 		expect(aggregateGroceryItems([])).toEqual([]);
 	});

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroceryList } from "#/lib/grocery-list";
@@ -537,6 +537,62 @@ describe("Home", () => {
 			expect(
 				screen.queryByText(/no grocery lists yet/i),
 			).not.toBeInTheDocument();
+		});
+
+		it("creates a grocery list from the create form and persists it", async () => {
+			seedRecipe({ title: "Garlic Shrimp Pasta" });
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "Grocery lists" }));
+			await user.click(
+				screen.getByRole("button", { name: "Create grocery list" }),
+			);
+
+			const dialog = screen.getByRole("dialog");
+			await user.type(
+				within(dialog).getByLabelText("Search recipes to add"),
+				"Garlic Shrimp Pasta",
+			);
+			await user.click(
+				within(dialog).getByRole("button", { name: "Garlic Shrimp Pasta" }),
+			);
+			await user.click(within(dialog).getByRole("button", { name: "Save" }));
+			await user.click(
+				within(screen.getByRole("alertdialog")).getByRole("button", {
+					name: "Save",
+				}),
+			);
+
+			expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+			expect(
+				screen.getByRole("heading", { name: "Garlic Shrimp Pasta" }),
+			).toBeInTheDocument();
+			const stored = JSON.parse(
+				window.localStorage.getItem("cookerist:grocery-lists") ?? "[]",
+			);
+			expect(stored).toHaveLength(1);
+			expect(stored[0].name).toBe("Garlic Shrimp Pasta");
+			expect(stored[0].items).toHaveLength(1);
+		});
+
+		it("closes the create form without saving when cancelled", async () => {
+			seedRecipe({ title: "Garlic Shrimp Pasta" });
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "Grocery lists" }));
+			await user.click(
+				screen.getByRole("button", { name: "Create grocery list" }),
+			);
+			await user.click(
+				within(screen.getByRole("dialog")).getByRole("button", {
+					name: "Cancel",
+				}),
+			);
+
+			expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+			expect(window.localStorage.getItem("cookerist:grocery-lists")).toBeNull();
 		});
 
 		it("hides the recipe search/filter toolbar while viewing grocery lists", async () => {
