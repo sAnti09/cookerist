@@ -114,4 +114,4 @@ type Recipe = {
 ## Open items / assumptions to revisit
 - Exact Grok model to call (cost/latency/quality trade-off) — decide during setup once an API key is available.
 - Unit system (metric vs. US customary) — MVP assumption: use whatever unit Grok naturally returns per-ingredient; no forced conversion system unless requested later.
-- GitHub org/repo name — to be finalized when the repository is created.
+- ~~GitHub org/repo name — to be finalized when the repository is created.~~ Done: [github.com/sAnti09/cookerist](https://github.com/sAnti09/cookerist) (public, `main` branch).
