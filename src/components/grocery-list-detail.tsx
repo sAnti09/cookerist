@@ -1,5 +1,6 @@
 import { Checkbox } from "#/components/ui/checkbox";
 import type { GroceryList, GroceryListItem } from "#/lib/grocery-list";
+import { applyGroceryItemsCheckedToRecipes } from "#/lib/propagate-grocery-check";
 import type { Recipe } from "#/lib/recipe";
 import { formatQuantity } from "#/lib/scale-servings";
 
@@ -7,6 +8,7 @@ type GroceryListDetailProps = {
 	list: GroceryList;
 	recipes: Recipe[];
 	onUpdate: (list: GroceryList) => void;
+	onUpdateRecipes: (recipes: Recipe[]) => void;
 };
 
 function ItemLabel({ item }: { item: GroceryListItem }) {
@@ -47,14 +49,22 @@ export function GroceryListDetail({
 	list,
 	recipes,
 	onUpdate,
+	onUpdateRecipes,
 }: GroceryListDetailProps) {
 	function handleToggleItem(id: string) {
+		const item = list.items.find((i) => i.id === id);
+		if (!item) return;
+		const checked = !item.checked;
 		onUpdate({
 			...list,
-			items: list.items.map((item) =>
-				item.id === id ? { ...item, checked: !item.checked } : item,
-			),
+			items: list.items.map((i) => (i.id === id ? { ...i, checked } : i)),
 		});
+		const affectedRecipes = applyGroceryItemsCheckedToRecipes(
+			recipes,
+			[item],
+			checked,
+		);
+		if (affectedRecipes.length > 0) onUpdateRecipes(affectedRecipes);
 	}
 
 	function handleCheckAll(checked: boolean) {
@@ -62,6 +72,12 @@ export function GroceryListDetail({
 			...list,
 			items: list.items.map((item) => ({ ...item, checked })),
 		});
+		const affectedRecipes = applyGroceryItemsCheckedToRecipes(
+			recipes,
+			list.items,
+			checked,
+		);
+		if (affectedRecipes.length > 0) onUpdateRecipes(affectedRecipes);
 	}
 
 	const allChecked =

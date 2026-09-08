@@ -51,6 +51,16 @@ export function updateRecipe(recipe: Recipe): Recipe[] {
 	return next;
 }
 
+// Like updateRecipe, but replaces several recipes in one load/persist cycle —
+// used when a single action (e.g. checking a merged grocery item, TEST-242)
+// touches ingredients across more than one recipe at once.
+export function updateRecipes(recipes: Recipe[]): Recipe[] {
+	const byId = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+	const next = loadRecipes().map((r) => byId.get(r.id) ?? r);
+	persist(next);
+	return next;
+}
+
 export function setExpandedRecipe(id: string | null): Recipe[] {
 	const next = loadRecipes().map((r) => ({ ...r, expanded: r.id === id }));
 	persist(next);

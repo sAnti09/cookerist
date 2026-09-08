@@ -41,23 +41,30 @@ const recipes: Recipe[] = [
 		overview: "",
 		baseServings: 2,
 		currentServings: 2,
-		ingredients: [],
+		ingredients: [
+			{ id: "ing-1", text: "shrimp", quantity: 1, unit: "lb", checked: false },
+		],
 		steps: [],
 		expanded: false,
 		favorite: false,
 	},
 ];
 
-function renderDetail(overrides: Partial<GroceryList> = {}) {
+function renderDetail(
+	overrides: Partial<GroceryList> = {},
+	recipesOverride: Recipe[] = recipes,
+) {
 	const onUpdate = vi.fn();
+	const onUpdateRecipes = vi.fn();
 	render(
 		<GroceryListDetail
 			list={{ ...list, ...overrides }}
-			recipes={recipes}
+			recipes={recipesOverride}
 			onUpdate={onUpdate}
+			onUpdateRecipes={onUpdateRecipes}
 		/>,
 	);
-	return { onUpdate };
+	return { onUpdate, onUpdateRecipes };
 }
 
 describe("GroceryListDetail", () => {
@@ -112,6 +119,53 @@ describe("GroceryListDetail", () => {
 		});
 	});
 
+	it("propagates a checked recipe-sourced item to its source recipe ingredient (TEST-242 AC1)", async () => {
+		const user = userEvent.setup();
+		const { onUpdateRecipes } = renderDetail();
+
+		await user.click(screen.getByText(/1 lb shrimp/));
+
+		expect(onUpdateRecipes).toHaveBeenCalledWith([
+			{
+				...recipes[0],
+				ingredients: [{ ...recipes[0].ingredients[0], checked: true }],
+			},
+		]);
+	});
+
+	it("propagates an uncheck back to the source recipe ingredient (TEST-242 AC2)", async () => {
+		const user = userEvent.setup();
+		const { onUpdateRecipes } = renderDetail(
+			{
+				items: [{ ...list.items[0], checked: true }, list.items[1]],
+			},
+			[
+				{
+					...recipes[0],
+					ingredients: [{ ...recipes[0].ingredients[0], checked: true }],
+				},
+			],
+		);
+
+		await user.click(screen.getByText(/1 lb shrimp/));
+
+		expect(onUpdateRecipes).toHaveBeenCalledWith([
+			{
+				...recipes[0],
+				ingredients: [{ ...recipes[0].ingredients[0], checked: false }],
+			},
+		]);
+	});
+
+	it("does not propagate when toggling a custom item (TEST-242 AC3)", async () => {
+		const user = userEvent.setup();
+		const { onUpdateRecipes } = renderDetail();
+
+		await user.click(screen.getByText(/2 rolls paper towels/));
+
+		expect(onUpdateRecipes).not.toHaveBeenCalled();
+	});
+
 	it("checks all items via the check-all control", async () => {
 		const user = userEvent.setup();
 		const { onUpdate } = renderDetail();
@@ -122,6 +176,20 @@ describe("GroceryListDetail", () => {
 			...list,
 			items: list.items.map((item) => ({ ...item, checked: true })),
 		});
+	});
+
+	it("propagates check-all to recipe-sourced items only", async () => {
+		const user = userEvent.setup();
+		const { onUpdateRecipes } = renderDetail();
+
+		await user.click(screen.getByLabelText("Check all"));
+
+		expect(onUpdateRecipes).toHaveBeenCalledWith([
+			{
+				...recipes[0],
+				ingredients: [{ ...recipes[0].ingredients[0], checked: true }],
+			},
+		]);
 	});
 
 	it("reflects an all-checked list in the check-all control", () => {

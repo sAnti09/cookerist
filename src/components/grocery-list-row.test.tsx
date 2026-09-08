@@ -65,6 +65,7 @@ function renderRow(
 		onEdit: vi.fn(),
 		onToggleExpand: vi.fn(),
 		onUpdate: vi.fn(),
+		onUpdateRecipes: vi.fn(),
 		...overrides,
 	};
 	return { ...render(<GroceryListRow {...props} />), props };
@@ -259,5 +260,40 @@ describe("GroceryListRow", () => {
 			expanded: true,
 			items: list.items.map((item) => ({ ...item, checked: true })),
 		});
+	});
+
+	it("passes recipe propagation updates from the detail view through to onUpdateRecipes", async () => {
+		const user = userEvent.setup();
+		const recipeWithIngredient = {
+			...recipes[0],
+			ingredients: [
+				{
+					id: "ing-1",
+					text: "shrimp",
+					quantity: 1,
+					unit: "lb",
+					checked: false,
+				},
+			],
+		};
+		const itemWithOrigin = {
+			...makeItem(false),
+			origins: [{ recipeId: "recipe-1", ingredientId: "ing-1" }],
+		};
+		const { props } = renderRow({
+			list: { ...list, expanded: true, items: [itemWithOrigin] },
+			recipes: [recipeWithIngredient, recipes[1]],
+		});
+
+		await user.click(screen.getByLabelText("Check all"));
+
+		expect(props.onUpdateRecipes).toHaveBeenCalledWith([
+			{
+				...recipeWithIngredient,
+				ingredients: [
+					{ ...recipeWithIngredient.ingredients[0], checked: true },
+				],
+			},
+		]);
 	});
 });

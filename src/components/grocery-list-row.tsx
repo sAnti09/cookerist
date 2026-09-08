@@ -18,6 +18,7 @@ export function GroceryListRow({
 	onEdit,
 	onToggleExpand,
 	onUpdate,
+	onUpdateRecipes,
 }: {
 	list: GroceryList;
 	recipes: Recipe[];
@@ -25,6 +26,7 @@ export function GroceryListRow({
 	onEdit: (list: GroceryList) => void;
 	onToggleExpand: (id: string) => void;
 	onUpdate: (list: GroceryList) => void;
+	onUpdateRecipes: (recipes: Recipe[]) => void;
 }) {
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const { checked, total, percent, completed } = getGroceryListProgress(list);
@@ -144,6 +146,7 @@ export function GroceryListRow({
 						list={list}
 						recipes={recipes}
 						onUpdate={onUpdate}
+						onUpdateRecipes={onUpdateRecipes}
 					/>
 				</div>
 			) : null}

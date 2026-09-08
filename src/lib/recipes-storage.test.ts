@@ -8,6 +8,7 @@ import {
 	toggleFavoriteRecipe,
 	toStoredRecipe,
 	updateRecipe,
+	updateRecipes,
 } from "./recipes-storage";
 
 const recipeInput: RecipeResponse = {
@@ -182,6 +183,40 @@ describe("updateRecipe", () => {
 		saveRecipe(recipe);
 
 		expect(updateRecipe({ ...recipe, id: "not-a-real-id" })).toEqual([recipe]);
+	});
+});
+
+describe("updateRecipes", () => {
+	it("replaces multiple matching recipes in one call and persists all of them", () => {
+		const first = toStoredRecipe("first prompt", recipeInput);
+		const second = toStoredRecipe("second prompt", recipeInput);
+		const third = toStoredRecipe("third prompt", recipeInput);
+		saveRecipe(first);
+		saveRecipe(second);
+		saveRecipe(third);
+
+		const updatedFirst = { ...first, currentServings: 4 };
+		const updatedThird = { ...third, currentServings: 6 };
+		const result = updateRecipes([updatedFirst, updatedThird]);
+
+		expect(result).toEqual([updatedThird, second, updatedFirst]);
+		expect(loadRecipes()).toEqual(result);
+	});
+
+	it("is a no-op for ids that aren't found", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		saveRecipe(recipe);
+
+		expect(updateRecipes([{ ...recipe, id: "not-a-real-id" }])).toEqual([
+			recipe,
+		]);
+	});
+
+	it("returns the unmodified list when passed no recipes", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		saveRecipe(recipe);
+
+		expect(updateRecipes([])).toEqual([recipe]);
 	});
 });
 

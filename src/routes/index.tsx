@@ -31,6 +31,7 @@ import {
 	toggleFavoriteRecipe,
 	toStoredRecipe,
 	updateRecipe,
+	updateRecipes,
 } from "#/lib/recipes-storage";
 import { cn } from "#/lib/utils";
 import { generateRecipe } from "#/server/generate-recipe";
@@ -112,6 +113,10 @@ export function Home() {
 
 	function handleUpdateRecipe(recipe: Recipe) {
 		setRecipes(updateRecipe(recipe));
+	}
+
+	function handleUpdateRecipes(recipesToUpdate: Recipe[]) {
+		setRecipes(updateRecipes(recipesToUpdate));
 	}
 
 	function handleToggleFavorite(id: string) {
@@ -331,6 +336,7 @@ export function Home() {
 								onEdit={handleEditGroceryList}
 								onToggleExpand={handleToggleExpandGroceryList}
 								onUpdate={handleUpdateGroceryList}
+								onUpdateRecipes={handleUpdateRecipes}
 							/>
 						))
 					)}
