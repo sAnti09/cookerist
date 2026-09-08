@@ -1,7 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Flame, Search, Star } from "lucide-react";
+import { Flame, Plus, Search, Star } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { GroceryListRow } from "#/components/grocery-list-row";
 import { PromptForm } from "#/components/prompt-form";
 import {
 	PendingResultRow,
@@ -10,7 +11,14 @@ import {
 } from "#/components/result-row";
 import { Button } from "#/components/ui/button";
 import { ThemeToggle } from "#/components/ui/theme-toggle";
+import { type ResultsView, ViewToggle } from "#/components/ui/view-toggle";
 import { filterRecipes, hasActiveFilters } from "#/lib/filter-recipes";
+import type { GroceryList } from "#/lib/grocery-list";
+import {
+	deleteGroceryList,
+	loadGroceryLists,
+	setExpandedGroceryList,
+} from "#/lib/grocery-storage";
 import { DIFFICULTY_LABELS, type Difficulty, type Recipe } from "#/lib/recipe";
 import {
 	deleteRecipe,
@@ -34,6 +42,8 @@ const PAGE_SIZE = 10;
 
 export function Home() {
 	const [recipes, setRecipes] = useState<Recipe[]>([]);
+	const [groceryLists, setGroceryLists] = useState<GroceryList[]>([]);
+	const [view, setView] = useState<ResultsView>("recipes");
 	const [pending, setPending] = useState<PendingRow[]>([]);
 	const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 	const [searchQuery, setSearchQuery] = useState("");
@@ -48,6 +58,7 @@ export function Home() {
 
 	useEffect(() => {
 		setRecipes(loadRecipes());
+		setGroceryLists(loadGroceryLists());
 	}, []);
 
 	const filters = {
@@ -100,6 +111,19 @@ export function Home() {
 	function handleToggleFavorite(id: string) {
 		setRecipes(toggleFavoriteRecipe(id));
 	}
+
+	function handleDeleteGroceryList(id: string) {
+		setGroceryLists(deleteGroceryList(id));
+	}
+
+	function handleToggleExpandGroceryList(id: string) {
+		const list = groceryLists.find((l) => l.id === id);
+		setGroceryLists(setExpandedGroceryList(list?.expanded ? null : id));
+	}
+
+	// The create flow (recipe selection + custom ingredients) lands in
+	// TEST-239; this button satisfies TEST-238 AC6 but isn't wired up yet.
+	function handleCreateGroceryList() {}
 
 	function submit(prompt: string, replaceId?: string) {
 		const localId = replaceId ?? crypto.randomUUID();
@@ -163,11 +187,26 @@ export function Home() {
 					<PromptForm onSubmit={submit} />
 				</div>
 
-				{recipes.length > 0 ? (
-					<div className="mt-8 mb-4">
-						<h2 className="display-title text-xl font-semibold text-ink">
-							Your recipes
-						</h2>
+				<div className="mt-8 mb-4">
+					<div className="flex flex-wrap items-center justify-between gap-3">
+						<div className="flex items-center gap-3">
+							<ViewToggle value={view} onChange={setView} />
+							<h2 className="display-title text-xl font-semibold text-ink">
+								{view === "recipes" ? "Recipes" : "Grocery Lists"}
+							</h2>
+						</div>
+						{view === "grocery" ? (
+							<Button
+								variant="primary"
+								className="gap-1.5"
+								onClick={handleCreateGroceryList}
+							>
+								<Plus className="size-4" aria-hidden="true" />
+								Create grocery list
+							</Button>
+						) : null}
+					</div>
+					{view === "recipes" && recipes.length > 0 ? (
 						<div className="mt-3 flex flex-wrap items-center gap-2">
 							<div className="card flex min-w-[180px] flex-1 items-center gap-2 rounded-full bg-surface px-4 py-2">
 								<Search
@@ -220,41 +259,57 @@ export function Home() {
 								</Button>
 							) : null}
 						</div>
-					</div>
-				) : null}
-				<div
-					className={
-						recipes.length > 0
-							? "flex flex-col gap-3"
-							: "mt-8 flex flex-col gap-3"
-					}
-				>
-					{pending.map((row) => (
-						<PendingResultRow key={row.localId} row={row} onRetry={submit} />
-					))}
-					{recipes.length === 0 && pending.length === 0 ? (
+					) : null}
+				</div>
+				<div className="flex flex-col gap-3">
+					{view === "recipes" ? (
+						<>
+							{pending.map((row) => (
+								<PendingResultRow
+									key={row.localId}
+									row={row}
+									onRetry={submit}
+								/>
+							))}
+							{recipes.length === 0 && pending.length === 0 ? (
+								<p className="card border-dashed bg-card p-6 text-center text-sm text-ink-dim">
+									No recipes yet — describe a dish above to get started.
+								</p>
+							) : filteredRecipes.length === 0 && pending.length === 0 ? (
+								<p className="card border-dashed bg-card p-6 text-center text-sm text-ink-dim">
+									No recipes match your filters.
+								</p>
+							) : (
+								filteredRecipes
+									.slice(0, visibleCount)
+									.map((recipe) => (
+										<RecipeResultRow
+											key={recipe.id}
+											recipe={recipe}
+											onDelete={handleDelete}
+											onToggleExpand={handleToggleExpand}
+											onToggleFavorite={handleToggleFavorite}
+											onUpdate={handleUpdateRecipe}
+										/>
+									))
+							)}
+							{hasMore ? <div ref={sentinelRef} aria-hidden="true" /> : null}
+						</>
+					) : groceryLists.length === 0 ? (
 						<p className="card border-dashed bg-card p-6 text-center text-sm text-ink-dim">
-							No recipes yet — describe a dish above to get started.
-						</p>
-					) : filteredRecipes.length === 0 && pending.length === 0 ? (
-						<p className="card border-dashed bg-card p-6 text-center text-sm text-ink-dim">
-							No recipes match your filters.
+							No grocery lists yet — create one from your saved recipes.
 						</p>
 					) : (
-						filteredRecipes
-							.slice(0, visibleCount)
-							.map((recipe) => (
-								<RecipeResultRow
-									key={recipe.id}
-									recipe={recipe}
-									onDelete={handleDelete}
-									onToggleExpand={handleToggleExpand}
-									onToggleFavorite={handleToggleFavorite}
-									onUpdate={handleUpdateRecipe}
-								/>
-							))
+						groceryLists.map((list) => (
+							<GroceryListRow
+								key={list.id}
+								list={list}
+								recipes={recipes}
+								onDelete={handleDeleteGroceryList}
+								onToggleExpand={handleToggleExpandGroceryList}
+							/>
+						))
 					)}
-					{hasMore ? <div ref={sentinelRef} aria-hidden="true" /> : null}
 				</div>
 			</div>
 		</>

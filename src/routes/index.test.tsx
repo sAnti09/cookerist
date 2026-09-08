@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { GroceryList } from "#/lib/grocery-list";
+import { saveGroceryList } from "#/lib/grocery-storage";
 import { saveRecipe, toStoredRecipe } from "#/lib/recipes-storage";
 import { Home } from "./index";
 
@@ -77,6 +79,27 @@ function seedRecipes(count: number) {
 			toStoredRecipe(`prompt ${i}`, { ...validRecipe, title: `Recipe ${i}` }),
 		);
 	}
+}
+
+function makeGroceryList(overrides: Partial<GroceryList> = {}): GroceryList {
+	return {
+		id: crypto.randomUUID(),
+		createdAt: new Date().toISOString(),
+		name: "Shrimp Pasta",
+		recipeIds: [],
+		items: [
+			{
+				id: crypto.randomUUID(),
+				text: "shrimp",
+				quantity: 1,
+				unit: "lb",
+				checked: false,
+				source: "custom",
+			},
+		],
+		expanded: false,
+		...overrides,
+	};
 }
 
 function seedRecipe(overrides: {
@@ -447,6 +470,153 @@ describe("Home", () => {
 
 			expect(screen.getByText("Beef Tacos")).toBeInTheDocument();
 			expect(screen.queryByText(/^Shrimp Dish \d+$/)).not.toBeInTheDocument();
+		});
+	});
+
+	describe("grocery lists view", () => {
+		it("stays on the Recipes view by default", () => {
+			renderHome();
+
+			expect(screen.getByRole("button", { name: "Recipes" })).toHaveAttribute(
+				"aria-pressed",
+				"true",
+			);
+			expect(
+				screen.getByRole("heading", { name: "Recipes" }),
+			).toBeInTheDocument();
+		});
+
+		it("switches to the Grocery Lists view and back via the icon toggle", async () => {
+			seedRecipes(1);
+			saveGroceryList(makeGroceryList({ name: "Weeknight Groceries" }));
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "Grocery lists" }));
+
+			expect(screen.getByText("Weeknight Groceries")).toBeInTheDocument();
+			expect(screen.queryByText("Recipe 0")).not.toBeInTheDocument();
+			expect(
+				screen.getByRole("heading", { name: "Grocery Lists" }),
+			).toBeInTheDocument();
+			expect(
+				screen.queryByRole("heading", { name: "Recipes" }),
+			).not.toBeInTheDocument();
+
+			await user.click(screen.getByRole("button", { name: "Recipes" }));
+
+			expect(screen.getByText("Recipe 0")).toBeInTheDocument();
+			expect(screen.queryByText("Weeknight Groceries")).not.toBeInTheDocument();
+			expect(
+				screen.getByRole("heading", { name: "Recipes" }),
+			).toBeInTheDocument();
+		});
+
+		it("shows a distinct empty state with a create entry point when no lists exist", async () => {
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "Grocery lists" }));
+
+			expect(screen.getByText(/no grocery lists yet/i)).toBeInTheDocument();
+			expect(
+				screen.getByRole("button", { name: "Create grocery list" }),
+			).toBeInTheDocument();
+		});
+
+		it("keeps the create entry point available once lists already exist", async () => {
+			saveGroceryList(makeGroceryList());
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "Grocery lists" }));
+
+			expect(
+				screen.getByRole("button", { name: "Create grocery list" }),
+			).toBeInTheDocument();
+			expect(
+				screen.queryByText(/no grocery lists yet/i),
+			).not.toBeInTheDocument();
+		});
+
+		it("hides the recipe search/filter toolbar while viewing grocery lists", async () => {
+			seedRecipe({ title: "Garlic Shrimp Pasta" });
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "Grocery lists" }));
+
+			expect(screen.queryByLabelText("Search recipes")).not.toBeInTheDocument();
+		});
+
+		it("deletes a grocery list from the list and localStorage after confirming", async () => {
+			saveGroceryList(makeGroceryList({ name: "Weeknight Groceries" }));
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "Grocery lists" }));
+			expect(screen.getByText("Weeknight Groceries")).toBeInTheDocument();
+
+			await user.click(
+				screen.getByRole("button", { name: "Delete Weeknight Groceries" }),
+			);
+			await user.click(screen.getByRole("button", { name: "Delete" }));
+
+			expect(screen.queryByText("Weeknight Groceries")).not.toBeInTheDocument();
+			expect(
+				window.localStorage.getItem("cookerist:grocery-lists"),
+			).not.toContain("Weeknight Groceries");
+			expect(
+				await screen.findByText(/no grocery lists yet/i),
+			).toBeInTheDocument();
+		});
+
+		it("expands a grocery list row in place and collapses it again on second click", async () => {
+			saveGroceryList(makeGroceryList({ name: "Weeknight Groceries" }));
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "Grocery lists" }));
+			expect(
+				screen.queryByText(/detail is coming soon/i),
+			).not.toBeInTheDocument();
+
+			await user.click(
+				screen.getByRole("button", { name: /^Weeknight Groceries/ }),
+			);
+			expect(screen.getByText(/detail is coming soon/i)).toBeInTheDocument();
+
+			await user.click(
+				screen.getByRole("button", { name: /^Weeknight Groceries/ }),
+			);
+			expect(
+				screen.queryByText(/detail is coming soon/i),
+			).not.toBeInTheDocument();
+		});
+
+		it("only keeps one grocery list row expanded at a time and persists it", async () => {
+			const first = makeGroceryList({ name: "First List" });
+			const second = makeGroceryList({ name: "Second List" });
+			saveGroceryList(first);
+			saveGroceryList(second);
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "Grocery lists" }));
+			await user.click(screen.getByRole("button", { name: /^First List/ }));
+			await user.click(screen.getByRole("button", { name: /^Second List/ }));
+
+			expect(screen.getAllByText(/detail is coming soon/i)).toHaveLength(1);
+			expect(
+				JSON.parse(
+					window.localStorage.getItem("cookerist:grocery-lists") ?? "[]",
+				),
+			).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({ name: "First List", expanded: false }),
+					expect.objectContaining({ name: "Second List", expanded: true }),
+				]),
+			);
 		});
 	});
 });

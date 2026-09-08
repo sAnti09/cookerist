@@ -33,3 +33,17 @@ export function generateGroceryListName(recipeTitles: string[]): string {
 	if (joined.length <= GROCERY_LIST_NAME_MAX_LENGTH) return joined;
 	return `${joined.slice(0, GROCERY_LIST_NAME_MAX_LENGTH - 1)}…`;
 }
+
+export type GroceryListProgress = {
+	checked: number;
+	total: number;
+	percent: number;
+	completed: boolean;
+};
+
+export function getGroceryListProgress(list: GroceryList): GroceryListProgress {
+	const total = list.items.length;
+	const checked = list.items.filter((item) => item.checked).length;
+	const percent = total > 0 ? Math.round((checked / total) * 100) : 0;
+	return { checked, total, percent, completed: total > 0 && percent === 100 };
+}

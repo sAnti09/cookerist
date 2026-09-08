@@ -4,6 +4,7 @@ import {
 	deleteGroceryList,
 	loadGroceryLists,
 	saveGroceryList,
+	setExpandedGroceryList,
 	updateGroceryList,
 } from "./grocery-storage";
 
@@ -146,5 +147,28 @@ describe("updateGroceryList", () => {
 		saveGroceryList(list);
 
 		expect(updateGroceryList({ ...list, id: "not-a-real-id" })).toEqual([list]);
+	});
+});
+
+describe("setExpandedGroceryList", () => {
+	it("expands the matching list and collapses every other one", () => {
+		const first = makeList({ name: "first", expanded: true });
+		const second = makeList({ name: "second" });
+		saveGroceryList(first);
+		saveGroceryList(second);
+
+		const result = setExpandedGroceryList(first.id);
+
+		expect(result.find((l) => l.id === first.id)?.expanded).toBe(true);
+		expect(result.find((l) => l.id === second.id)?.expanded).toBe(false);
+	});
+
+	it("collapses every list when passed null", () => {
+		const list = makeList({ expanded: true });
+		saveGroceryList(list);
+
+		const result = setExpandedGroceryList(null);
+
+		expect(result.every((l) => l.expanded === false)).toBe(true);
 	});
 });

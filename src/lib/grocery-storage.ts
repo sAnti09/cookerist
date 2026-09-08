@@ -47,3 +47,9 @@ export function updateGroceryList(list: GroceryList): GroceryList[] {
 	persist(next);
 	return next;
 }
+
+export function setExpandedGroceryList(id: string | null): GroceryList[] {
+	const next = loadGroceryLists().map((l) => ({ ...l, expanded: l.id === id }));
+	persist(next);
+	return next;
+}
