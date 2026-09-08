@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { GroceryListItem } from "#/lib/grocery-list";
 import type { Ingredient, Recipe } from "#/lib/recipe";
 import {
 	aggregateGroceryItems,
 	COUNTABLE_UNITS,
+	carryOverCheckedState,
 	isCountableUnit,
 	roundGroceryQuantity,
 } from "./aggregate-grocery-items";
@@ -333,5 +335,80 @@ describe("aggregateGroceryItems", () => {
 		const ids = new Set(result.map((item) => item.id));
 		expect(ids.size).toBe(result.length);
 		expect(result.every((item) => item.checked === false)).toBe(true);
+	});
+});
+
+describe("carryOverCheckedState", () => {
+	function makeItem(overrides: Partial<GroceryListItem> = {}): GroceryListItem {
+		return {
+			id: crypto.randomUUID(),
+			text: "shrimp",
+			quantity: 1,
+			unit: "lb",
+			checked: false,
+			source: "recipe",
+			...overrides,
+		};
+	}
+
+	it("keeps the checked state of an item whose merged text+unit is unchanged", () => {
+		const previous = [makeItem({ text: "shrimp", unit: "lb", checked: true })];
+		const next = [
+			makeItem({ id: "new-id", text: "shrimp", unit: "lb", checked: false }),
+		];
+
+		const result = carryOverCheckedState(previous, next);
+
+		expect(result[0].checked).toBe(true);
+		// The new item's own id is preserved, only checked is carried over.
+		expect(result[0].id).toBe("new-id");
+	});
+
+	it("resets a brand new item (no matching text+unit in the previous list) to unchecked", () => {
+		const previous = [makeItem({ text: "shrimp", unit: "lb", checked: true })];
+		const next = [makeItem({ text: "napkins", unit: "pack", checked: false })];
+
+		const result = carryOverCheckedState(previous, next);
+
+		expect(result[0].checked).toBe(false);
+	});
+
+	it("resets an item whose unit changed, even if the text is the same", () => {
+		const previous = [makeItem({ text: "flour", unit: "cups", checked: true })];
+		const next = [makeItem({ text: "flour", unit: "g", checked: false })];
+
+		const result = carryOverCheckedState(previous, next);
+
+		expect(result[0].checked).toBe(false);
+	});
+
+	it("drops items no longer present without carrying anything over for them", () => {
+		const previous = [
+			makeItem({ text: "shrimp", unit: "lb", checked: true }),
+			makeItem({ text: "garlic", unit: "cloves", checked: true }),
+		];
+		const next = [makeItem({ text: "shrimp", unit: "lb", checked: false })];
+
+		const result = carryOverCheckedState(previous, next);
+
+		expect(result).toHaveLength(1);
+		expect(result[0].checked).toBe(true);
+	});
+
+	it("matches on normalized (trimmed, case-insensitive) text and unit", () => {
+		const previous = [
+			makeItem({ text: "  Shrimp  ", unit: "LB", checked: true }),
+		];
+		const next = [makeItem({ text: "shrimp", unit: "lb", checked: false })];
+
+		const result = carryOverCheckedState(previous, next);
+
+		expect(result[0].checked).toBe(true);
+	});
+
+	it("returns an empty array when there are no new items", () => {
+		const previous = [makeItem({ checked: true })];
+
+		expect(carryOverCheckedState(previous, [])).toEqual([]);
 	});
 });

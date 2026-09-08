@@ -1,4 +1,4 @@
-import { ChevronDown, CircleCheck, Trash2 } from "lucide-react";
+import { ChevronDown, CircleCheck, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
@@ -14,15 +14,22 @@ export function GroceryListRow({
 	list,
 	recipes,
 	onDelete,
+	onEdit,
 	onToggleExpand,
 }: {
 	list: GroceryList;
 	recipes: Recipe[];
 	onDelete: (id: string) => void;
+	onEdit: (list: GroceryList) => void;
 	onToggleExpand: (id: string) => void;
 }) {
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const { checked, total, percent, completed } = getGroceryListProgress(list);
+	const date = new Date(list.createdAt).toLocaleDateString(undefined, {
+		year: "numeric",
+		month: "short",
+		day: "numeric",
+	});
 	const recipeTitles = list.recipeIds
 		.map((id) => recipes.find((recipe) => recipe.id === id)?.title)
 		.filter((title): title is string => Boolean(title));
@@ -59,22 +66,6 @@ export function GroceryListRow({
 							</span>
 						) : null}
 					</div>
-					<div
-						role="progressbar"
-						aria-label={`${list.name} items checked`}
-						aria-valuenow={percent}
-						aria-valuemin={0}
-						aria-valuemax={100}
-						className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-bg2"
-					>
-						<div
-							className="h-full rounded-full bg-sage transition-[width] duration-300 ease-out"
-							style={{ width: `${percent}%` }}
-						/>
-					</div>
-					<p className="mt-1 text-xs text-ink-dim tabular-nums">
-						{checked}/{total} checked
-					</p>
 				</button>
 				<div
 					className={cn(
@@ -83,6 +74,14 @@ export function GroceryListRow({
 							"opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
 					)}
 				>
+					<Button
+						variant="secondary"
+						className="shrink-0 rounded-[10px] px-2"
+						aria-label={`Edit ${list.name}`}
+						onClick={() => onEdit(list)}
+					>
+						<Pencil className="size-4 text-ink-dim" aria-hidden="true" />
+					</Button>
 					<Button
 						variant="secondary"
 						className="group/delete shrink-0 rounded-[10px] px-2"
@@ -108,6 +107,34 @@ export function GroceryListRow({
 					</Button>
 				</div>
 			</div>
+			{/* A full-width row of its own — sharing the header's flex row with the
+			icon buttons would keep the bar from ever reaching the card's right edge. */}
+			<button
+				type="button"
+				className="mt-2 block w-full cursor-pointer text-left"
+				aria-expanded={list.expanded}
+				onClick={() => onToggleExpand(list.id)}
+			>
+				<div
+					role="progressbar"
+					aria-label={`${list.name} items checked`}
+					aria-valuenow={percent}
+					aria-valuemin={0}
+					aria-valuemax={100}
+					className="h-1.5 w-full overflow-hidden rounded-full bg-bg2"
+				>
+					<div
+						className="h-full rounded-full bg-sage transition-[width] duration-300 ease-out"
+						style={{ width: `${percent}%` }}
+					/>
+				</div>
+				<p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-dim tabular-nums">
+					<span>{date}</span>
+					<span>
+						{checked}/{total} checked
+					</span>
+				</p>
+			</button>
 			{list.expanded ? (
 				<div className="mt-4 border-line border-t pt-4">
 					<p className="text-sm text-ink-dim">

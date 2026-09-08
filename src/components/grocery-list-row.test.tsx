@@ -62,6 +62,7 @@ function renderRow(
 		list,
 		recipes,
 		onDelete: vi.fn(),
+		onEdit: vi.fn(),
 		onToggleExpand: vi.fn(),
 		...overrides,
 	};
@@ -221,5 +222,21 @@ describe("GroceryListRow", () => {
 
 		expect(props.onDelete).toHaveBeenCalledWith(list.id);
 		expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+	});
+
+	it("shows the creation date right before the checked-items count", () => {
+		renderRow();
+
+		const checkedText = screen.getByText("0/2 checked");
+		expect(checkedText.parentElement).toHaveTextContent(/2026.*0\/2 checked/);
+	});
+
+	it("calls onEdit with the list when the edit button is clicked", async () => {
+		const user = userEvent.setup();
+		const { props } = renderRow();
+
+		await user.click(screen.getByRole("button", { name: `Edit ${list.name}` }));
+
+		expect(props.onEdit).toHaveBeenCalledWith(list);
 	});
 });

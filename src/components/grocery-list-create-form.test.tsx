@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
+import type { GroceryList } from "#/lib/grocery-list";
 import type { Recipe } from "#/lib/recipe";
 import { GroceryListCreateForm } from "./grocery-list-create-form";
 
@@ -30,7 +31,7 @@ function renderForm(
 	const props = {
 		recipes: [makeRecipe()],
 		onUpdateRecipe: vi.fn(),
-		onCreate: vi.fn(),
+		onSave: vi.fn(),
 		onClose: vi.fn(),
 		...overrides,
 	};
@@ -190,7 +191,7 @@ describe("GroceryListCreateForm", () => {
 			<GroceryListCreateForm
 				recipes={[updatedRecipe]}
 				onUpdateRecipe={props.onUpdateRecipe}
-				onCreate={props.onCreate}
+				onSave={props.onSave}
 				onClose={props.onClose}
 			/>,
 		);
@@ -349,7 +350,7 @@ describe("GroceryListCreateForm", () => {
 		expect(
 			screen.getByText(/tied to the recipes you selected/i),
 		).toBeInTheDocument();
-		expect(props.onCreate).not.toHaveBeenCalled();
+		expect(props.onSave).not.toHaveBeenCalled();
 
 		await user.click(
 			within(screen.getByRole("alertdialog")).getByRole("button", {
@@ -358,7 +359,7 @@ describe("GroceryListCreateForm", () => {
 		);
 
 		expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-		expect(props.onCreate).not.toHaveBeenCalled();
+		expect(props.onSave).not.toHaveBeenCalled();
 		// The form itself is left open and unchanged.
 		expect(screen.getByText("Shrimp Pasta")).toBeInTheDocument();
 	});
@@ -375,8 +376,8 @@ describe("GroceryListCreateForm", () => {
 			within(confirmDialog).getByRole("button", { name: "Save" }),
 		);
 
-		expect(props.onCreate).toHaveBeenCalledTimes(1);
-		const created = vi.mocked(props.onCreate).mock.calls[0][0];
+		expect(props.onSave).toHaveBeenCalledTimes(1);
+		const created = vi.mocked(props.onSave).mock.calls[0][0];
 		expect(created.name).toBe("Shrimp Pasta");
 		expect(created.recipeIds).toEqual(["recipe-1"]);
 		expect(created.items).toHaveLength(1);
@@ -438,5 +439,193 @@ describe("GroceryListCreateForm", () => {
 		await user.click(screen.getByRole("button", { name: "Dismiss dialog" }));
 
 		expect(props.onClose).toHaveBeenCalled();
+	});
+
+	describe("editing an existing list", () => {
+		function makeEditingList(
+			overrides: Partial<GroceryList> = {},
+		): GroceryList {
+			return {
+				id: "list-1",
+				createdAt: "2026-01-15T12:00:00.000Z",
+				name: "My Custom Name",
+				recipeIds: ["recipe-1"],
+				items: [
+					{
+						id: "item-shrimp",
+						text: "shrimp",
+						quantity: 1,
+						unit: "lb",
+						checked: true,
+						source: "recipe",
+						origins: [{ recipeId: "recipe-1", ingredientId: "ing-1" }],
+					},
+				],
+				expanded: false,
+				...overrides,
+			};
+		}
+
+		it("pre-populates the recipe selection, custom ingredients, and name", () => {
+			renderForm({
+				recipes: [
+					makeRecipe({ id: "recipe-1", title: "Shrimp Pasta" }),
+					makeRecipe({ id: "recipe-2", title: "Garlic Bread" }),
+				],
+				editingList: makeEditingList({
+					items: [
+						{
+							id: "item-shrimp",
+							text: "shrimp",
+							quantity: 1,
+							unit: "lb",
+							checked: true,
+							source: "recipe",
+						},
+						{
+							id: "item-napkins",
+							text: "napkins",
+							quantity: 2,
+							unit: "pack",
+							checked: false,
+							source: "custom",
+						},
+					],
+				}),
+			});
+
+			expect(
+				screen.getByRole("heading", { name: "Edit grocery list" }),
+			).toBeInTheDocument();
+			expect(screen.getByText("Shrimp Pasta")).toBeInTheDocument();
+			expect(screen.queryByText("Garlic Bread")).not.toBeInTheDocument();
+			expect(screen.getAllByText("2 pack napkins")).toHaveLength(2);
+			expect(screen.getByLabelText("List name")).toHaveValue("My Custom Name");
+		});
+
+		it("re-aggregates the preview live when the selection changes, same as creation", async () => {
+			const user = userEvent.setup();
+			renderForm({
+				recipes: [
+					makeRecipe({ id: "recipe-1", title: "Shrimp Pasta" }),
+					makeRecipe({
+						id: "recipe-2",
+						title: "Garlic Bread",
+						prompt: "garlic bread",
+						ingredients: [
+							{
+								id: "ing-garlic",
+								text: "garlic",
+								quantity: 2,
+								unit: "cloves",
+								checked: false,
+							},
+						],
+					}),
+				],
+				editingList: makeEditingList(),
+			});
+
+			expect(screen.getByText(/1 lb shrimp/)).toBeInTheDocument();
+
+			await addRecipe(user, "Garlic Bread");
+
+			expect(screen.getByText(/2 cloves garlic/)).toBeInTheDocument();
+		});
+
+		it("shows a confirmation dialog before saving that mentions replacing the prior recipe relationship", async () => {
+			const user = userEvent.setup();
+			renderForm({
+				recipes: [makeRecipe({ id: "recipe-1", title: "Shrimp Pasta" })],
+				editingList: makeEditingList(),
+			});
+
+			await user.click(screen.getByRole("button", { name: "Save" }));
+
+			expect(
+				screen.getByRole("heading", {
+					name: "Save changes to this grocery list?",
+				}),
+			).toBeInTheDocument();
+			expect(
+				screen.getByText(/replaces the list's current recipe selection/i),
+			).toBeInTheDocument();
+		});
+
+		it("preserves checked state for unchanged items and resets it for items dropped by the edit, while keeping the id and createdAt", async () => {
+			const user = userEvent.setup();
+			const recipe1 = makeRecipe({ id: "recipe-1", title: "Shrimp Pasta" });
+			const recipe2 = makeRecipe({
+				id: "recipe-2",
+				title: "Garlic Bread",
+				prompt: "garlic bread",
+				ingredients: [
+					{
+						id: "ing-garlic",
+						text: "garlic",
+						quantity: 2,
+						unit: "cloves",
+						checked: false,
+					},
+				],
+			});
+			const editingList = makeEditingList({
+				recipeIds: ["recipe-1", "recipe-2"],
+				items: [
+					{
+						id: "item-shrimp",
+						text: "shrimp",
+						quantity: 1,
+						unit: "lb",
+						checked: true,
+						source: "recipe",
+					},
+					{
+						id: "item-garlic",
+						text: "garlic",
+						quantity: 2,
+						unit: "cloves",
+						checked: true,
+						source: "recipe",
+					},
+				],
+			});
+			const { props } = renderForm({
+				recipes: [recipe1, recipe2],
+				editingList,
+			});
+
+			await user.click(
+				screen.getByRole("button", { name: "Remove Garlic Bread" }),
+			);
+			await user.click(screen.getByRole("button", { name: "Save" }));
+			const confirmDialog = screen.getByRole("alertdialog");
+			await user.click(
+				within(confirmDialog).getByRole("button", { name: "Save" }),
+			);
+
+			expect(props.onSave).toHaveBeenCalledTimes(1);
+			const saved = vi.mocked(props.onSave).mock.calls[0][0];
+			expect(saved.id).toBe(editingList.id);
+			expect(saved.createdAt).toBe(editingList.createdAt);
+			expect(saved.recipeIds).toEqual(["recipe-1"]);
+			expect(saved.items).toEqual([
+				expect.objectContaining({ text: "shrimp", checked: true }),
+			]);
+		});
+
+		it("lets the name be changed independently of the recipe/ingredient selection, up to 255 characters", async () => {
+			const user = userEvent.setup();
+			renderForm({
+				recipes: [makeRecipe({ id: "recipe-1", title: "Shrimp Pasta" })],
+				editingList: makeEditingList(),
+			});
+
+			const nameInput = screen.getByLabelText("List name");
+			await user.clear(nameInput);
+			await user.type(nameInput, "a".repeat(300));
+
+			expect((nameInput as HTMLInputElement).value.length).toBe(255);
+		});
 	});
 });

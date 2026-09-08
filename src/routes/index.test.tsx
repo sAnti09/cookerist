@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroceryList } from "#/lib/grocery-list";
 import { saveGroceryList } from "#/lib/grocery-storage";
-import { saveRecipe, toStoredRecipe } from "#/lib/recipes-storage";
+import { loadRecipes, saveRecipe, toStoredRecipe } from "#/lib/recipes-storage";
 import { Home } from "./index";
 
 class MockIntersectionObserver {
@@ -673,6 +673,71 @@ describe("Home", () => {
 					expect.objectContaining({ name: "Second List", expanded: true }),
 				]),
 			);
+		});
+
+		it("opens the edit form pre-populated and saves changes over the existing list", async () => {
+			seedRecipe({ title: "Garlic Shrimp Pasta" });
+			const recipe = loadRecipes()[0];
+			saveGroceryList({
+				id: "list-1",
+				createdAt: "2026-01-01T00:00:00.000Z",
+				name: "Weeknight Groceries",
+				recipeIds: [recipe.id],
+				items: [
+					{
+						id: "item-shrimp",
+						text: "shrimp",
+						quantity: 300,
+						unit: "g",
+						checked: true,
+						source: "recipe",
+						origins: [
+							{ recipeId: recipe.id, ingredientId: recipe.ingredients[0].id },
+						],
+					},
+				],
+				expanded: false,
+			});
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "Grocery lists" }));
+			await user.click(
+				screen.getByRole("button", { name: "Edit Weeknight Groceries" }),
+			);
+
+			const dialog = screen.getByRole("dialog");
+			expect(
+				within(dialog).getByRole("heading", { name: "Edit grocery list" }),
+			).toBeInTheDocument();
+			expect(
+				within(dialog).getByText("Garlic Shrimp Pasta"),
+			).toBeInTheDocument();
+
+			const nameInput = within(dialog).getByLabelText("List name");
+			await user.clear(nameInput);
+			await user.type(nameInput, "Updated Groceries");
+			await user.click(within(dialog).getByRole("button", { name: "Save" }));
+			await user.click(
+				within(screen.getByRole("alertdialog")).getByRole("button", {
+					name: "Save",
+				}),
+			);
+
+			expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+			expect(screen.getByText("Updated Groceries")).toBeInTheDocument();
+			const stored = JSON.parse(
+				window.localStorage.getItem("cookerist:grocery-lists") ?? "[]",
+			);
+			expect(stored).toHaveLength(1);
+			expect(stored[0].id).toBe("list-1");
+			expect(stored[0].name).toBe("Updated Groceries");
+			// Same recipe/ingredient selection re-aggregates to the same
+			// text+unit, so the previously checked item stays checked.
+			expect(stored[0].items[0]).toMatchObject({
+				text: "shrimp",
+				checked: true,
+			});
 		});
 	});
 });

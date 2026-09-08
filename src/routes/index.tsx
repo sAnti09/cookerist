@@ -20,6 +20,7 @@ import {
 	loadGroceryLists,
 	saveGroceryList,
 	setExpandedGroceryList,
+	updateGroceryList,
 } from "#/lib/grocery-storage";
 import { DIFFICULTY_LABELS, type Difficulty, type Recipe } from "#/lib/recipe";
 import {
@@ -54,6 +55,8 @@ export function Home() {
 	);
 	const [favoritesOnly, setFavoritesOnly] = useState(false);
 	const [creatingGroceryList, setCreatingGroceryList] = useState(false);
+	const [editingGroceryList, setEditingGroceryList] =
+		useState<GroceryList | null>(null);
 	const sentinelRef = useRef<HTMLDivElement | null>(null);
 	const mutation = useMutation({
 		mutationFn: (prompt: string) => generateRecipe({ data: prompt }),
@@ -128,9 +131,16 @@ export function Home() {
 		setCreatingGroceryList(true);
 	}
 
-	function handleGroceryListCreated(list: GroceryList) {
-		setGroceryLists(saveGroceryList(list));
+	function handleEditGroceryList(list: GroceryList) {
+		setEditingGroceryList(list);
+	}
+
+	function handleGroceryListSaved(list: GroceryList) {
+		setGroceryLists(
+			editingGroceryList ? updateGroceryList(list) : saveGroceryList(list),
+		);
 		setCreatingGroceryList(false);
+		setEditingGroceryList(null);
 	}
 
 	function submit(prompt: string, replaceId?: string) {
@@ -314,18 +324,23 @@ export function Home() {
 								list={list}
 								recipes={recipes}
 								onDelete={handleDeleteGroceryList}
+								onEdit={handleEditGroceryList}
 								onToggleExpand={handleToggleExpandGroceryList}
 							/>
 						))
 					)}
 				</div>
 			</div>
-			{creatingGroceryList ? (
+			{creatingGroceryList || editingGroceryList ? (
 				<GroceryListCreateForm
 					recipes={recipes}
+					editingList={editingGroceryList ?? undefined}
 					onUpdateRecipe={handleUpdateRecipe}
-					onCreate={handleGroceryListCreated}
-					onClose={() => setCreatingGroceryList(false)}
+					onSave={handleGroceryListSaved}
+					onClose={() => {
+						setCreatingGroceryList(false);
+						setEditingGroceryList(null);
+					}}
 				/>
 			) : null}
 		</>

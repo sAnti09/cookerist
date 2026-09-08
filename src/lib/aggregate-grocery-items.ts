@@ -119,3 +119,24 @@ export function aggregateGroceryItems(
 
 	return [...recipeItems, ...customItems];
 }
+
+function checkedStateKey(item: GroceryListItem): string {
+	return `${item.text.trim().toLowerCase()}::${item.unit.trim().toLowerCase()}`;
+}
+
+// Carries checked state from a list's previous items onto its freshly
+// re-aggregated items (e.g. after an edit) — an item counts as "the same" if
+// its merged text+unit is unchanged; anything new or changed resets to
+// unchecked rather than guessing.
+export function carryOverCheckedState(
+	previousItems: GroceryListItem[],
+	newItems: GroceryListItem[],
+): GroceryListItem[] {
+	const previouslyChecked = new Map(
+		previousItems.map((item) => [checkedStateKey(item), item.checked]),
+	);
+	return newItems.map((item) => ({
+		...item,
+		checked: previouslyChecked.get(checkedStateKey(item)) ?? false,
+	}));
+}

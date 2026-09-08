@@ -6,6 +6,7 @@ import { ServingsStepper } from "#/components/ui/servings-stepper";
 import {
 	aggregateGroceryItems,
 	type CustomGroceryIngredient,
+	carryOverCheckedState,
 } from "#/lib/aggregate-grocery-items";
 import { filterRecipes } from "#/lib/filter-recipes";
 import {
@@ -20,31 +21,49 @@ import { formatQuantity } from "#/lib/scale-servings";
 // turn the dropdown back into "just show every recipe".
 const RECIPE_SEARCH_RESULTS_LIMIT = 8;
 
-const SAVE_CONFIRMATION_DESCRIPTION =
+const SAVE_CONFIRMATION_DESCRIPTION_CREATE =
 	"This list will be tied to the recipes you selected — checking off a combined item here will also check it off in those recipes. This can't be changed after saving.";
+const SAVE_CONFIRMATION_DESCRIPTION_EDIT =
+	"This replaces the list's current recipe selection and custom ingredients. Items unaffected by the change keep their checked state — anything new or changed resets to unchecked.";
 
 type DraftCustomIngredient = CustomGroceryIngredient & { localId: string };
 
 export function GroceryListCreateForm({
 	recipes,
+	editingList,
 	onUpdateRecipe,
-	onCreate,
+	onSave,
 	onClose,
 }: {
 	recipes: Recipe[];
+	editingList?: GroceryList;
 	onUpdateRecipe: (recipe: Recipe) => void;
-	onCreate: (list: GroceryList) => void;
+	onSave: (list: GroceryList) => void;
 	onClose: () => void;
 }) {
-	const [selectedRecipeIds, setSelectedRecipeIds] = useState<string[]>([]);
+	const isEditing = editingList != null;
+	const [selectedRecipeIds, setSelectedRecipeIds] = useState<string[]>(
+		() => editingList?.recipeIds ?? [],
+	);
 	const [recipeSearch, setRecipeSearch] = useState("");
 	const [customIngredients, setCustomIngredients] = useState<
 		DraftCustomIngredient[]
-	>([]);
+	>(() =>
+		(editingList?.items ?? [])
+			.filter((item) => item.source === "custom")
+			.map((item) => ({
+				localId: item.id,
+				text: item.text,
+				quantity: item.quantity,
+				unit: item.unit,
+			})),
+	);
 	const [customText, setCustomText] = useState("");
 	const [customQuantity, setCustomQuantity] = useState("");
 	const [customUnit, setCustomUnit] = useState("");
-	const [customName, setCustomName] = useState<string | null>(null);
+	const [customName, setCustomName] = useState<string | null>(
+		() => editingList?.name ?? null,
+	);
 	const [confirmOpen, setConfirmOpen] = useState(false);
 
 	useEffect(() => {
@@ -133,11 +152,22 @@ export function GroceryListCreateForm({
 
 	function handleConfirmSave() {
 		setConfirmOpen(false);
-		onCreate({
+		const finalName = name.trim() || defaultName;
+		const recipeIds = selectedRecipes.map((recipe) => recipe.id);
+		if (editingList) {
+			onSave({
+				...editingList,
+				name: finalName,
+				recipeIds,
+				items: carryOverCheckedState(editingList.items, previewItems),
+			});
+			return;
+		}
+		onSave({
 			id: crypto.randomUUID(),
 			createdAt: new Date().toISOString(),
-			name: name.trim() || defaultName,
-			recipeIds: selectedRecipes.map((recipe) => recipe.id),
+			name: finalName,
+			recipeIds,
 			items: previewItems,
 			expanded: false,
 		});
@@ -159,7 +189,7 @@ export function GroceryListCreateForm({
 			>
 				<div className="flex items-center justify-between border-line border-b p-5">
 					<h2 id="grocery-list-create-title" className="display-title text-lg">
-						Create grocery list
+						{isEditing ? "Edit grocery list" : "Create grocery list"}
 					</h2>
 					<Button
 						variant="secondary"
@@ -382,8 +412,16 @@ export function GroceryListCreateForm({
 
 			<ConfirmDialog
 				open={confirmOpen}
-				title="Save this grocery list?"
-				description={SAVE_CONFIRMATION_DESCRIPTION}
+				title={
+					isEditing
+						? "Save changes to this grocery list?"
+						: "Save this grocery list?"
+				}
+				description={
+					isEditing
+						? SAVE_CONFIRMATION_DESCRIPTION_EDIT
+						: SAVE_CONFIRMATION_DESCRIPTION_CREATE
+				}
 				confirmLabel="Save"
 				cancelLabel="Cancel"
 				onConfirm={handleConfirmSave}
