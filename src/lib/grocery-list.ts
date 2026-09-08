@@ -1,0 +1,35 @@
+export type GroceryListItemSource = "recipe" | "custom";
+
+export type GroceryListItemOrigin = {
+	recipeId: string;
+	ingredientId: string;
+};
+
+export type GroceryListItem = {
+	id: string;
+	text: string;
+	quantity: number;
+	unit: string;
+	checked: boolean;
+	source: GroceryListItemSource;
+	// Present (non-empty) only when source is "recipe" — the ingredients this
+	// item was aggregated from.
+	origins?: GroceryListItemOrigin[];
+};
+
+export type GroceryList = {
+	id: string;
+	createdAt: string;
+	name: string;
+	recipeIds: string[];
+	items: GroceryListItem[];
+	expanded: boolean;
+};
+
+export const GROCERY_LIST_NAME_MAX_LENGTH = 255;
+
+export function generateGroceryListName(recipeTitles: string[]): string {
+	const joined = recipeTitles.join(", ");
+	if (joined.length <= GROCERY_LIST_NAME_MAX_LENGTH) return joined;
+	return `${joined.slice(0, GROCERY_LIST_NAME_MAX_LENGTH - 1)}…`;
+}
