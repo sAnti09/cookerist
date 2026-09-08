@@ -13,7 +13,7 @@ A single-page web app. A user types a prompt describing a dish (e.g. "creamy gar
 
 ### Prompt handling
 - The prompt must be validated as on-topic (a specific dish / cooking request) before calling Groq for a full recipe. Off-topic prompts (not about cooking/food) must be rejected with a friendly inline message and must **not** consume a full recipe generation call.
-- Implement this as a cheap up-front check, e.g. a lightweight Groq classification call (or a single combined prompt with a strict system prompt that asks the model to refuse/return an "off_topic" flag instead of a recipe when the request isn't about cooking a specific dish). Do not attempt to hardcode keyword filters as the primary defense — they're easy to bypass and produce false negatives; use the model, but keep the check cheap (small/fast model, short output — e.g. Llama 3.1 8B on Groq).
+- Implement this as a cheap up-front check, e.g. a lightweight Groq classification call (or a single combined prompt with a strict system prompt that asks the model to refuse/return an "off_topic" flag instead of a recipe when the request isn't about cooking a specific dish). Do not attempt to hardcode keyword filters as the primary defense — they're easy to bypass and produce false negatives; use the model, but keep the check cheap (small/fast model, short output — e.g. `openai/gpt-oss-20b` on Groq).
 
 ### Expanded result contents
 - Title of the dish
@@ -74,7 +74,7 @@ Prompt entry, loading (flickering flame + "Simmering your …" copy), off-topic 
 | Data/async | TanStack Query for client state around the Groq call; TanStack Store only if plain `useState`/`useReducer` + localStorage isn't enough |
 | Styling | Tailwind CSS v4 |
 | Components | shadcn/ui (Radix-based, copied into the repo, fully owned/customizable) |
-| AI provider | Groq (GroqCloud API, OpenAI-compatible) — fast LPU inference over open models (e.g. Llama 3.3 70B Versatile for recipe generation, Llama 3.1 8B for the cheap on-topic check); JSON mode/structured outputs for the recipe schema — called from a TanStack Start **server function**, never from the client, so the API key never reaches the browser |
+| AI provider | Groq (GroqCloud API, OpenAI-compatible) — fast LPU inference over open models (`openai/gpt-oss-120b` for recipe generation, `openai/gpt-oss-20b` for the cheap on-topic check — see TEST-149 note below); JSON mode/structured outputs for the recipe schema — called from a TanStack Start **server function**, never from the client, so the API key never reaches the browser |
 | Hosting | Cloudflare Workers (via Wrangler; static assets served free/unlimited, Worker requests on the free tier). Live: [cookerist.jameseuangel-limpiado.workers.dev](https://cookerist.jameseuangel-limpiado.workers.dev) |
 | Deployment | `pnpm run deploy` (builds + `wrangler deploy`) — run by the agent only with explicit per-deploy user approval (auto-mode blocks it otherwise); not yet wired to auto-deploy on push |
 | Package manager | pnpm |
@@ -172,6 +172,6 @@ type Recipe = {
 - `workers_dev`/`preview_urls` are enabled by default since neither is set explicitly in `wrangler.jsonc` — revisit if a custom domain or disabling the `workers.dev` route is wanted later.
 
 ## Open items / assumptions to revisit
-- Exact Groq-hosted model(s) to call (cost/latency/quality trade-off, e.g. Llama 3.3 70B Versatile vs Llama 4 Maverick for generation, Llama 3.1 8B for the on-topic check) — decide during setup once an API key is available.
+- ~~Exact Groq-hosted model(s) to call~~ Done (TEST-149): the Llama 3.x models originally planned (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`) are no longer available on this Groq account's model catalog as of implementation time (`GET /openai/v1/models` no longer lists any `llama-*` text model — Groq's hosted lineup had moved on to `openai/gpt-oss-*`, `qwen/*`, `groq/compound*`, etc.). Verified against this account: `openai/gpt-oss-120b` for recipe generation, `openai/gpt-oss-20b` for the on-topic check — both support `response_format: {type: "json_object"}` as long as the system prompt contains the literal word "json" somewhere (Groq's API rejects JSON mode otherwise). If the catalog changes again, re-check with `GET https://api.groq.com/openai/v1/models` before assuming a model name still exists.
 - Unit system (metric vs. US customary) — MVP assumption: use whatever unit Groq naturally returns per-ingredient; no forced conversion system unless requested later.
 - ~~GitHub org/repo name — to be finalized when the repository is created.~~ Done: [github.com/sAnti09/cookerist](https://github.com/sAnti09/cookerist) (public, `main` branch).
