@@ -126,6 +126,8 @@ type Recipe = {
 - Biome handles lint + format; run it in CI and as a pre-commit check.
 - Keep components small and colocate tests next to source (`Component.tsx` + `Component.test.tsx`).
 - No premature abstraction — this is a single-page app; don't build a router/multi-page structure or a generic "plugin" system for the recipe schema unless a second real use case appears.
+- **Commit messages must be prefixed with the Beacon ticket key** being worked on, e.g. `TEST-148: Document finalized visual design direction`. Ask if the work doesn't map cleanly to one ticket.
+- Never commit, push, or make any Beacon write (`create_ticket`/`update_ticket`/`add_attachment`/`delete_comment`/etc.) without the user's explicit approval first — make the change, show it, then wait.
 
 ## Testing
 - Target **90%+ coverage** (statements/branches/functions/lines) via `@vitest/coverage-v8`, enforced in CI.
