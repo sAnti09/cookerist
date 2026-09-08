@@ -146,7 +146,7 @@ describe("GroceryListRow", () => {
 		expect(screen.getByText("Items")).toBeInTheDocument();
 	});
 
-	it("calls onToggleExpand with the list id when the header is clicked", async () => {
+	it("calls onToggleExpand exactly once with the list id when the header is clicked", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow();
 
@@ -154,10 +154,11 @@ describe("GroceryListRow", () => {
 			screen.getByRole("button", { name: /^Weeknight Shopping/i }),
 		);
 
+		expect(props.onToggleExpand).toHaveBeenCalledTimes(1);
 		expect(props.onToggleExpand).toHaveBeenCalledWith(list.id);
 	});
 
-	it("calls onToggleExpand with the list id when the expand icon is clicked", async () => {
+	it("calls onToggleExpand exactly once with the list id when the expand icon is clicked", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow();
 
@@ -165,6 +166,17 @@ describe("GroceryListRow", () => {
 			screen.getByRole("button", { name: `Expand ${list.name}` }),
 		);
 
+		expect(props.onToggleExpand).toHaveBeenCalledTimes(1);
+		expect(props.onToggleExpand).toHaveBeenCalledWith(list.id);
+	});
+
+	it("calls onToggleExpand when an arbitrary non-interactive point of the card is clicked", async () => {
+		const user = userEvent.setup();
+		const { props } = renderRow();
+
+		await user.click(screen.getByTestId(`grocery-list-row-${list.id}`));
+
+		expect(props.onToggleExpand).toHaveBeenCalledTimes(1);
 		expect(props.onToggleExpand).toHaveBeenCalledWith(list.id);
 	});
 
@@ -194,7 +206,7 @@ describe("GroceryListRow", () => {
 		expect(collapseButton.parentElement).not.toHaveClass("opacity-0");
 	});
 
-	it("does not delete until the confirmation dialog is confirmed", async () => {
+	it("does not delete until the confirmation dialog is confirmed, and never expands or collapses the row", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow();
 
@@ -204,14 +216,16 @@ describe("GroceryListRow", () => {
 
 		expect(screen.getByRole("alertdialog")).toBeInTheDocument();
 		expect(props.onDelete).not.toHaveBeenCalled();
+		expect(props.onToggleExpand).not.toHaveBeenCalled();
 
 		await user.click(screen.getByRole("button", { name: "Cancel" }));
 
 		expect(props.onDelete).not.toHaveBeenCalled();
+		expect(props.onToggleExpand).not.toHaveBeenCalled();
 		expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
 	});
 
-	it("calls onDelete with the list id when confirmed", async () => {
+	it("calls onDelete with the list id when confirmed, without also toggling expand", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow();
 
@@ -221,6 +235,7 @@ describe("GroceryListRow", () => {
 		await user.click(screen.getByRole("button", { name: "Delete" }));
 
 		expect(props.onDelete).toHaveBeenCalledWith(list.id);
+		expect(props.onToggleExpand).not.toHaveBeenCalled();
 		expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
 	});
 
@@ -231,21 +246,23 @@ describe("GroceryListRow", () => {
 		expect(checkedText.parentElement).toHaveTextContent(/2026.*0\/2 checked/);
 	});
 
-	it("calls onEdit with the list when the edit button is clicked", async () => {
+	it("calls onEdit with the list when the edit button is clicked, without toggling expand", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow();
 
 		await user.click(screen.getByRole("button", { name: `Edit ${list.name}` }));
 
 		expect(props.onEdit).toHaveBeenCalledWith(list);
+		expect(props.onToggleExpand).not.toHaveBeenCalled();
 	});
 
-	it("calls onToggleExpand when the progress bar row is clicked", async () => {
+	it("calls onToggleExpand exactly once when the progress bar row is clicked", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow();
 
 		await user.click(screen.getByText("0/2 checked"));
 
+		expect(props.onToggleExpand).toHaveBeenCalledTimes(1);
 		expect(props.onToggleExpand).toHaveBeenCalledWith(list.id);
 	});
 

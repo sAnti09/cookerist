@@ -69,11 +69,20 @@ export function RecipeResultRow({
 	});
 
 	return (
+		// Whole card acts as a click-anywhere expand/collapse target (mouse/touch
+		// convenience only — not focusable itself). Keyboard/AT users get one
+		// coherent path via the title/metadata block below (role="button") or the
+		// chevron button; every other control inside stops propagation so it
+		// doesn't also toggle expand, and so this outer handler doesn't fire the
+		// toggle a second time when those controls already handle it themselves.
+		// biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: intentionally mouse/touch-only — this div is never focusable, so it adds no new keyboard/AT interaction; keyboard users already reach the same action via the header (role="button") or the chevron button below.
 		<div
+			data-testid={`recipe-row-${recipe.id}`}
 			className={cn(
 				"group card cursor-pointer p-4 transition-colors",
 				recipe.expanded ? "bg-bg2" : "bg-card hover:bg-bg2",
 			)}
+			onClick={() => onToggleExpand(recipe.id)}
 		>
 			<div className="flex items-start justify-between gap-3">
 				{/* biome-ignore lint/a11y/useSemanticElements: a nested <button> (favorite) can't live inside a <button> */}
@@ -82,7 +91,10 @@ export function RecipeResultRow({
 					tabIndex={0}
 					className="flex-1 cursor-pointer text-left"
 					aria-expanded={recipe.expanded}
-					onClick={() => onToggleExpand(recipe.id)}
+					onClick={(event) => {
+						event.stopPropagation();
+						onToggleExpand(recipe.id);
+					}}
 					onKeyDown={(event) => {
 						if (event.key === "Enter" || event.key === " ") {
 							event.preventDefault();
@@ -143,7 +155,10 @@ export function RecipeResultRow({
 						variant="secondary"
 						className="group/delete shrink-0 rounded-[10px] px-2"
 						aria-label={`Delete ${recipe.title}`}
-						onClick={() => setConfirmingDelete(true)}
+						onClick={(event) => {
+							event.stopPropagation();
+							setConfirmingDelete(true);
+						}}
 					>
 						<Trash2 className="size-4 text-ink-dim transition-colors group-hover/delete:text-warn" />
 					</Button>
@@ -155,7 +170,10 @@ export function RecipeResultRow({
 								? `Collapse ${recipe.title}`
 								: `Expand ${recipe.title}`
 						}
-						onClick={() => onToggleExpand(recipe.id)}
+						onClick={(event) => {
+							event.stopPropagation();
+							onToggleExpand(recipe.id);
+						}}
 					>
 						<ChevronDown
 							className={cn(
@@ -167,22 +185,34 @@ export function RecipeResultRow({
 				</div>
 			</div>
 			{recipe.expanded ? (
-				<div className="mt-4 border-line border-t pt-4">
+				// Stops clicks inside the expanded detail (checkboxes, servings
+				// stepper, etc. — owned by RecipeDetail, out of this fix's scope)
+				// from bubbling up and misfiring the card's expand-toggle handler.
+				// biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: only stops click-event propagation, adds no new interaction — RecipeDetail's own controls remain the real, keyboard-accessible ones.
+				<div
+					className="mt-4 border-line border-t pt-4"
+					onClick={(event) => event.stopPropagation()}
+				>
 					<RecipeDetail recipe={recipe} onUpdate={onUpdate} />
 				</div>
 			) : null}
-			<ConfirmDialog
-				open={confirmingDelete}
-				title="Delete this recipe?"
-				description={`"${recipe.title}" will be permanently removed.`}
-				confirmLabel="Delete"
-				cancelLabel="Cancel"
-				onConfirm={() => {
-					setConfirmingDelete(false);
-					onDelete(recipe.id);
-				}}
-				onCancel={() => setConfirmingDelete(false)}
-			/>
+			{/* Stops the dialog's own backdrop/confirm/cancel clicks from bubbling
+			up to the card's expand-toggle handler above. */}
+			{/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: only stops click-event propagation, adds no new interaction — ConfirmDialog's own buttons remain the real, keyboard-accessible controls. */}
+			<div onClick={(event) => event.stopPropagation()}>
+				<ConfirmDialog
+					open={confirmingDelete}
+					title="Delete this recipe?"
+					description={`"${recipe.title}" will be permanently removed.`}
+					confirmLabel="Delete"
+					cancelLabel="Cancel"
+					onConfirm={() => {
+						setConfirmingDelete(false);
+						onDelete(recipe.id);
+					}}
+					onCancel={() => setConfirmingDelete(false)}
+				/>
+			</div>
 		</div>
 	);
 }

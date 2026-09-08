@@ -70,12 +70,13 @@ describe("RecipeResultRow", () => {
 		expect(screen.queryByText(/min$/)).not.toBeInTheDocument();
 	});
 
-	it("calls onToggleExpand with the recipe id when the header is clicked", async () => {
+	it("calls onToggleExpand exactly once with the recipe id when the header is clicked", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow();
 
 		await user.click(screen.getByRole("button", { name: /^Garlic Butter/i }));
 
+		expect(props.onToggleExpand).toHaveBeenCalledTimes(1);
 		expect(props.onToggleExpand).toHaveBeenCalledWith(recipe.id);
 	});
 
@@ -91,7 +92,7 @@ describe("RecipeResultRow", () => {
 		expect(props.onToggleExpand).toHaveBeenCalledWith(recipe.id);
 	});
 
-	it("calls onToggleExpand with the recipe id when the expand icon is clicked", async () => {
+	it("calls onToggleExpand exactly once with the recipe id when the expand icon is clicked", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow();
 
@@ -99,6 +100,17 @@ describe("RecipeResultRow", () => {
 			screen.getByRole("button", { name: `Expand ${recipe.title}` }),
 		);
 
+		expect(props.onToggleExpand).toHaveBeenCalledTimes(1);
+		expect(props.onToggleExpand).toHaveBeenCalledWith(recipe.id);
+	});
+
+	it("calls onToggleExpand when an arbitrary non-interactive point of the card is clicked", async () => {
+		const user = userEvent.setup();
+		const { props } = renderRow();
+
+		await user.click(screen.getByTestId(`recipe-row-${recipe.id}`));
+
+		expect(props.onToggleExpand).toHaveBeenCalledTimes(1);
 		expect(props.onToggleExpand).toHaveBeenCalledWith(recipe.id);
 	});
 
@@ -191,7 +203,7 @@ describe("RecipeResultRow", () => {
 		});
 	});
 
-	it("does not delete until the confirmation dialog is confirmed", async () => {
+	it("does not delete until the confirmation dialog is confirmed, and never expands or collapses the row", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow();
 
@@ -201,14 +213,16 @@ describe("RecipeResultRow", () => {
 
 		expect(screen.getByRole("alertdialog")).toBeInTheDocument();
 		expect(props.onDelete).not.toHaveBeenCalled();
+		expect(props.onToggleExpand).not.toHaveBeenCalled();
 
 		await user.click(screen.getByRole("button", { name: "Cancel" }));
 
 		expect(props.onDelete).not.toHaveBeenCalled();
+		expect(props.onToggleExpand).not.toHaveBeenCalled();
 		expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
 	});
 
-	it("calls onDelete with the recipe id when confirmed", async () => {
+	it("calls onDelete with the recipe id when confirmed, without also toggling expand", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow();
 
@@ -218,10 +232,11 @@ describe("RecipeResultRow", () => {
 		await user.click(screen.getByRole("button", { name: "Delete" }));
 
 		expect(props.onDelete).toHaveBeenCalledWith(recipe.id);
+		expect(props.onToggleExpand).not.toHaveBeenCalled();
 		expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
 	});
 
-	it("dismisses when the backdrop is clicked", async () => {
+	it("dismisses when the backdrop is clicked, without toggling expand", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow();
 
@@ -231,6 +246,7 @@ describe("RecipeResultRow", () => {
 		await user.click(screen.getByRole("button", { name: "Dismiss dialog" }));
 
 		expect(props.onDelete).not.toHaveBeenCalled();
+		expect(props.onToggleExpand).not.toHaveBeenCalled();
 		expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
 	});
 
