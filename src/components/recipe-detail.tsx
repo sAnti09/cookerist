@@ -1,7 +1,7 @@
 import { Checkbox } from "#/components/ui/checkbox";
 import { ServingsStepper } from "#/components/ui/servings-stepper";
 import { groupSteps, type Recipe } from "#/lib/recipe";
-import { formatQuantity, scaleQuantity } from "#/lib/scale-servings";
+import { formatIngredientLine, scaleQuantity } from "#/lib/scale-servings";
 
 type RecipeDetailProps = {
 	recipe: Recipe;
@@ -108,14 +108,15 @@ export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
 												: "tabular-nums"
 										}
 									>
-										{formatQuantity(
+										{formatIngredientLine(
 											scaleQuantity(
 												ingredient.quantity,
 												recipe.baseServings,
 												recipe.currentServings,
 											),
-										)}{" "}
-										{ingredient.unit} {ingredient.text}
+											ingredient.unit,
+											ingredient.text,
+										)}
 									</span>
 								}
 							/>
