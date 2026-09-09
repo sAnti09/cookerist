@@ -364,6 +364,77 @@ describe("GroceryListCreateForm", () => {
 		expect(screen.queryByText("1 pack Napkins")).not.toBeInTheDocument();
 	});
 
+	describe("smart-parsing the item field on Enter", () => {
+		it("parses '<qty> <unit> <item>' and adds it immediately", async () => {
+			const user = userEvent.setup();
+			renderForm({ recipes: [] });
+
+			await user.type(
+				screen.getByLabelText("Custom ingredient name"),
+				"1 pc chicken{Enter}",
+			);
+
+			expect(screen.getAllByText("1 pc chicken")).toHaveLength(2);
+			expect(screen.getByLabelText("Custom ingredient name")).toHaveValue("");
+			expect(screen.getByLabelText("Custom ingredient quantity")).toHaveValue(
+				null,
+			);
+			expect(screen.getByLabelText("Custom ingredient unit")).toHaveValue("");
+		});
+
+		it("defaults the unit to piece for '<qty> <item>' with no recognized unit, and adds it", async () => {
+			const user = userEvent.setup();
+			renderForm({ recipes: [] });
+
+			await user.type(
+				screen.getByLabelText("Custom ingredient name"),
+				"5 tuna sardines{Enter}",
+			);
+
+			expect(screen.getAllByText("5 piece tuna sardines")).toHaveLength(2);
+		});
+
+		it("defaults quantity 1 and unit piece for a bare item name, and adds it", async () => {
+			const user = userEvent.setup();
+			renderForm({ recipes: [] });
+
+			await user.type(
+				screen.getByLabelText("Custom ingredient name"),
+				"table{Enter}",
+			);
+
+			expect(screen.getAllByText("1 piece table")).toHaveLength(2);
+		});
+
+		it("does nothing when Enter is pressed in an empty item field", async () => {
+			const user = userEvent.setup();
+			renderForm({ recipes: [] });
+
+			await user.click(screen.getByLabelText("Custom ingredient name"));
+			await user.keyboard("{Enter}");
+
+			expect(screen.getByLabelText("Custom ingredient name")).toHaveValue("");
+			expect(screen.getByLabelText("Custom ingredient quantity")).toHaveValue(
+				null,
+			);
+			expect(screen.getByLabelText("Custom ingredient unit")).toHaveValue("");
+		});
+
+		it("still submits normally when Enter is pressed in the quantity or unit field", async () => {
+			const user = userEvent.setup();
+			renderForm({ recipes: [] });
+
+			await user.type(screen.getByLabelText("Custom ingredient name"), "Salt");
+			await user.type(screen.getByLabelText("Custom ingredient quantity"), "1");
+			await user.type(
+				screen.getByLabelText("Custom ingredient unit"),
+				"box{Enter}",
+			);
+
+			expect(screen.getAllByText("1 box Salt")).toHaveLength(2);
+		});
+	});
+
 	it("disables adding a custom ingredient until name, quantity, and unit are filled in", async () => {
 		const user = userEvent.setup();
 		renderForm({ recipes: [] });

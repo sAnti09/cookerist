@@ -1,5 +1,10 @@
 import { Plus, Search, X } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import {
+	type FormEvent,
+	type KeyboardEvent as ReactKeyboardEvent,
+	useEffect,
+	useState,
+} from "react";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { ServingsStepper } from "#/components/ui/servings-stepper";
@@ -15,6 +20,7 @@ import {
 	type GroceryList,
 	generateGroceryListName,
 } from "#/lib/grocery-list";
+import { parseCustomIngredientInput } from "#/lib/parse-custom-ingredient";
 import type { Recipe } from "#/lib/recipe";
 import { formatIngredientLine } from "#/lib/scale-servings";
 
@@ -125,20 +131,41 @@ export function GroceryListCreateForm({
 		onUpdateRecipe({ ...recipe, currentServings: nextServings });
 	}
 
+	function addCustomIngredient(entry: {
+		text: string;
+		quantity: number;
+		unit: string;
+	}) {
+		setCustomIngredients((items) => [
+			...items,
+			{ localId: crypto.randomUUID(), ...entry },
+		]);
+		setCustomText("");
+		setCustomQuantity("");
+		setCustomUnit("");
+	}
+
 	function handleAddCustomIngredient(event: FormEvent) {
 		event.preventDefault();
 		const text = customText.trim();
 		const unit = customUnit.trim();
 		const quantity = Number(customQuantity);
 		if (!text || !unit || !Number.isFinite(quantity) || quantity <= 0) return;
+		addCustomIngredient({ text, quantity, unit });
+	}
 
-		setCustomIngredients((items) => [
-			...items,
-			{ localId: crypto.randomUUID(), text, quantity, unit },
-		]);
-		setCustomText("");
-		setCustomQuantity("");
-		setCustomUnit("");
+	// Pressing Enter in just the item field is the explicit trigger for the
+	// smart split — e.g. typing "1 pc chicken" and hitting Enter there parses
+	// it into Quantity ("1"), Unit ("pc"), and item ("chicken"), then adds it
+	// immediately (same as clicking Add), instead of submitting the form
+	// natively (the native Enter-submits-form behavior is what Quantity/Unit
+	// still use).
+	function handleItemFieldKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+		if (event.key !== "Enter") return;
+		event.preventDefault();
+		const parsed = parseCustomIngredientInput(customText, knownUnits);
+		if (!parsed || parsed.quantity <= 0) return;
+		addCustomIngredient(parsed);
 	}
 
 	function handleRemoveCustomIngredient(localId: string) {
@@ -321,7 +348,8 @@ export function GroceryListCreateForm({
 								type="text"
 								value={customText}
 								onChange={(event) => setCustomText(event.target.value)}
-								placeholder="Item"
+								onKeyDown={handleItemFieldKeyDown}
+								placeholder="Item, e.g. 1 pc chicken"
 								aria-label="Custom ingredient name"
 								className="min-w-0 flex-1 rounded-full border border-line bg-surface px-3 py-1.5 text-sm outline-none"
 							/>

@@ -33,6 +33,11 @@ export type Step = {
 	section: string | null;
 	text: string;
 	checked: boolean;
+	// Optional: minutes estimate for an inherently time-based step (e.g.
+	// "simmer for 10 minutes") — populated by Groq only when relevant
+	// (TEST-258). Absent/null for most steps, which fall back to plain
+	// navigation with no timer.
+	estimatedMinutes?: number | null;
 };
 
 export type Difficulty = "quick_and_easy" | "intermediate" | "hard";

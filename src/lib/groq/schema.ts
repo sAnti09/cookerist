@@ -20,6 +20,9 @@ const ingredientItemSchema = z.object({
 const stepItemSchema = z.object({
 	section: z.string().nullable(),
 	text: z.string().min(1),
+	// Only present for inherently time-based steps (e.g. simmering, baking,
+	// resting) — see TEST-258. Absent/null for most steps.
+	estimatedMinutes: z.number().positive().nullable().optional(),
 });
 
 export const recipeResponseSchema = z.object({

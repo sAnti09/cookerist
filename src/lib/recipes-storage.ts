@@ -105,6 +105,7 @@ export function toStoredRecipe(
 			id: crypto.randomUUID(),
 			section: step.section,
 			text: step.text,
+			estimatedMinutes: step.estimatedMinutes ?? null,
 			checked: false,
 		})),
 		expanded: false,

@@ -77,6 +77,7 @@ export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
 							id: crypto.randomUUID(),
 							section: step.section,
 							text: step.text,
+							estimatedMinutes: step.estimatedMinutes ?? null,
 							checked: false,
 						})),
 					],

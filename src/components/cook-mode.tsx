@@ -1,8 +1,10 @@
 import { X } from "lucide-react";
 import type { TouchEvent as ReactTouchEvent } from "react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { StepTimer } from "#/components/step-timer";
 import { Button } from "#/components/ui/button";
 import { CelebrationBurst } from "#/components/ui/celebration-burst";
+import { highlightIngredientMentions } from "#/lib/highlight-ingredients";
 import type { Recipe } from "#/lib/recipe";
 
 type CookModeProps = {
@@ -176,9 +178,35 @@ export function CookMode({ recipe, onUpdate, onClose }: CookModeProps) {
 						</p>
 					</div>
 				) : (
-					<p className="display-title font-semibold text-2xl leading-snug">
-						{currentStep?.text}
-					</p>
+					<div className="flex flex-col items-center gap-4">
+						<p className="display-title font-semibold text-2xl leading-snug">
+							{currentStep
+								? highlightIngredientMentions(
+										currentStep.text,
+										recipe.ingredients,
+									).map((segment, segmentIndex) =>
+										segment.matched ? (
+											<span
+												// biome-ignore lint/suspicious/noArrayIndexKey: segments are a stable derived split of static step text, never reordered
+												key={segmentIndex}
+												className="text-accent"
+											>
+												{segment.text}
+											</span>
+										) : (
+											// biome-ignore lint/suspicious/noArrayIndexKey: segments are a stable derived split of static step text, never reordered
+											<Fragment key={segmentIndex}>{segment.text}</Fragment>
+										),
+									)
+								: null}
+						</p>
+						{currentStep?.estimatedMinutes ? (
+							<StepTimer
+								key={currentStep.id}
+								estimatedMinutes={currentStep.estimatedMinutes}
+							/>
+						) : null}
+					</div>
 				)}
 			</div>
 

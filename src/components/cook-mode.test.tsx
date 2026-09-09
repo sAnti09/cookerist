@@ -38,6 +38,86 @@ afterEach(() => {
 });
 
 describe("CookMode", () => {
+	it("shows no timer for a step without an estimated duration", () => {
+		renderCookMode(baseRecipe, vi.fn(), vi.fn());
+
+		expect(
+			screen.queryByRole("button", { name: "Start" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("shows a timer defaulting to the step's estimated duration when one is present", () => {
+		const recipeWithTimedStep: Recipe = {
+			...baseRecipe,
+			steps: [
+				{
+					id: "step-1",
+					section: "Cook",
+					text: "Simmer the sauce",
+					checked: false,
+					estimatedMinutes: 10,
+				},
+				baseRecipe.steps[1],
+			],
+		};
+		renderCookMode(recipeWithTimedStep, vi.fn(), vi.fn());
+
+		expect(screen.getByText("10:00")).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+	});
+
+	it("highlights ingredient mentions within the step text", () => {
+		const recipeWithIngredients: Recipe = {
+			...baseRecipe,
+			ingredients: [
+				{
+					id: "ing-1",
+					text: "garlic",
+					baseName: "garlic",
+					quantity: 2,
+					unit: "cloves",
+					checked: false,
+				},
+			],
+		};
+		const { container } = renderCookMode(
+			recipeWithIngredients,
+			vi.fn(),
+			vi.fn(),
+		);
+
+		// Scoped to the step-text paragraph — the section label above it
+		// (e.g. "Prep") also uses text-accent, for an unrelated reason.
+		const stepParagraph = container.querySelector("p.leading-snug");
+		const highlighted = stepParagraph?.querySelector(".text-accent");
+		expect(highlighted?.textContent).toBe("garlic");
+	});
+
+	it("does not highlight anything when no ingredient is mentioned in the step", () => {
+		const recipeWithIngredients: Recipe = {
+			...baseRecipe,
+			ingredients: [
+				{
+					id: "ing-1",
+					text: "olive oil",
+					baseName: "olive oil",
+					quantity: 1,
+					unit: "tbsp",
+					checked: false,
+				},
+			],
+		};
+		const { container } = renderCookMode(
+			recipeWithIngredients,
+			vi.fn(),
+			vi.fn(),
+		);
+
+		expect(screen.getByText("Chop garlic")).toBeInTheDocument();
+		const stepParagraph = container.querySelector("p.leading-snug");
+		expect(stepParagraph?.querySelector(".text-accent")).toBeNull();
+	});
+
 	it("opens on the first step, with Back disabled and the section shown", () => {
 		renderCookMode(baseRecipe, vi.fn(), vi.fn());
 

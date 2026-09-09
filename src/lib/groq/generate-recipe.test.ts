@@ -199,6 +199,55 @@ describe("generateRecipe", () => {
 		});
 	});
 
+	it("accepts a step with an estimated duration and a step with none (null)", async () => {
+		const recipeWithTimedStep = {
+			...validRecipe,
+			steps: [
+				{ section: "Prep", text: "Mince the garlic.", estimatedMinutes: null },
+				{ section: "Cook", text: "Simmer the sauce.", estimatedMinutes: 10 },
+			],
+		};
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(jsonResponse(recipeWithTimedStep));
+
+		const result = await generateRecipe("shrimp pasta for 2");
+
+		expect(result).toEqual({
+			type: "success",
+			recipe: recipeWithTimedStep,
+			truncated: false,
+		});
+	});
+
+	it("accepts a step that omits estimatedMinutes entirely", async () => {
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(jsonResponse(validRecipe));
+
+		const result = await generateRecipe("shrimp pasta for 2");
+
+		expect(result.type).toBe("success");
+	});
+
+	it("returns an error when a step's estimatedMinutes is not positive", async () => {
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(
+				jsonResponse({
+					...validRecipe,
+					steps: [{ section: null, text: "Simmer.", estimatedMinutes: 0 }],
+				}),
+			);
+
+		const result = await generateRecipe("shrimp pasta for 2");
+
+		expect(result).toEqual({
+			type: "error",
+			message: "Malformed recipe response from Groq",
+		});
+	});
+
 	it("returns an error when difficulty is not one of the known values", async () => {
 		createMock
 			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))

@@ -50,6 +50,7 @@ describe("toStoredRecipe", () => {
 		expect(recipe.steps[0]).toMatchObject({
 			section: null,
 			text: "Cook the pasta.",
+			estimatedMinutes: null,
 			checked: false,
 		});
 		expect(recipe.id).toBeTruthy();
@@ -61,6 +62,17 @@ describe("toStoredRecipe", () => {
 		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput, true);
 
 		expect(recipe.truncated).toBe(true);
+	});
+
+	it("carries through a step's estimated duration when Groq provides one", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", {
+			...recipeInput,
+			steps: [
+				{ section: "Cook", text: "Simmer the sauce.", estimatedMinutes: 10 },
+			],
+		});
+
+		expect(recipe.steps[0]).toMatchObject({ estimatedMinutes: 10 });
 	});
 
 	it("combines base name + description into the display text (TEST-255 AC2)", () => {
