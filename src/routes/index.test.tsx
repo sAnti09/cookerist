@@ -262,16 +262,34 @@ describe("Home", () => {
 		expect(screen.getByText(/no recipes yet/i)).toBeInTheDocument();
 	});
 
-	describe("FAQ", () => {
-		it("explains data privacy, mobile install steps for both platforms, and data removal", () => {
+	describe("Why Cookerist", () => {
+		it("shows the feature showcase with a privacy tile and an install button", () => {
 			renderHome();
 
-			expect(screen.getByRole("heading", { name: "FAQ" })).toBeInTheDocument();
-			expect(screen.getByText(/is my data private/i)).toBeInTheDocument();
-			expect(screen.getByText(/android \(chrome\)/i)).toBeInTheDocument();
-			expect(screen.getByText(/ios \(safari\)/i)).toBeInTheDocument();
 			expect(
-				screen.getByText(/uninstalling cookerist deletes/i),
+				screen.getByRole("heading", { name: "Why Cookerist" }),
+			).toBeInTheDocument();
+			expect(
+				screen.getByRole("heading", { name: "Private by design" }),
+			).toBeInTheDocument();
+			expect(screen.getByText(/nothing sent to a server/i)).toBeInTheDocument();
+			expect(
+				screen.getByRole("heading", { name: "Install on any phone" }),
+			).toBeInTheDocument();
+			expect(
+				screen.getByRole("button", { name: "Install app" }),
+			).toBeInTheDocument();
+		});
+
+		it("keeps the feature showcase (and its reset action) reachable once recipes exist", () => {
+			seedRecipes(1);
+			renderHome();
+
+			expect(
+				screen.getByRole("heading", { name: "Why Cookerist" }),
+			).toBeInTheDocument();
+			expect(
+				screen.getByRole("button", { name: "reset all data" }),
 			).toBeInTheDocument();
 		});
 

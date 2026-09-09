@@ -113,18 +113,29 @@ describe("playAlarmTone", () => {
 		expect(() => playAlarmTone(null)).not.toThrow();
 	});
 
-	it("creates and plays a short tone", () => {
+	it("creates and plays a triple-beep pattern, not just one soft tone", () => {
 		const context = makeMockContext("running");
 
 		playAlarmTone(context as unknown as AudioContext);
 
-		expect(context.createOscillator).toHaveBeenCalledTimes(1);
-		expect(context.createGain).toHaveBeenCalledTimes(1);
+		expect(context.createOscillator).toHaveBeenCalledTimes(3);
+		expect(context.createGain).toHaveBeenCalledTimes(3);
 		expect(context.oscillator.connect).toHaveBeenCalledWith(context.gain);
 		expect(context.gain.connect).toHaveBeenCalledWith(context.destination);
-		expect(context.oscillator.start).toHaveBeenCalledTimes(1);
-		expect(context.oscillator.stop).toHaveBeenCalledWith(
-			context.currentTime + 0.6,
+		expect(context.oscillator.start).toHaveBeenCalledTimes(3);
+		expect(context.oscillator.stop).toHaveBeenCalledTimes(3);
+		// Each beep is scheduled to start right after the previous one ends.
+		expect(context.oscillator.start).toHaveBeenNthCalledWith(
+			1,
+			context.currentTime,
+		);
+		expect(context.oscillator.start).toHaveBeenNthCalledWith(
+			2,
+			context.currentTime + 0.25,
+		);
+		expect(context.oscillator.start).toHaveBeenNthCalledWith(
+			3,
+			context.currentTime + 0.5,
 		);
 	});
 

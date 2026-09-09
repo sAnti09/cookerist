@@ -30,18 +30,32 @@ export function primeAudioContext(context: AudioContext | null): void {
 	context.resume().catch(() => {});
 }
 
+// A single soft tone was easy to miss over kitchen noise, so each alarm
+// firing is a sharp triple-beep (like a microwave/kitchen timer) rather
+// than one long note.
+const ALARM_BEEP_COUNT = 3;
+const ALARM_BEEP_DURATION_SECONDS = 0.15;
+const ALARM_BEEP_GAP_SECONDS = 0.1;
+const ALARM_BEEP_FREQUENCY_HZ = 1046.5; // C6 — more piercing than a low sine tone
+const ALARM_BEEP_GAIN = 0.35;
+
 export function playAlarmTone(context: AudioContext | null): void {
 	if (!context) return;
 	try {
-		const oscillator = context.createOscillator();
-		const gain = context.createGain();
-		oscillator.type = "sine";
-		oscillator.frequency.value = 880;
-		gain.gain.value = 0.2;
-		oscillator.connect(gain);
-		gain.connect(context.destination);
-		oscillator.start();
-		oscillator.stop(context.currentTime + 0.6);
+		for (let i = 0; i < ALARM_BEEP_COUNT; i++) {
+			const startTime =
+				context.currentTime +
+				i * (ALARM_BEEP_DURATION_SECONDS + ALARM_BEEP_GAP_SECONDS);
+			const oscillator = context.createOscillator();
+			const gain = context.createGain();
+			oscillator.type = "square";
+			oscillator.frequency.value = ALARM_BEEP_FREQUENCY_HZ;
+			gain.gain.value = ALARM_BEEP_GAIN;
+			oscillator.connect(gain);
+			gain.connect(context.destination);
+			oscillator.start(startTime);
+			oscillator.stop(startTime + ALARM_BEEP_DURATION_SECONDS);
+		}
 	} catch {
 		// Playback can still fail (e.g. context never got primed) — the
 		// vibration + visual "time's up" state cover AC4 regardless.

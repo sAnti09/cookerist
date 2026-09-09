@@ -363,12 +363,39 @@ describe("StepTimer", () => {
 			).not.toBeInTheDocument();
 		});
 
-		it("stops counting down once finished, even if timers keep advancing", () => {
+		it("keeps the countdown display at zero once finished, even if timers keep advancing", () => {
 			render(<StepTimer estimatedMinutes={1} />);
 
 			fireEvent.click(screen.getByRole("button", { name: "Start" }));
 			advanceTimersByTime(60_000);
 			advanceTimersByTime(5000);
+
+			expect(screen.getByText("Time's up!")).toBeInTheDocument();
+		});
+
+		it("repeats the alarm every few seconds until acknowledged, since a single beep is easy to miss", () => {
+			render(<StepTimer estimatedMinutes={1} />);
+
+			fireEvent.click(screen.getByRole("button", { name: "Start" }));
+			advanceTimersByTime(60_000);
+			expect(alarmSound.playAlarmTone).toHaveBeenCalledTimes(1);
+
+			advanceTimersByTime(3000);
+			expect(alarmSound.playAlarmTone).toHaveBeenCalledTimes(2);
+
+			advanceTimersByTime(3000);
+			expect(alarmSound.playAlarmTone).toHaveBeenCalledTimes(3);
+		});
+
+		it("stops repeating the alarm once reset", () => {
+			render(<StepTimer estimatedMinutes={1} />);
+
+			fireEvent.click(screen.getByRole("button", { name: "Start" }));
+			advanceTimersByTime(60_000);
+			expect(alarmSound.playAlarmTone).toHaveBeenCalledTimes(1);
+
+			fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+			advanceTimersByTime(10_000);
 
 			expect(alarmSound.playAlarmTone).toHaveBeenCalledTimes(1);
 		});

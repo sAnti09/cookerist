@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Flame, Plus, Search, Star } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { FeatureSection } from "#/components/feature-section";
 import { GroceryListCreateForm } from "#/components/grocery-list-create-form";
 import { GroceryListRow } from "#/components/grocery-list-row";
 import { PromptForm } from "#/components/prompt-form";
@@ -383,62 +384,27 @@ export function Home() {
 					)}
 				</div>
 
-				<footer className="mt-10 border-t border-line pt-7 text-sm text-ink-dim">
-					<h2 className="display-title mb-2.5 text-base font-semibold text-ink">
-						FAQ
-					</h2>
-					<div className="flex flex-col gap-4">
-						<div>
-							<p className="font-semibold text-ink">Is my data private?</p>
-							<p className="mt-1">
-								Yes. Every recipe, grocery list, and setting lives only in this
-								browser's local storage — nothing is sent to or saved on a
-								server, and Cookerist has no accounts or sign-in.
-							</p>
-						</div>
-						<div>
-							<p className="font-semibold text-ink">
-								Can I use Cookerist on my phone?
-							</p>
-							<p className="mt-1">
-								Yes — Cookerist installs like a native app on Android and iOS
-								straight from your browser, no app store required.
-							</p>
-							<ul className="mt-2 list-disc space-y-1 pl-5">
-								<li>
-									<span className="font-medium text-ink">
-										Android (Chrome):
-									</span>{" "}
-									open this page, tap the ⋮ menu, then choose "Install app" (or
-									"Add to Home screen").
-								</li>
-								<li>
-									<span className="font-medium text-ink">iOS (Safari):</span>{" "}
-									open this page, tap the Share icon, then choose "Add to Home
-									Screen".
-								</li>
-							</ul>
-						</div>
-						<div>
-							<p className="font-semibold text-ink">
-								What happens to my data if I remove the app?
-							</p>
-							<p className="mt-1">
-								On mobile, uninstalling Cookerist deletes its local storage
-								along with it, so every saved recipe and grocery list goes too.
-								You can also{" "}
-								<button
-									type="button"
-									className="font-medium text-accent underline underline-offset-2 hover:text-ink"
-									onClick={() => setResetConfirmOpen(true)}
-								>
-									reset all data
-								</button>{" "}
-								right now, which clears everything Cookerist has saved in this
-								browser.
-							</p>
-						</div>
+				{recipes.length === 0 ? (
+					<div className="mt-8">
+						<h2 className="display-title text-center text-xl font-semibold text-ink">
+							Why Cookerist
+						</h2>
+						<FeatureSection
+							className="mt-4"
+							onResetData={() => setResetConfirmOpen(true)}
+						/>
 					</div>
+				) : null}
+
+				<footer className="mt-10 border-t border-line pt-7 text-sm text-ink-dim">
+					{recipes.length > 0 ? (
+						<div className="mb-8">
+							<h2 className="display-title mb-2.5 text-base font-semibold text-ink">
+								Why Cookerist
+							</h2>
+							<FeatureSection onResetData={() => setResetConfirmOpen(true)} />
+						</div>
+					) : null}
 					<p className="mt-6 text-center text-xs text-ink-dim">
 						Cooked up with love by <b>James Limpiado</b>
 					</p>

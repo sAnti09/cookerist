@@ -118,7 +118,6 @@ export async function generateRecipe(
 	try {
 		const classification = await client.chat.completions.create({
 			model: ON_TOPIC_MODEL,
-			response_format: { type: "json_object" },
 			messages: [
 				{ role: "system", content: ON_TOPIC_SYSTEM_PROMPT },
 				{ role: "user", content: prompt },

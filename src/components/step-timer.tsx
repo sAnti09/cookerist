@@ -20,6 +20,9 @@ type TimerPhase = "idle" | "running" | "paused" | "finished";
 const MINUTE_STEP_SECONDS = 60;
 const SECOND_STEP_SECONDS = 5;
 const MIN_DURATION_SECONDS = SECOND_STEP_SECONDS;
+// A single alarm firing was easy to miss — repeat it until the user
+// acknowledges (Reset) or leaves the step, like a real kitchen timer.
+const ALARM_REPEAT_INTERVAL_MS = 3000;
 
 function formatClock(totalSeconds: number): string {
 	const minutes = Math.floor(totalSeconds / 60);
@@ -57,11 +60,23 @@ export function StepTimer({ estimatedMinutes }: StepTimerProps) {
 	useEffect(() => {
 		if (phase !== "running" || remainingSeconds > 0) return;
 		setPhase("finished");
-		playAlarmTone(audioContextRef.current);
-		if (typeof navigator.vibrate === "function") {
-			navigator.vibrate([300, 100, 300]);
-		}
 	}, [phase, remainingSeconds]);
+
+	// Fires immediately on reaching "finished", then keeps repeating until the
+	// user acknowledges it (Reset) or leaves the step — a single beep was too
+	// easy to miss over kitchen noise.
+	useEffect(() => {
+		if (phase !== "finished") return;
+		function fireAlarm() {
+			playAlarmTone(audioContextRef.current);
+			if (typeof navigator.vibrate === "function") {
+				navigator.vibrate([300, 100, 300]);
+			}
+		}
+		fireAlarm();
+		const interval = setInterval(fireAlarm, ALARM_REPEAT_INTERVAL_MS);
+		return () => clearInterval(interval);
+	}, [phase]);
 
 	function handleDurationChange(nextTotalSeconds: number) {
 		if (phase === "finished" || nextTotalSeconds < MIN_DURATION_SECONDS) return;
