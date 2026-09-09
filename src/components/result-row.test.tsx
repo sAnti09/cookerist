@@ -1,9 +1,17 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Recipe } from "#/lib/recipe";
 import { RecipeResultRow } from "./result-row";
+
+// RecipeResultRow renders RecipeDetail when expanded, which calls
+// useMutation (TEST-243's recipe continuation flow) and therefore needs a
+// QueryClientProvider ancestor even in tests that never trigger it.
+vi.mock("#/server/generate-recipe", () => ({
+	continueRecipe: vi.fn(),
+}));
 
 const recipe: Recipe = {
 	id: "recipe-1",
@@ -34,7 +42,15 @@ function renderRow(
 		onUpdate: vi.fn(),
 		...overrides,
 	};
-	return { ...render(<RecipeResultRow {...props} />), props };
+	const queryClient = new QueryClient();
+	return {
+		...render(
+			<QueryClientProvider client={queryClient}>
+				<RecipeResultRow {...props} />
+			</QueryClientProvider>,
+		),
+		props,
+	};
 }
 
 describe("RecipeResultRow", () => {

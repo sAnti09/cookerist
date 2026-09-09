@@ -1,14 +1,81 @@
+import { useMutation } from "@tanstack/react-query";
+import { useState } from "react";
 import { Checkbox } from "#/components/ui/checkbox";
 import { ServingsStepper } from "#/components/ui/servings-stepper";
 import { groupSteps, type Recipe } from "#/lib/recipe";
 import { formatQuantity, scaleQuantity } from "#/lib/scale-servings";
+import { continueRecipe } from "#/server/generate-recipe";
 
 type RecipeDetailProps = {
 	recipe: Recipe;
 	onUpdate: (recipe: Recipe) => void;
 };
 
+const CONTINUATION_ERROR_MESSAGE =
+	"Couldn't load the rest of the recipe. Please try again.";
+
 export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
+	const [continuationError, setContinuationError] = useState<string | null>(
+		null,
+	);
+	const continueMutation = useMutation({
+		mutationFn: () =>
+			continueRecipe({
+				data: {
+					prompt: recipe.prompt,
+					soFar: {
+						ingredients: recipe.ingredients.map((ingredient) => ({
+							text: ingredient.text,
+							quantity: ingredient.quantity,
+							unit: ingredient.unit,
+						})),
+						steps: recipe.steps.map((step) => ({
+							section: step.section,
+							text: step.text,
+						})),
+					},
+				},
+			}),
+	});
+
+	function handleLoadMore() {
+		setContinuationError(null);
+		continueMutation.mutate(undefined, {
+			onSuccess: (result) => {
+				if (result.type !== "success") {
+					setContinuationError(result.message);
+					return;
+				}
+				onUpdate({
+					...recipe,
+					ingredients: [
+						...recipe.ingredients,
+						...result.ingredients.map((ingredient) => ({
+							id: crypto.randomUUID(),
+							text: ingredient.text,
+							quantity: ingredient.quantity,
+							unit: ingredient.unit,
+							checked: false,
+						})),
+					],
+					steps: [
+						...recipe.steps,
+						...result.steps.map((step) => ({
+							id: crypto.randomUUID(),
+							section: step.section,
+							text: step.text,
+							checked: false,
+						})),
+					],
+					truncated: result.truncated,
+				});
+			},
+			onError: () => {
+				setContinuationError(CONTINUATION_ERROR_MESSAGE);
+			},
+		});
+	}
+
 	function handleServingsChange(nextServings: number) {
 		if (nextServings < 1 || nextServings === recipe.currentServings) return;
 		onUpdate({ ...recipe, currentServings: nextServings });
@@ -156,6 +223,25 @@ export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
 					</div>
 				))}
 			</section>
+
+			{recipe.truncated ? (
+				<div className="rounded-[18px] border border-line bg-bg2 p-3 text-sm">
+					<p className="text-ink-dim">
+						This recipe got cut off before it finished generating.
+					</p>
+					<button
+						type="button"
+						onClick={handleLoadMore}
+						disabled={continueMutation.isPending}
+						className="mt-2 rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+					>
+						{continueMutation.isPending ? "Loading more…" : "Load more"}
+					</button>
+					{continuationError ? (
+						<p className="mt-2 text-warn">{continuationError}</p>
+					) : null}
+				</div>
+			) : null}
 		</div>
 	);
 }

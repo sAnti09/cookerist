@@ -10,29 +10,38 @@ export const difficultySchema = z.enum([
 	"hard",
 ]);
 
+const ingredientItemSchema = z.object({
+	text: z.string().min(1),
+	quantity: z.number().nonnegative(),
+	unit: z.string(),
+});
+
+const stepItemSchema = z.object({
+	section: z.string().nullable(),
+	text: z.string().min(1),
+});
+
 export const recipeResponseSchema = z.object({
 	title: z.string().min(1),
 	overview: z.string().min(1),
 	baseServings: z.number().positive(),
 	difficulty: difficultySchema,
 	estimatedMinutes: z.number().positive(),
-	ingredients: z
-		.array(
-			z.object({
-				text: z.string().min(1),
-				quantity: z.number().nonnegative(),
-				unit: z.string(),
-			}),
-		)
-		.min(1),
-	steps: z
-		.array(
-			z.object({
-				section: z.string().nullable(),
-				text: z.string().min(1),
-			}),
-		)
-		.min(1),
+	ingredients: z.array(ingredientItemSchema).min(1),
+	steps: z.array(stepItemSchema).min(1),
 });
 
 export type RecipeResponse = z.infer<typeof recipeResponseSchema>;
+
+// Used by the continuation call (TEST-243) that asks Groq for only the
+// remaining ingredients/steps after a truncated response — both arrays are
+// allowed to be empty since a given continuation might only need to finish
+// one of the two.
+export const recipeContinuationResponseSchema = z.object({
+	ingredients: z.array(ingredientItemSchema),
+	steps: z.array(stepItemSchema),
+});
+
+export type RecipeContinuationResponse = z.infer<
+	typeof recipeContinuationResponseSchema
+>;

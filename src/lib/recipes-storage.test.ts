@@ -36,6 +36,7 @@ describe("toStoredRecipe", () => {
 		expect(recipe.estimatedMinutes).toBe(25);
 		expect(recipe.expanded).toBe(false);
 		expect(recipe.favorite).toBe(false);
+		expect(recipe.truncated).toBe(false);
 		expect(recipe.ingredients[0]).toMatchObject({
 			text: "shrimp",
 			quantity: 300,
@@ -50,6 +51,12 @@ describe("toStoredRecipe", () => {
 		expect(recipe.id).toBeTruthy();
 		expect(recipe.ingredients[0].id).toBeTruthy();
 		expect(recipe.steps[0].id).toBeTruthy();
+	});
+
+	it("marks the recipe truncated when the caller passes true", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput, true);
+
+		expect(recipe.truncated).toBe(true);
 	});
 });
 
@@ -140,6 +147,20 @@ describe("loadRecipes / saveRecipe", () => {
 
 		expect(loaded).toHaveLength(1);
 		expect(loaded[0].favorite).toBe(false);
+	});
+
+	it("defaults truncated to false for recipes saved before it existed", () => {
+		const legacyRecipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const { truncated, ...withoutTruncated } = legacyRecipe;
+		window.localStorage.setItem(
+			"cookerist:recipes",
+			JSON.stringify([withoutTruncated]),
+		);
+
+		const loaded = loadRecipes();
+
+		expect(loaded).toHaveLength(1);
+		expect(loaded[0].truncated).toBe(false);
 	});
 });
 
