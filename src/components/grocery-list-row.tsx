@@ -40,18 +40,30 @@ export function GroceryListRow({
 		.filter((title): title is string => Boolean(title));
 
 	return (
+		// Whole card acts as a click-anywhere expand/collapse target (mouse/touch
+		// convenience only — not focusable itself). Keyboard/AT users get one
+		// coherent path via the title/metadata button or the chevron button;
+		// every other control inside stops propagation so it doesn't also toggle
+		// expand, and so this outer handler doesn't fire the toggle a second time
+		// when those controls already handle it themselves.
+		// biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: intentionally mouse/touch-only — this div is never focusable, so it adds no new keyboard/AT interaction; keyboard users already reach the same action via the header button, the progress-bar button, or the chevron button below.
 		<div
+			data-testid={`grocery-list-row-${list.id}`}
 			className={cn(
 				"group card cursor-pointer p-4 transition-colors",
 				list.expanded ? "bg-bg2" : "bg-card hover:bg-bg2",
 			)}
+			onClick={() => onToggleExpand(list.id)}
 		>
 			<div className="flex items-start justify-between gap-3">
 				<button
 					type="button"
 					className="flex-1 cursor-pointer text-left"
 					aria-expanded={list.expanded}
-					onClick={() => onToggleExpand(list.id)}
+					onClick={(event) => {
+						event.stopPropagation();
+						onToggleExpand(list.id);
+					}}
 				>
 					<h3 className="display-title text-lg">{list.name}</h3>
 					<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
@@ -83,7 +95,10 @@ export function GroceryListRow({
 						variant="secondary"
 						className="shrink-0 rounded-[10px] px-2"
 						aria-label={`Edit ${list.name}`}
-						onClick={() => onEdit(list)}
+						onClick={(event) => {
+							event.stopPropagation();
+							onEdit(list);
+						}}
 					>
 						<Pencil className="size-4 text-ink-dim" aria-hidden="true" />
 					</Button>
@@ -91,7 +106,10 @@ export function GroceryListRow({
 						variant="secondary"
 						className="group/delete shrink-0 rounded-[10px] px-2"
 						aria-label={`Delete ${list.name}`}
-						onClick={() => setConfirmingDelete(true)}
+						onClick={(event) => {
+							event.stopPropagation();
+							setConfirmingDelete(true);
+						}}
 					>
 						<Trash2 className="size-4 text-ink-dim transition-colors group-hover/delete:text-warn" />
 					</Button>
@@ -101,7 +119,10 @@ export function GroceryListRow({
 						aria-label={
 							list.expanded ? `Collapse ${list.name}` : `Expand ${list.name}`
 						}
-						onClick={() => onToggleExpand(list.id)}
+						onClick={(event) => {
+							event.stopPropagation();
+							onToggleExpand(list.id);
+						}}
 					>
 						<ChevronDown
 							className={cn(
@@ -118,7 +139,10 @@ export function GroceryListRow({
 				type="button"
 				className="mt-2 block w-full cursor-pointer text-left"
 				aria-expanded={list.expanded}
-				onClick={() => onToggleExpand(list.id)}
+				onClick={(event) => {
+					event.stopPropagation();
+					onToggleExpand(list.id);
+				}}
 			>
 				<div
 					role="progressbar"
@@ -141,7 +165,14 @@ export function GroceryListRow({
 				</p>
 			</button>
 			{list.expanded ? (
-				<div className="mt-4 border-line border-t pt-4">
+				// Stops clicks inside the expanded detail (checkboxes, etc. — owned
+				// by GroceryListDetail, out of this fix's scope) from bubbling up
+				// and misfiring the card's expand-toggle handler.
+				// biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: only stops click-event propagation, adds no new interaction — GroceryListDetail's own controls remain the real, keyboard-accessible ones.
+				<div
+					className="mt-4 border-line border-t pt-4"
+					onClick={(event) => event.stopPropagation()}
+				>
 					<GroceryListDetail
 						list={list}
 						recipes={recipes}
@@ -150,18 +181,23 @@ export function GroceryListRow({
 					/>
 				</div>
 			) : null}
-			<ConfirmDialog
-				open={confirmingDelete}
-				title="Delete this grocery list?"
-				description={`"${list.name}" will be permanently removed.`}
-				confirmLabel="Delete"
-				cancelLabel="Cancel"
-				onConfirm={() => {
-					setConfirmingDelete(false);
-					onDelete(list.id);
-				}}
-				onCancel={() => setConfirmingDelete(false)}
-			/>
+			{/* Stops the dialog's own backdrop/confirm/cancel clicks from bubbling
+			up to the card's expand-toggle handler above. */}
+			{/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: only stops click-event propagation, adds no new interaction — ConfirmDialog's own buttons remain the real, keyboard-accessible controls. */}
+			<div onClick={(event) => event.stopPropagation()}>
+				<ConfirmDialog
+					open={confirmingDelete}
+					title="Delete this grocery list?"
+					description={`"${list.name}" will be permanently removed.`}
+					confirmLabel="Delete"
+					cancelLabel="Cancel"
+					onConfirm={() => {
+						setConfirmingDelete(false);
+						onDelete(list.id);
+					}}
+					onCancel={() => setConfirmingDelete(false)}
+				/>
+			</div>
 		</div>
 	);
 }
