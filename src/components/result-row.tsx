@@ -120,7 +120,10 @@ export function RecipeResultRow({
 								"group/favorite shrink-0 rounded-[10px] p-1 transition-opacity",
 								!recipe.expanded &&
 									!recipe.favorite &&
-									"opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+									// pointer-events-none while hidden — otherwise this still
+									// intercepts taps on touch devices, which never trigger the
+									// hover state that would normally reveal it first.
+									"pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
 							)}
 							aria-label={
 								recipe.favorite
@@ -144,16 +147,17 @@ export function RecipeResultRow({
 						</Button>
 					</div>
 				</div>
-				<div
-					className={cn(
-						"flex shrink-0 items-center gap-1",
-						!recipe.expanded &&
-							"opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
-					)}
-				>
+				<div className="flex shrink-0 items-center gap-1">
 					<Button
 						variant="secondary"
-						className="group/delete shrink-0 rounded-[10px] px-2"
+						className={cn(
+							"group/delete shrink-0 rounded-[10px] px-2 transition-opacity",
+							!recipe.expanded &&
+								// pointer-events-none while hidden — otherwise this still
+								// intercepts taps on touch devices, which never trigger the
+								// hover state that would normally reveal it first.
+								"pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+						)}
 						aria-label={`Delete ${recipe.title}`}
 						onClick={(event) => {
 							event.stopPropagation();
@@ -162,6 +166,8 @@ export function RecipeResultRow({
 					>
 						<Trash2 className="size-4 text-ink-dim transition-colors group-hover/delete:text-warn" />
 					</Button>
+					{/* Always visible (unlike Delete/Favorite above) — it's the one
+					cue that the row itself is expandable, not just a hover nicety. */}
 					<Button
 						variant="secondary"
 						className="shrink-0 rounded-[10px] px-2"

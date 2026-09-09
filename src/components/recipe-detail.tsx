@@ -212,11 +212,11 @@ export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
 						<h4 className="font-medium">Steps</h4>
 						{recipe.steps.length > 0 ? (
 							<Button
-								variant="secondary"
-								className="gap-1.5 text-xs"
+								variant="primary"
+								className="gap-1.5"
 								onClick={() => setCookModeOpen(true)}
 							>
-								<ChefHat className="size-3.5" aria-hidden="true" />
+								<ChefHat className="size-4" aria-hidden="true" />
 								Cook mode
 							</Button>
 						) : null}

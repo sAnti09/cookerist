@@ -130,23 +130,44 @@ describe("RecipeResultRow", () => {
 		expect(props.onToggleExpand).toHaveBeenCalledWith(recipe.id);
 	});
 
-	it("labels the icon as collapse, and hides it from hover-only visibility, once expanded", () => {
+	it("labels the icon as collapse once expanded", () => {
 		renderRow({ recipe: { ...recipe, expanded: true } });
 
-		const collapseButton = screen.getByRole("button", {
-			name: `Collapse ${recipe.title}`,
-		});
-		expect(collapseButton).toBeInTheDocument();
-		expect(collapseButton.parentElement).not.toHaveClass("opacity-0");
+		expect(
+			screen.getByRole("button", { name: `Collapse ${recipe.title}` }),
+		).toBeInTheDocument();
 	});
 
-	it("only reveals the delete and expand controls on hover while collapsed", () => {
+	it("keeps the expand/collapse chevron visible at all times, as a discoverability cue", () => {
+		renderRow();
+		expect(
+			screen.getByRole("button", { name: `Expand ${recipe.title}` }),
+		).not.toHaveClass("opacity-0");
+
+		renderRow({ recipe: { ...recipe, expanded: true } });
+		expect(
+			screen.getByRole("button", { name: `Collapse ${recipe.title}` }),
+		).not.toHaveClass("opacity-0");
+	});
+
+	it("only reveals the delete control on hover while collapsed, and doesn't let it be clicked while hidden", () => {
 		renderRow();
 
-		const expandButton = screen.getByRole("button", {
-			name: `Expand ${recipe.title}`,
+		const deleteButton = screen.getByRole("button", {
+			name: `Delete ${recipe.title}`,
 		});
-		expect(expandButton.parentElement).toHaveClass("opacity-0");
+		expect(deleteButton).toHaveClass("opacity-0");
+		expect(deleteButton).toHaveClass("pointer-events-none");
+	});
+
+	it("keeps the delete control visible and clickable once expanded", () => {
+		renderRow({ recipe: { ...recipe, expanded: true } });
+
+		const deleteButton = screen.getByRole("button", {
+			name: `Delete ${recipe.title}`,
+		});
+		expect(deleteButton).not.toHaveClass("opacity-0");
+		expect(deleteButton).not.toHaveClass("pointer-events-none");
 	});
 
 	it("calls onToggleFavorite with the recipe id when the favorite icon is clicked, without expanding or deleting", async () => {
@@ -172,13 +193,14 @@ describe("RecipeResultRow", () => {
 		expect(favoriteButton.querySelector("svg")).toHaveClass("fill-accent");
 	});
 
-	it("hides the favorite control behind hover while collapsed and not yet favorited", () => {
+	it("hides the favorite control behind hover while collapsed and not yet favorited, and doesn't let it be clicked while hidden", () => {
 		renderRow();
 
 		const favoriteButton = screen.getByRole("button", {
 			name: `Favorite ${recipe.title}`,
 		});
 		expect(favoriteButton).toHaveClass("opacity-0");
+		expect(favoriteButton).toHaveClass("pointer-events-none");
 	});
 
 	it("keeps the favorite control visible without hovering once favorited", () => {
