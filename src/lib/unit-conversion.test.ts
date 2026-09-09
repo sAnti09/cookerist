@@ -41,6 +41,23 @@ describe("resolveUnit / getUnitDimension", () => {
 		expect(getUnitDimension("Kg")).toBe("mass");
 	});
 
+	it("resolves common length units to the length dimension", () => {
+		for (const unit of [
+			"mm",
+			"cm",
+			"centimeter",
+			"centimeters",
+			"in",
+			"inch",
+			"inches",
+		]) {
+			expect(getUnitDimension(unit)).toBe("length");
+		}
+		expect(convertToBase(1, "in")).toBeCloseTo(2.54);
+		expect(convertToBase(1, "cm")).toBe(1);
+		expect(convertToBase(10, "mm")).toBeCloseTo(1);
+	});
+
 	it("resolves generic count units to the count dimension with exact multipliers", () => {
 		expect(getUnitDimension("piece")).toBe("count");
 		expect(getUnitDimension("whole")).toBe("count");

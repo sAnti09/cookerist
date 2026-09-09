@@ -1,8 +1,10 @@
 import type { GroceryListItem, GroceryListItemOrigin } from "./grocery-list";
 import { lookupIngredientDensity } from "./ingredient-density";
+import { lookupLengthDensity } from "./ingredient-length-density";
 import { lookupPieceRatio } from "./ingredient-piece-ratio";
 import type { Recipe } from "./recipe";
 import { formatIngredientLine, scaleQuantity } from "./scale-servings";
+import { stripSizeDescriptor } from "./size-descriptor";
 import {
 	convertFromBase,
 	getUnitDimension,
@@ -71,37 +73,41 @@ export function roundGroceryQuantity(quantity: number, unit: string): number {
 	return roundUpToMultiple(quantity, 0.25);
 }
 
-// Which running total a merged group accumulates into: "mass" (grams) and
-// "volume" (ml) both merge across differently-spelled/scaled units of that
-// dimension (e.g. "tbsp" + "cup" -> both volume); "count" merges discrete
-// units (e.g. "dozen" + "egg", or "clove" + "whole" for an ingredient with a
-// known piece ratio — see ingredient-piece-ratio.ts); null is the fallback
-// for anything the unit table doesn't recognize, where merging still
-// requires an exact unit-string match.
-type GroupBucket = "mass" | "volume" | "count" | null;
+// Which running total a merged group accumulates into: "mass" (grams),
+// "volume" (ml), and "length" (cm) each merge across differently-spelled/
+// scaled units of that dimension (e.g. "tbsp" + "cup" -> both volume, or
+// "in" + "cm" -> both length); "count" merges discrete units (e.g. "dozen" +
+// "egg", or "clove" + "whole" for an ingredient with a known piece ratio —
+// see ingredient-piece-ratio.ts); null is the fallback for anything the unit
+// table doesn't recognize, where merging still requires an exact unit-string
+// match.
+type GroupBucket = "mass" | "volume" | "length" | "count" | null;
 
 type IngredientGroup = {
 	text: string;
 	bucket: GroupBucket;
 	// Every distinct original unit string contributed to this group — used to
-	// pick a display unit for a "volume"/null-bucket group once merging is
-	// done (see pickDisplayUnit); unused for "mass" (see roundGroceryQuantity
-	// call below, which picks g/kg by magnitude instead, since a mass group
-	// may include no native mass unit at all — see `approximate`) and for
-	// "count" (display is re-derived from an ingredient-piece-ratio lookup or
-	// a filter over this list — see the finalization step below).
+	// pick a display unit for a "volume"/"length"/null-bucket group once
+	// merging is done (see pickDisplayUnit); unused for "mass" (see
+	// roundGroceryQuantity call below, which picks g/kg by magnitude instead,
+	// since a mass group may include no native mass unit at all — see
+	// `approximate`) and for "count" (display is re-derived from an
+	// ingredient-piece-ratio lookup or a filter over this list — see the
+	// finalization step below).
 	unitsUsed: string[];
-	// Running total in the bucket's base unit (grams/ml/one-discrete-item, or
-	// container-equivalents for a "count" group with a known piece ratio), or
-	// a direct sum in `unitsUsed[0]` when bucket is null.
+	// Running total in the bucket's base unit (grams/ml/cm/one-discrete-item,
+	// or container-equivalents for a "count" group with a known piece ratio),
+	// or a direct sum in `unitsUsed[0]` when bucket is null.
 	quantity: number;
 	// True once any contribution to this group came from an approximate
-	// conversion rather than an exact one — either converting a volume unit
-	// to mass via an ingredient density (ingredient-density.ts), e.g.
-	// combining "2 cups sugar" with "500 g sugar"; or converting a sub-piece
-	// count to its container via a piece ratio (ingredient-piece-ratio.ts),
-	// e.g. combining "7 cloves garlic" with "1 whole garlic". Surfaced on the
-	// resulting GroceryListItem so the UI can flag the total as an estimate.
+	// conversion rather than an exact one — converting a volume or length
+	// unit to mass via an ingredient density (ingredient-density.ts /
+	// ingredient-length-density.ts), e.g. combining "2 cups sugar" with "500 g
+	// sugar", or "2 inches ginger" with "10 g ginger"; or converting a
+	// sub-piece count to its container via a piece ratio
+	// (ingredient-piece-ratio.ts), e.g. combining "7 cloves garlic" with "1
+	// whole garlic". Surfaced on the resulting GroceryListItem so the UI can
+	// flag the total as an estimate.
 	approximate: boolean;
 	// Unique, order-preserved descriptions collected from every ingredient
 	// merged into this group (e.g. "chopped", "minced") — kept as detail since
@@ -123,7 +129,14 @@ export function aggregateGroceryItems(
 			// differently-described ingredients that are really the same item
 			// still merge — falling back to `text` for ingredients saved before
 			// the base name/description split existed (TEST-255).
-			const baseName = (ingredient.baseName ?? ingredient.text).trim();
+			const rawBaseName = (ingredient.baseName ?? ingredient.text).trim();
+			// A leading/trailing size adjective (e.g. "medium onion") describes
+			// which specimen to grab, not a different grocery item, so it's
+			// stripped from the merge key/display name and folded into
+			// descriptions instead — same treatment as "chopped"/"minced" below.
+			// See size-descriptor.ts for what's stripped and why.
+			const { mergeKey: baseName, extractedSizeDescriptor } =
+				stripSizeDescriptor(rawBaseName);
 			const description = (ingredient.description ?? "").trim();
 			const normalizedBaseName = baseName.toLowerCase();
 			const trimmedUnit = ingredient.unit.trim();
@@ -139,12 +152,14 @@ export function aggregateGroceryItems(
 				recipe.currentServings,
 			);
 
-			// A mass unit always joins the mass bucket (grams). A volume unit
-			// joins the mass bucket too -- via an approximate density -- whenever
-			// this ingredient has a known one (see ingredient-density.ts), since
-			// most dry/liquid staples are actually bought by weight, not by cup;
-			// otherwise it joins the volume bucket (ml), merging only with other
-			// volume units of the same ingredient.
+			// A mass unit always joins the mass bucket (grams). A volume or
+			// length unit joins the mass bucket too -- via an approximate density
+			// -- whenever this ingredient has a known one (see
+			// ingredient-density.ts for volume, ingredient-length-density.ts for
+			// length), since most dry/liquid staples are actually bought by
+			// weight, not by cup or by the inch; otherwise it joins the volume/
+			// length bucket instead (ml/cm), merging only with other units of
+			// that same dimension for the same ingredient.
 			//
 			// A count-based unit is checked first (most ingredient-specific
 			// signal): if this ingredient has a known container/piece ratio (see
@@ -187,6 +202,16 @@ export function aggregateGroceryItems(
 					bucket = "volume";
 					contribution = scaledQuantity * unitDef.toBase;
 				}
+			} else if (unitDef?.dimension === "length") {
+				const lengthDensity = lookupLengthDensity(baseName);
+				if (lengthDensity !== null) {
+					bucket = "mass";
+					contribution = scaledQuantity * unitDef.toBase * lengthDensity;
+					approximate = true;
+				} else {
+					bucket = "length";
+					contribution = scaledQuantity * unitDef.toBase;
+				}
 			} else if (unitDef?.dimension === "count") {
 				bucket = "count";
 				contribution = scaledQuantity * unitDef.toBase;
@@ -207,14 +232,27 @@ export function aggregateGroceryItems(
 				if (description && !existing.descriptions.includes(description)) {
 					existing.descriptions.push(description);
 				}
+				if (
+					extractedSizeDescriptor &&
+					!existing.descriptions.includes(extractedSizeDescriptor)
+				) {
+					existing.descriptions.push(extractedSizeDescriptor);
+				}
 			} else {
+				const initialDescriptions = Array.from(
+					new Set(
+						[description, extractedSizeDescriptor].filter(
+							(value): value is string => Boolean(value),
+						),
+					),
+				);
 				groups.set(key, {
 					text: baseName,
 					bucket,
 					unitsUsed: [trimmedUnit],
 					quantity: contribution,
 					approximate,
-					descriptions: description ? [description] : [],
+					descriptions: initialDescriptions,
 					origins: [origin],
 				});
 			}
@@ -292,10 +330,11 @@ export function aggregateGroceryItems(
 					displayQuantity = group.quantity;
 				}
 			} else {
-				// "volume" and unbucketed (null) groups display in whichever of
-				// their actually-used units is largest (e.g. tbsp + cup -> cup) --
-				// for an unbucketed group there's only ever one entry in
-				// `unitsUsed` (it's the grouping key), so this just echoes it back.
+				// "volume", "length", and unbucketed (null) groups display in
+				// whichever of their actually-used units is largest (e.g. tbsp +
+				// cup -> cup, or in + cm -> in) -- for an unbucketed group there's
+				// only ever one entry in `unitsUsed` (it's the grouping key), so
+				// this just echoes it back.
 				displayUnit = pickDisplayUnit(group.unitsUsed);
 				displayQuantity = group.bucket
 					? convertFromBase(group.quantity, displayUnit)

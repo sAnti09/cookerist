@@ -283,6 +283,81 @@ describe("aggregateGroceryItems", () => {
 		});
 	});
 
+	it("merges a length-measured ingredient with a mass-measured one via its approximate length density (the inches-vs-grams ginger case)", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					text: "ginger",
+					quantity: 2,
+					unit: "inches",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					text: "ginger",
+					quantity: 10,
+					unit: "g",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		// 2 inches * ~15 g/inch ginger length-density = 30 g (estimated), + 10 g
+		// native = 40 g, already on a 0.25 boundary.
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "ginger",
+			unit: "g",
+			quantity: 40,
+			approximate: true,
+		});
+	});
+
+	it("merges a length-only ingredient with no known length density across differently-spelled units, without any estimate", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					text: "lemongrass",
+					quantity: 1,
+					unit: "in",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					text: "lemongrass",
+					quantity: 1,
+					unit: "cm",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		// 1 in (2.54 cm) + 1 cm = 3.54 cm = 1.3937 in, rounded up to the next
+		// 0.25 -> 1.5 in (the larger of the two units actually used); no length
+		// density known for lemongrass, so no estimate involved.
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "lemongrass",
+			unit: "in",
+			quantity: 1.5,
+			approximate: undefined,
+		});
+	});
+
 	it("prefers magnitude-based mg/g/kg over a disproportionately tiny native mass unit once density estimation is involved", () => {
 		const recipeA = makeRecipe({
 			id: "recipe-a",
@@ -981,6 +1056,119 @@ describe("aggregateGroceryItems", () => {
 			unit: "bulb",
 			quantity: 1,
 			approximate: true,
+		});
+	});
+
+	it("merges a plain ingredient with a size-described one (the medium-onion case)", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					baseName: "onion",
+					description: "",
+					quantity: 1,
+					unit: "whole",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					baseName: "medium onion",
+					description: "",
+					quantity: 1,
+					unit: "whole",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "onion",
+			unit: "whole",
+			quantity: 2,
+			descriptions: ["medium"],
+		});
+	});
+
+	it("merges a size word alongside an already-present description without duplicating it", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					baseName: "large onion",
+					description: "diced",
+					quantity: 1,
+					unit: "whole",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					baseName: "onion",
+					description: "chopped",
+					quantity: 1,
+					unit: "whole",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "onion",
+			quantity: 2,
+		});
+		expect(result[0].descriptions).toEqual(
+			expect.arrayContaining(["large", "diced", "chopped"]),
+		);
+		expect(result[0].descriptions).toHaveLength(3);
+	});
+
+	it("merges eggs across differently-sized descriptions too, since the user chose to leave size to the shopper", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					baseName: "large eggs",
+					description: "",
+					quantity: 6,
+					unit: "eggs",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					baseName: "eggs",
+					description: "",
+					quantity: 6,
+					unit: "eggs",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "eggs",
+			unit: "eggs",
+			quantity: 12,
+			descriptions: ["large"],
 		});
 	});
 

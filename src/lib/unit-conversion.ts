@@ -1,14 +1,17 @@
-// Lightweight cooking-unit conversion table. Covers three dimensions: mass,
-// volume, and count (discrete items — "dozen", "piece", "whole", etc.).
-// There's no cross-dimension entry between mass/volume (e.g. cup <-> gram)
-// because that depends on the specific ingredient's density (a cup of flour
-// and a cup of sugar don't weigh the same) — see ingredient-density.ts for
-// that per-ingredient bridge. Count-to-mass/volume has no entry here at all
-// (a "whole" onion has no universal weight) — see ingredient-piece-ratio.ts
-// for the analogous per-ingredient container/piece bridge within the count
+// Lightweight cooking-unit conversion table. Covers four dimensions: mass,
+// volume, length (a "2-inch piece" of ginger, say), and count (discrete
+// items — "dozen", "piece", "whole", etc.). There's no cross-dimension entry
+// between mass/volume/length (e.g. cup <-> gram, or inch <-> gram) because
+// that depends on the specific ingredient — a cup of flour and a cup of
+// sugar don't weigh the same, and neither does an inch of ginger and an inch
+// of a much thicker root — see ingredient-density.ts (volume -> mass) and
+// ingredient-length-density.ts (length -> mass) for those per-ingredient
+// bridges. Count-to-mass/volume has no entry here at all (a "whole" onion
+// has no universal weight) — see ingredient-piece-ratio.ts for the
+// analogous per-ingredient container/piece bridge within the count
 // dimension itself (e.g. a bulb of garlic -> its cloves).
 
-export type UnitDimension = "mass" | "volume" | "count";
+export type UnitDimension = "mass" | "volume" | "length" | "count";
 
 type UnitDefinition = {
 	dimension: UnitDimension;
@@ -71,6 +74,18 @@ const UNIT_TABLE: Record<string, UnitDefinition> = {
 	gallon: { dimension: "volume", toBase: 3785.41 },
 	gallons: { dimension: "volume", toBase: 3785.41 },
 
+	// Length (base: centimeter) — for ingredients specified by a piece length
+	// rather than a weight/volume, e.g. "a 2-inch piece of ginger".
+	mm: { dimension: "length", toBase: 0.1 },
+	millimeter: { dimension: "length", toBase: 0.1 },
+	millimeters: { dimension: "length", toBase: 0.1 },
+	cm: { dimension: "length", toBase: 1 },
+	centimeter: { dimension: "length", toBase: 1 },
+	centimeters: { dimension: "length", toBase: 1 },
+	in: { dimension: "length", toBase: 2.54 },
+	inch: { dimension: "length", toBase: 2.54 },
+	inches: { dimension: "length", toBase: 2.54 },
+
 	// Count (base: one discrete item). These are exact multipliers (a dozen
 	// is always 12), unlike ingredient-piece-ratio.ts's container/piece
 	// ratios, which are approximate.
@@ -101,14 +116,14 @@ export function resolveUnit(unit: string): UnitDefinition | null {
 	return UNIT_TABLE[normalizeUnitKey(unit)] ?? null;
 }
 
-// Returns the dimension of a unit string, or null when it's not a
-// recognized mass/volume unit (e.g. a count-based unit like "clove", or
-// anything Groq/the user typed that isn't in the table).
+// Returns the dimension of a unit string, or null when it's not recognized
+// at all (e.g. an ingredient-specific unit like "clove", or anything Groq/
+// the user typed that isn't in the table).
 export function getUnitDimension(unit: string): UnitDimension | null {
 	return resolveUnit(unit)?.dimension ?? null;
 }
 
-// Null when `unit` isn't a recognized mass/volume unit.
+// Null when `unit` isn't recognized.
 export function convertToBase(quantity: number, unit: string): number | null {
 	const def = resolveUnit(unit);
 	return def ? quantity * def.toBase : null;
