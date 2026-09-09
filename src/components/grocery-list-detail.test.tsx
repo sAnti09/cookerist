@@ -192,6 +192,24 @@ describe("GroceryListDetail", () => {
 		]);
 	});
 
+	it("omits the unit when it duplicates the item text (TEST-243 AC1)", () => {
+		renderDetail({
+			items: [
+				{
+					id: "item-1",
+					text: "egg",
+					quantity: 1,
+					unit: "egg",
+					checked: false,
+					source: "recipe",
+				},
+			],
+		});
+
+		expect(screen.getByText("1 egg")).toBeInTheDocument();
+		expect(screen.queryByText(/1 egg egg/)).not.toBeInTheDocument();
+	});
+
 	it("reflects an all-checked list in the check-all control", () => {
 		renderDetail({
 			items: list.items.map((item) => ({ ...item, checked: true })),

@@ -149,6 +149,21 @@ describe("RecipeDetail", () => {
 		expect(screen.getByText("Cook")).toBeInTheDocument();
 	});
 
+	it("omits the unit when it duplicates the ingredient text (TEST-243 AC1)", () => {
+		const recipeWithDuplicateUnit: Recipe = {
+			...baseRecipe,
+			ingredients: [
+				{ id: "ing-1", text: "egg", quantity: 1, unit: "egg", checked: false },
+			],
+		};
+		render(
+			<RecipeDetail recipe={recipeWithDuplicateUnit} onUpdate={vi.fn()} />,
+		);
+
+		expect(screen.getByText("1 egg")).toBeInTheDocument();
+		expect(screen.queryByText(/1 egg egg/)).not.toBeInTheDocument();
+	});
+
 	it("renders steps flat with no section heading when ungrouped", () => {
 		const flatRecipe: Recipe = {
 			...baseRecipe,

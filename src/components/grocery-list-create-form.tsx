@@ -15,7 +15,7 @@ import {
 	generateGroceryListName,
 } from "#/lib/grocery-list";
 import type { Recipe } from "#/lib/recipe";
-import { formatQuantity } from "#/lib/scale-servings";
+import { formatIngredientLine } from "#/lib/scale-servings";
 
 // How many search matches to surface at once — enough to scan, not enough to
 // turn the dropdown back into "just show every recipe".
@@ -294,7 +294,11 @@ export function GroceryListCreateForm({
 										className="flex items-center justify-between gap-2 rounded-[10px] bg-bg2 px-3 py-1.5 text-sm"
 									>
 										<span className="tabular-nums">
-											{formatQuantity(item.quantity)} {item.unit} {item.text}
+											{formatIngredientLine(
+												item.quantity,
+												item.unit,
+												item.text,
+											)}
 										</span>
 										<Button
 											variant="secondary"
@@ -371,7 +375,7 @@ export function GroceryListCreateForm({
 							<ul className="mt-2 grid grid-cols-1 list-disc gap-1.5 pl-5 text-sm min-[420px]:grid-cols-2">
 								{previewItems.map((item) => (
 									<li key={item.id} className="tabular-nums">
-										{formatQuantity(item.quantity)} {item.unit} {item.text}
+										{formatIngredientLine(item.quantity, item.unit, item.text)}
 									</li>
 								))}
 							</ul>

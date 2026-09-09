@@ -17,7 +17,7 @@ const RECIPE_SYSTEM_PROMPT = `You are a recipe generator. Given a user's request
   "baseServings": number (servings this recipe is written for),
   "difficulty": "quick_and_easy" | "intermediate" | "hard" (how difficult the dish is to make),
   "estimatedMinutes": number (total time to go from start to finished dish, in minutes),
-  "ingredients": [ { "text": string (ingredient name, e.g. "garlic, minced"), "quantity": number, "unit": string (e.g. "cloves", "g", "cups"; use "" if unitless) } ],
+  "ingredients": [ { "text": string (ingredient name, e.g. "garlic, minced"), "quantity": number, "unit": string (the measure or container the quantity is in, e.g. "cloves", "g", "cups" — NEVER restate the ingredient's own name as its unit, e.g. for "egg" use unit "" not "egg"; use "" when there is genuinely no unit) } ],
   "steps": [ { "section": string | null (e.g. "Prep", "Cook", "Plate"; null if the recipe doesn't warrant grouping), "text": string } ]
 }
 

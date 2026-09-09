@@ -276,6 +276,20 @@ describe("GroceryListCreateForm", () => {
 		expect(screen.getByLabelText("Custom ingredient name")).toHaveValue("");
 	});
 
+	it("omits the unit when it duplicates the custom ingredient text, in both the custom list and the preview (TEST-243 AC1)", async () => {
+		const user = userEvent.setup();
+		renderForm({ recipes: [] });
+
+		await user.type(screen.getByLabelText("Custom ingredient name"), "Egg");
+		await user.type(screen.getByLabelText("Custom ingredient quantity"), "1");
+		await user.type(screen.getByLabelText("Custom ingredient unit"), "egg");
+		await user.click(screen.getByRole("button", { name: "Add" }));
+
+		expect(screen.getAllByText("1 Egg")).toHaveLength(2);
+		expect(screen.queryByText(/1 egg Egg/i)).not.toBeInTheDocument();
+		expect(screen.queryByText(/1 Egg egg/)).not.toBeInTheDocument();
+	});
+
 	it("removes a custom ingredient", async () => {
 		const user = userEvent.setup();
 		renderForm({ recipes: [] });
