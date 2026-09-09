@@ -342,7 +342,7 @@ export function GroceryListCreateForm({
 						) : null}
 						<form
 							onSubmit={handleAddCustomIngredient}
-							className="mt-2 flex flex-wrap items-center gap-2"
+							className="mt-2 flex flex-col gap-2 min-[420px]:flex-row min-[420px]:flex-wrap min-[420px]:items-center"
 						>
 							<input
 								type="text"
@@ -351,46 +351,48 @@ export function GroceryListCreateForm({
 								onKeyDown={handleItemFieldKeyDown}
 								placeholder="Item, e.g. 1 pc chicken"
 								aria-label="Custom ingredient name"
-								className="min-w-0 flex-1 rounded-full border border-line bg-surface px-3 py-1.5 text-sm outline-none"
+								className="w-full min-w-0 rounded-full border border-line bg-surface px-3 py-1.5 text-sm outline-none min-[420px]:flex-1"
 							/>
-							<input
-								type="number"
-								inputMode="decimal"
-								min="0"
-								step="any"
-								value={customQuantity}
-								onChange={(event) => setCustomQuantity(event.target.value)}
-								placeholder="Qty"
-								aria-label="Custom ingredient quantity"
-								className="w-20 rounded-full border border-line bg-surface px-3 py-1.5 text-sm tabular-nums outline-none [appearance:textfield]"
-							/>
-							<input
-								type="text"
-								value={customUnit}
-								onChange={(event) => setCustomUnit(event.target.value)}
-								placeholder="Unit"
-								aria-label="Custom ingredient unit"
-								list="grocery-known-units"
-								className="w-24 rounded-full border border-line bg-surface px-3 py-1.5 text-sm outline-none"
-							/>
-							<datalist id="grocery-known-units">
-								{knownUnits.map((unit) => (
-									<option key={unit} value={unit} />
-								))}
-							</datalist>
-							<Button
-								type="submit"
-								variant="secondary"
-								className="shrink-0 gap-1"
-								disabled={
-									!customText.trim() ||
-									!customUnit.trim() ||
-									!(Number(customQuantity) > 0)
-								}
-							>
-								<Plus className="size-4" aria-hidden="true" />
-								Add
-							</Button>
+							<div className="flex flex-wrap items-center gap-2">
+								<input
+									type="number"
+									inputMode="decimal"
+									min="0"
+									step="any"
+									value={customQuantity}
+									onChange={(event) => setCustomQuantity(event.target.value)}
+									placeholder="Qty"
+									aria-label="Custom ingredient quantity"
+									className="w-20 rounded-full border border-line bg-surface px-3 py-1.5 text-sm tabular-nums outline-none [appearance:textfield]"
+								/>
+								<input
+									type="text"
+									value={customUnit}
+									onChange={(event) => setCustomUnit(event.target.value)}
+									placeholder="Unit"
+									aria-label="Custom ingredient unit"
+									list="grocery-known-units"
+									className="w-24 rounded-full border border-line bg-surface px-3 py-1.5 text-sm outline-none"
+								/>
+								<datalist id="grocery-known-units">
+									{knownUnits.map((unit) => (
+										<option key={unit} value={unit} />
+									))}
+								</datalist>
+								<Button
+									type="submit"
+									variant="secondary"
+									className="shrink-0 gap-1"
+									disabled={
+										!customText.trim() ||
+										!customUnit.trim() ||
+										!(Number(customQuantity) > 0)
+									}
+								>
+									<Plus className="size-4" aria-hidden="true" />
+									Add
+								</Button>
+							</div>
 						</form>
 					</fieldset>
 
