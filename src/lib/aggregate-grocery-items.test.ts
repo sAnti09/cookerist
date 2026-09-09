@@ -5,6 +5,7 @@ import {
 	aggregateGroceryItems,
 	COUNTABLE_UNITS,
 	carryOverCheckedState,
+	formatGroceryItemLine,
 	isCountableUnit,
 	roundGroceryQuantity,
 } from "./aggregate-grocery-items";
@@ -319,6 +320,112 @@ describe("aggregateGroceryItems", () => {
 		expect(aggregateGroceryItems([])).toEqual([]);
 	});
 
+	it("combines ingredients with the same base name but different descriptions, preserving both as detail (TEST-255 AC2)", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					text: "garlic, chopped",
+					baseName: "garlic",
+					description: "chopped",
+					quantity: 2,
+					unit: "cloves",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					text: "garlic, minced",
+					baseName: "garlic",
+					description: "minced",
+					quantity: 3,
+					unit: "cloves",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "garlic",
+			unit: "cloves",
+			quantity: 5,
+			descriptions: ["chopped", "minced"],
+		});
+	});
+
+	it("does not add a description twice, and omits the field entirely when there is none", () => {
+		const recipe = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-1",
+					baseName: "garlic",
+					description: "chopped",
+					quantity: 1,
+					unit: "cloves",
+				}),
+				makeIngredient({
+					id: "ing-2",
+					baseName: "garlic",
+					description: "chopped",
+					quantity: 1,
+					unit: "cloves",
+				}),
+				makeIngredient({
+					id: "ing-3",
+					baseName: "onion",
+					description: "",
+					quantity: 1,
+					unit: "whole",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipe]);
+
+		const garlic = result.find((item) => item.text === "garlic");
+		expect(garlic?.descriptions).toEqual(["chopped"]);
+		const onion = result.find((item) => item.text === "onion");
+		expect(onion?.descriptions).toBeUndefined();
+	});
+
+	it("falls back to the ingredient's text as the base name for ingredients saved before the split existed (TEST-255)", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					text: "Garlic",
+					quantity: 2,
+					unit: "cloves",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					baseName: "garlic",
+					description: "",
+					quantity: 3,
+					unit: "cloves",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({ text: "Garlic", quantity: 5 });
+	});
+
 	it("assigns each item a unique id and starts every item unchecked", () => {
 		const recipe = makeRecipe({
 			id: "recipe-a",
@@ -410,5 +517,35 @@ describe("carryOverCheckedState", () => {
 		const previous = [makeItem({ checked: true })];
 
 		expect(carryOverCheckedState(previous, [])).toEqual([]);
+	});
+});
+
+describe("formatGroceryItemLine", () => {
+	function makeItem(overrides: Partial<GroceryListItem> = {}): GroceryListItem {
+		return {
+			id: crypto.randomUUID(),
+			text: "garlic",
+			quantity: 5,
+			unit: "cloves",
+			checked: false,
+			source: "recipe",
+			...overrides,
+		};
+	}
+
+	it("renders the base quantity/unit/name line with no descriptions", () => {
+		expect(formatGroceryItemLine(makeItem())).toBe("5 cloves garlic");
+	});
+
+	it("appends preserved descriptions in parentheses (TEST-255 AC2)", () => {
+		expect(
+			formatGroceryItemLine(makeItem({ descriptions: ["chopped", "minced"] })),
+		).toBe("5 cloves garlic (chopped, minced)");
+	});
+
+	it("omits the parentheses for an empty descriptions array", () => {
+		expect(formatGroceryItemLine(makeItem({ descriptions: [] }))).toBe(
+			"5 cloves garlic",
+		);
 	});
 });

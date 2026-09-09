@@ -43,7 +43,9 @@ const validRecipe = {
 	baseServings: 2,
 	difficulty: "quick_and_easy" as const,
 	estimatedMinutes: 25,
-	ingredients: [{ text: "shrimp", quantity: 300, unit: "g" }],
+	ingredients: [
+		{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
+	],
 	steps: [{ section: null, text: "Cook the pasta." }],
 };
 

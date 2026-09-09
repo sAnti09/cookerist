@@ -128,6 +128,19 @@ describe("GroceryListCreateForm", () => {
 		expect(screen.getByText("Garlic Bread")).toBeInTheDocument();
 	});
 
+	it("wraps a long recipe name instead of truncating/overflowing it (TEST-255 AC1)", async () => {
+		const user = userEvent.setup();
+		const longTitle =
+			"An Extremely Long Recipe Name That Would Otherwise Overflow The Grocery Edit Modal's Width";
+		renderForm({ recipes: [makeRecipe({ title: longTitle })] });
+
+		await addRecipe(user, longTitle);
+
+		const nameSpan = screen.getByText(longTitle);
+		expect(nameSpan).toHaveClass("break-words");
+		expect(nameSpan).not.toHaveClass("truncate");
+	});
+
 	it("removes an added recipe via its remove button", async () => {
 		const user = userEvent.setup();
 		renderForm({ recipes: [makeRecipe({ title: "Shrimp Pasta" })] });
@@ -154,6 +167,52 @@ describe("GroceryListCreateForm", () => {
 		await addRecipe(user, "Shrimp Pasta");
 
 		expect(screen.getByText(/1 lb shrimp/)).toBeInTheDocument();
+	});
+
+	it("combines differently-described ingredients under a shared base name in the preview, preserving both descriptions (TEST-255 AC2)", async () => {
+		const user = userEvent.setup();
+		renderForm({
+			recipes: [
+				makeRecipe({
+					id: "recipe-1",
+					title: "Shrimp Pasta",
+					ingredients: [
+						{
+							id: "ing-1",
+							text: "garlic, chopped",
+							baseName: "garlic",
+							description: "chopped",
+							quantity: 2,
+							unit: "cloves",
+							checked: false,
+						},
+					],
+				}),
+				makeRecipe({
+					id: "recipe-2",
+					title: "Garlic Bread",
+					prompt: "garlic bread",
+					ingredients: [
+						{
+							id: "ing-2",
+							text: "garlic, minced",
+							baseName: "garlic",
+							description: "minced",
+							quantity: 3,
+							unit: "cloves",
+							checked: false,
+						},
+					],
+				}),
+			],
+		});
+
+		await addRecipe(user, "Shrimp Pasta");
+		await addRecipe(user, "Garlic Bread");
+
+		expect(
+			screen.getByText("5 cloves garlic (chopped, minced)"),
+		).toBeInTheDocument();
 	});
 
 	it("removes a recipe's ingredients from the preview when it's removed", async () => {

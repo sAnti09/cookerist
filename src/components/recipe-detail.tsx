@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Checkbox } from "#/components/ui/checkbox";
 import { ServingsStepper } from "#/components/ui/servings-stepper";
-import { groupSteps, type Recipe } from "#/lib/recipe";
+import { combineIngredientName, groupSteps, type Recipe } from "#/lib/recipe";
 import { formatIngredientLine, scaleQuantity } from "#/lib/scale-servings";
 import { continueRecipe } from "#/server/generate-recipe";
 
@@ -25,7 +25,11 @@ export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
 					prompt: recipe.prompt,
 					soFar: {
 						ingredients: recipe.ingredients.map((ingredient) => ({
-							text: ingredient.text,
+							// Ingredients saved before the base name/description split
+							// (TEST-255) have neither field — fall back to the full text
+							// as the base name with no description.
+							baseName: ingredient.baseName ?? ingredient.text,
+							description: ingredient.description ?? "",
 							quantity: ingredient.quantity,
 							unit: ingredient.unit,
 						})),
@@ -52,7 +56,12 @@ export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
 						...recipe.ingredients,
 						...result.ingredients.map((ingredient) => ({
 							id: crypto.randomUUID(),
-							text: ingredient.text,
+							text: combineIngredientName(
+								ingredient.baseName,
+								ingredient.description,
+							),
+							baseName: ingredient.baseName,
+							description: ingredient.description,
 							quantity: ingredient.quantity,
 							unit: ingredient.unit,
 							checked: false,

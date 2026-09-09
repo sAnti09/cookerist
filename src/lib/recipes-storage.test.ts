@@ -17,7 +17,9 @@ const recipeInput: RecipeResponse = {
 	baseServings: 2,
 	difficulty: "quick_and_easy",
 	estimatedMinutes: 25,
-	ingredients: [{ text: "shrimp", quantity: 300, unit: "g" }],
+	ingredients: [
+		{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
+	],
 	steps: [{ section: null, text: "Cook the pasta." }],
 };
 
@@ -39,6 +41,8 @@ describe("toStoredRecipe", () => {
 		expect(recipe.truncated).toBe(false);
 		expect(recipe.ingredients[0]).toMatchObject({
 			text: "shrimp",
+			baseName: "shrimp",
+			description: "",
 			quantity: 300,
 			unit: "g",
 			checked: false,
@@ -57,6 +61,26 @@ describe("toStoredRecipe", () => {
 		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput, true);
 
 		expect(recipe.truncated).toBe(true);
+	});
+
+	it("combines base name + description into the display text (TEST-255 AC2)", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", {
+			...recipeInput,
+			ingredients: [
+				{
+					baseName: "garlic",
+					description: "chopped",
+					quantity: 2,
+					unit: "cloves",
+				},
+			],
+		});
+
+		expect(recipe.ingredients[0]).toMatchObject({
+			text: "garlic, chopped",
+			baseName: "garlic",
+			description: "chopped",
+		});
 	});
 });
 
@@ -147,6 +171,23 @@ describe("loadRecipes / saveRecipe", () => {
 
 		expect(loaded).toHaveLength(1);
 		expect(loaded[0].favorite).toBe(false);
+	});
+
+	it("loads pre-existing recipes whose ingredients predate the base name/description split without crashing (TEST-255)", () => {
+		const legacyRecipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const { baseName, description, ...legacyIngredient } =
+			legacyRecipe.ingredients[0];
+		window.localStorage.setItem(
+			"cookerist:recipes",
+			JSON.stringify([{ ...legacyRecipe, ingredients: [legacyIngredient] }]),
+		);
+
+		const loaded = loadRecipes();
+
+		expect(loaded).toHaveLength(1);
+		expect(loaded[0].ingredients[0].baseName).toBeUndefined();
+		expect(loaded[0].ingredients[0].description).toBeUndefined();
+		expect(loaded[0].ingredients[0].text).toBe("shrimp");
 	});
 
 	it("defaults truncated to false for recipes saved before it existed", () => {

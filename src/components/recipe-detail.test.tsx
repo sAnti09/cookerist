@@ -207,7 +207,9 @@ describe("RecipeDetail", () => {
 		const user = userEvent.setup();
 		continueRecipeMock.mockResolvedValueOnce({
 			type: "success",
-			ingredients: [{ text: "parmesan", quantity: 50, unit: "g" }],
+			ingredients: [
+				{ baseName: "parmesan", description: "", quantity: 50, unit: "g" },
+			],
 			steps: [{ section: null, text: "Plate and serve." }],
 			truncated: false,
 		});
@@ -242,8 +244,8 @@ describe("RecipeDetail", () => {
 		const callArgs = continueRecipeMock.mock.calls[0]?.[0];
 		expect(callArgs.data.prompt).toBe(baseRecipe.prompt);
 		expect(callArgs.data.soFar.ingredients).toEqual([
-			{ text: "shrimp", quantity: 300, unit: "g" },
-			{ text: "garlic", quantity: 4, unit: "cloves" },
+			{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
+			{ baseName: "garlic", description: "", quantity: 4, unit: "cloves" },
 		]);
 	});
 

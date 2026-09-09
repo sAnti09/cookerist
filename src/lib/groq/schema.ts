@@ -11,7 +11,8 @@ export const difficultySchema = z.enum([
 ]);
 
 const ingredientItemSchema = z.object({
-	text: z.string().min(1),
+	baseName: z.string().min(1),
+	description: z.string(),
 	quantity: z.number().nonnegative(),
 	unit: z.string(),
 });

@@ -1,8 +1,8 @@
 import { Checkbox } from "#/components/ui/checkbox";
+import { formatGroceryItemLine } from "#/lib/aggregate-grocery-items";
 import type { GroceryList, GroceryListItem } from "#/lib/grocery-list";
 import { applyGroceryItemsCheckedToRecipes } from "#/lib/propagate-grocery-check";
 import type { Recipe } from "#/lib/recipe";
-import { formatIngredientLine } from "#/lib/scale-servings";
 
 type GroceryListDetailProps = {
 	list: GroceryList;
@@ -18,7 +18,7 @@ function ItemLabel({ item }: { item: GroceryListItem }) {
 				item.checked ? "tabular-nums text-ink-dim line-through" : "tabular-nums"
 			}
 		>
-			{formatIngredientLine(item.quantity, item.unit, item.text)}
+			{formatGroceryItemLine(item)}
 		</span>
 	);
 }

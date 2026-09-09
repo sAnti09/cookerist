@@ -32,7 +32,9 @@ const validRecipe = {
 	baseServings: 2,
 	difficulty: "quick_and_easy",
 	estimatedMinutes: 25,
-	ingredients: [{ text: "shrimp", quantity: 300, unit: "g" }],
+	ingredients: [
+		{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
+	],
 	steps: [{ section: null, text: "Cook the pasta." }],
 };
 
@@ -117,8 +119,13 @@ describe("generateRecipe", () => {
 		const elaborateRecipe = {
 			...validRecipe,
 			ingredients: [
-				{ text: "shrimp", quantity: 300, unit: "g" },
-				{ text: "garlic, minced", quantity: 4, unit: "cloves" },
+				{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
+				{
+					baseName: "garlic",
+					description: "minced",
+					quantity: 4,
+					unit: "cloves",
+				},
 			],
 			steps: [
 				{ section: "Prep", text: "Peel and devein the shrimp." },
@@ -247,7 +254,9 @@ describe("continueRecipe", () => {
 
 	it("returns the remaining ingredients/steps on success", async () => {
 		const remaining = {
-			ingredients: [{ text: "parmesan", quantity: 50, unit: "g" }],
+			ingredients: [
+				{ baseName: "parmesan", description: "", quantity: 50, unit: "g" },
+			],
 			steps: [{ section: null, text: "Plate and serve." }],
 		};
 		createMock.mockResolvedValueOnce(jsonResponse(remaining));
@@ -302,7 +311,9 @@ describe("continueRecipe", () => {
 
 	it("repairs a truncated continuation response", async () => {
 		const remaining = {
-			ingredients: [{ text: "parmesan", quantity: 50, unit: "g" }],
+			ingredients: [
+				{ baseName: "parmesan", description: "", quantity: 50, unit: "g" },
+			],
 			steps: [{ section: null, text: "Plate and serve." }],
 		};
 		const full = JSON.stringify(remaining);

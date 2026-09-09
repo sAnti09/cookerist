@@ -103,10 +103,16 @@ type Recipe = {
   currentServings: number; // user-adjusted; drives the scaling math
   ingredients: Array<{
     id: string;
-    text: string;        // e.g. "garlic, minced"
+    text: string;        // full display name, e.g. "garlic, minced" — always present
     quantity: number;     // numeric part, scaled by servings ratio
     unit: string;         // e.g. "cloves", "g", "cups"
     checked: boolean;
+    // Base name (e.g. "garlic") + description (e.g. "minced") split (TEST-255)
+    // so grocery combination can key on the base name while `text` keeps the
+    // full display string. Optional: absent on ingredients saved before this
+    // split existed — fall back to `text` as the base name, "" as description.
+    baseName?: string;
+    description?: string;
   }>;
   steps: Array<{
     id: string;

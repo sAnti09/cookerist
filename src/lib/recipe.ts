@@ -4,7 +4,29 @@ export type Ingredient = {
 	quantity: number;
 	unit: string;
 	checked: boolean;
+	// Optional: absent on ingredients saved before TEST-255 split ingredient
+	// naming into a base name (what grocery combination keys on, e.g. "garlic")
+	// and a description (preserved detail, e.g. "chopped"). When absent,
+	// callers should fall back to treating `text` as the base name with no
+	// description.
+	baseName?: string;
+	description?: string;
 };
+
+// Composes the full display name from a base name + optional description
+// (e.g. "garlic" + "chopped" -> "garlic, chopped"), used both when building a
+// freshly-generated ingredient's display `text` and when merging a Groq
+// continuation response back into a recipe.
+export function combineIngredientName(
+	baseName: string,
+	description: string,
+): string {
+	const trimmedBase = baseName.trim();
+	const trimmedDescription = description.trim();
+	return trimmedDescription
+		? `${trimmedBase}, ${trimmedDescription}`
+		: trimmedBase;
+}
 
 export type Step = {
 	id: string;

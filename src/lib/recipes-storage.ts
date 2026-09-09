@@ -1,5 +1,5 @@
 import type { RecipeResponse } from "#/lib/groq/schema";
-import type { Recipe } from "#/lib/recipe";
+import { combineIngredientName, type Recipe } from "#/lib/recipe";
 
 const STORAGE_KEY = "cookerist:recipes";
 
@@ -94,7 +94,9 @@ export function toStoredRecipe(
 		estimatedMinutes: input.estimatedMinutes,
 		ingredients: input.ingredients.map((ingredient) => ({
 			id: crypto.randomUUID(),
-			text: ingredient.text,
+			text: combineIngredientName(ingredient.baseName, ingredient.description),
+			baseName: ingredient.baseName,
+			description: ingredient.description,
 			quantity: ingredient.quantity,
 			unit: ingredient.unit,
 			checked: false,

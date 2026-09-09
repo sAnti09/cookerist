@@ -1,6 +1,6 @@
 import type { GroceryListItem, GroceryListItemOrigin } from "./grocery-list";
 import type { Recipe } from "./recipe";
-import { scaleQuantity } from "./scale-servings";
+import { formatIngredientLine, scaleQuantity } from "./scale-servings";
 
 // Units that count discrete, whole ingredients — can't take a fractional
 // (0.25) amount. Extend this list as new countable units show up from Groq.
@@ -53,6 +53,10 @@ type IngredientGroup = {
 	text: string;
 	unit: string;
 	quantity: number;
+	// Unique, order-preserved descriptions collected from every ingredient
+	// merged into this group (e.g. "chopped", "minced") — kept as detail since
+	// combining on the shared base name would otherwise lose it (TEST-255).
+	descriptions: string[];
 	origins: GroceryListItemOrigin[];
 };
 
@@ -64,9 +68,16 @@ export function aggregateGroceryItems(
 
 	for (const recipe of recipes) {
 		for (const ingredient of recipe.ingredients) {
-			const normalizedText = ingredient.text.trim().toLowerCase();
+			// Grocery combination keys on the base name (e.g. "garlic") rather
+			// than the full descriptive text (e.g. "garlic, chopped") so
+			// differently-described ingredients that are really the same item
+			// still merge — falling back to `text` for ingredients saved before
+			// the base name/description split existed (TEST-255).
+			const baseName = (ingredient.baseName ?? ingredient.text).trim();
+			const description = (ingredient.description ?? "").trim();
+			const normalizedBaseName = baseName.toLowerCase();
 			const normalizedUnit = ingredient.unit.trim().toLowerCase();
-			const key = `${normalizedText}::${normalizedUnit}`;
+			const key = `${normalizedBaseName}::${normalizedUnit}`;
 			const origin: GroceryListItemOrigin = {
 				recipeId: recipe.id,
 				ingredientId: ingredient.id,
@@ -83,11 +94,15 @@ export function aggregateGroceryItems(
 			if (existing) {
 				existing.quantity += scaledQuantity;
 				existing.origins.push(origin);
+				if (description && !existing.descriptions.includes(description)) {
+					existing.descriptions.push(description);
+				}
 			} else {
 				groups.set(key, {
-					text: ingredient.text.trim(),
+					text: baseName,
 					unit: ingredient.unit.trim(),
 					quantity: scaledQuantity,
+					descriptions: description ? [description] : [],
 					origins: [origin],
 				});
 			}
@@ -103,6 +118,8 @@ export function aggregateGroceryItems(
 			checked: false,
 			source: "recipe",
 			origins: group.origins,
+			descriptions:
+				group.descriptions.length > 0 ? group.descriptions : undefined,
 		}),
 	);
 
@@ -139,4 +156,13 @@ export function carryOverCheckedState(
 		...item,
 		checked: previouslyChecked.get(checkedStateKey(item)) ?? false,
 	}));
+}
+
+// Renders a grocery item's display line, appending any preserved descriptions
+// (TEST-255) after the base quantity/unit/name line, e.g.
+// "2 cloves garlic (chopped, minced)".
+export function formatGroceryItemLine(item: GroceryListItem): string {
+	const base = formatIngredientLine(item.quantity, item.unit, item.text);
+	if (!item.descriptions || item.descriptions.length === 0) return base;
+	return `${base} (${item.descriptions.join(", ")})`;
 }

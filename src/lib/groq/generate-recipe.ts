@@ -1,3 +1,4 @@
+import { combineIngredientName } from "#/lib/recipe";
 import { getGroqClient } from "./client";
 import { repairTruncatedJson } from "./repair-truncated-json";
 import type { RecipeContinuationResponse, RecipeResponse } from "./schema";
@@ -29,20 +30,24 @@ const RECIPE_SYSTEM_PROMPT = `You are a recipe generator. Given a user's request
   "baseServings": number (servings this recipe is written for),
   "difficulty": "quick_and_easy" | "intermediate" | "hard" (how difficult the dish is to make),
   "estimatedMinutes": number (total time to go from start to finished dish, in minutes),
-  "ingredients": [ { "text": string (ingredient name, e.g. "garlic, minced"), "quantity": number, "unit": string (the measure or container the quantity is in, e.g. "cloves", "g", "cups" — NEVER restate the ingredient's own name as its unit, e.g. for "egg" use unit "" not "egg"; use "" when there is genuinely no unit) } ],
+  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name, e.g. "minced", "chopped", "diced small"; use "" when there is no further detail), "quantity": number, "unit": string (the measure or container the quantity is in, e.g. "cloves", "g", "cups" — NEVER restate the ingredient's own name as its unit, e.g. for "egg" use unit "" not "egg"; use "" when there is genuinely no unit) } ],
   "steps": [ { "section": string | null (e.g. "Prep", "Cook", "Plate"; null if the recipe doesn't warrant grouping), "text": string } ]
 }
 
-Every ingredient must have a clean numeric quantity (not baked into the text) so servings can be rescaled by simple multiplication. Sections are optional — use null for every step if the recipe is simple enough to stay flat.`;
+Every ingredient must have a clean numeric quantity (not baked into the text) so servings can be rescaled by simple multiplication. Sections are optional — use null for every step if the recipe is simple enough to stay flat.
+
+baseName rule: baseName is what a shopper would look for or ask for at a grocery store — never a preparation method. Different prep styles of the same product share ONE baseName, with the prep pushed into description instead (e.g. "garlic, chopped" and "garlic, minced" are both baseName "garlic" — you can't buy "chopped garlic" or "minced garlic" as a distinct grocery item, only garlic prepared differently). But genuinely different products or cuts get their OWN baseName, even when the everyday ingredient name overlaps (e.g. "chicken breast" and "chicken legs" are different baseNames, not "chicken" + a description, because they're sold as separate cuts/products at the store).`;
 
 const RECIPE_CONTINUATION_SYSTEM_PROMPT = `You are continuing a recipe generation for a dish that got cut off before it was finished. You'll be given the original request plus the ingredients and steps already generated. Respond with ONLY a JSON object (no other text) matching exactly this shape:
 
 {
-  "ingredients": [ { "text": string (ingredient name, e.g. "garlic, minced"), "quantity": number, "unit": string (e.g. "cloves", "g", "cups"; use "" if unitless) } ],
+  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name, e.g. "minced"; use "" when there is no further detail), "quantity": number, "unit": string (e.g. "cloves", "g", "cups"; use "" if unitless) } ],
   "steps": [ { "section": string | null (e.g. "Prep", "Cook", "Plate"; null if the recipe doesn't warrant grouping), "text": string } ]
 }
 
-Return ONLY the ingredients and steps that are still missing — do not repeat anything already generated. If nothing is missing for one of the two arrays, return an empty array for it.`;
+Return ONLY the ingredients and steps that are still missing — do not repeat anything already generated. If nothing is missing for one of the two arrays, return an empty array for it.
+
+baseName rule: baseName is what a shopper would look for or ask for at a grocery store — never a preparation method. Different prep styles of the same product share ONE baseName, with the prep pushed into description instead (e.g. "garlic, chopped" and "garlic, minced" are both baseName "garlic"). But genuinely different products or cuts get their OWN baseName, even when the everyday ingredient name overlaps (e.g. "chicken breast" and "chicken legs" are different baseNames, not "chicken" + a description, because they're sold as separate cuts/products at the store).`;
 
 export type GenerateRecipeResult =
 	| { type: "off_topic" }
@@ -85,7 +90,7 @@ function formatContinuationUserPrompt(
 	const ingredientLines =
 		soFar.ingredients
 			.map((ingredient) =>
-				`- ${ingredient.quantity} ${ingredient.unit} ${ingredient.text}`.trim(),
+				`- ${ingredient.quantity} ${ingredient.unit} ${combineIngredientName(ingredient.baseName, ingredient.description)}`.trim(),
 			)
 			.join("\n") || "(none yet)";
 	const stepLines =

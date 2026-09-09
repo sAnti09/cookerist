@@ -15,6 +15,11 @@ export type GroceryListItem = {
 	// Present (non-empty) only when source is "recipe" — the ingredients this
 	// item was aggregated from.
 	origins?: GroceryListItemOrigin[];
+	// Present (non-empty) only for recipe-sourced items combined from
+	// ingredients whose descriptions differ (e.g. "chopped" + "minced" garlic,
+	// TEST-255) — deduped, preserves detail that merging on the shared base
+	// name would otherwise drop.
+	descriptions?: string[];
 };
 
 export type GroceryList = {

@@ -7,6 +7,7 @@ import {
 	aggregateGroceryItems,
 	type CustomGroceryIngredient,
 	carryOverCheckedState,
+	formatGroceryItemLine,
 } from "#/lib/aggregate-grocery-items";
 import { filterRecipes } from "#/lib/filter-recipes";
 import {
@@ -255,7 +256,7 @@ export function GroceryListCreateForm({
 												key={recipe.id}
 												className="flex items-center justify-between gap-3 rounded-[10px] border border-line px-3 py-2"
 											>
-												<span className="min-w-0 flex-1 truncate text-sm">
+												<span className="min-w-0 flex-1 break-words text-sm">
 													{recipe.title}
 												</span>
 												<ServingsStepper
@@ -375,7 +376,7 @@ export function GroceryListCreateForm({
 							<ul className="mt-2 grid grid-cols-1 list-disc gap-1.5 pl-5 text-sm min-[420px]:grid-cols-2">
 								{previewItems.map((item) => (
 									<li key={item.id} className="tabular-nums">
-										{formatIngredientLine(item.quantity, item.unit, item.text)}
+										{formatGroceryItemLine(item)}
 									</li>
 								))}
 							</ul>
