@@ -264,6 +264,80 @@ a {
   }
 }
 
+/* Cook mode's "done" screen celebration (CelebrationBurst) — a one-shot
+   confetti + party-popper burst, not a loop, so it settles back to the
+   app's usual restraint once it's played. Confetti launches from each
+   popper's mouth (--burst-x/--burst-y), then falls with gravity
+   (--fall-x/--fall-y) rather than raining down from the top of the screen.
+
+   The launch and the fall need opposite easing to read as real physics —
+   reusing one curve for both made the fall look like it was yanked down
+   instead of drifting. Each keyframe's `animation-timing-function` governs
+   the segment *into the next* keyframe, not itself:
+   - launch (10%→18%): the same snappy, near-instant curve as before —
+     it was already right, don't soften it.
+   - fall (18%→100%): a gentle accelerating curve, and most of the
+     timeline, so it reads as a slow, graceful drift down rather than a
+     quick pop followed by an equally quick drop. */
+.confetti-piece {
+  animation: confetti-burst 2.4s linear both;
+  opacity: 0;
+}
+
+@keyframes confetti-burst {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  6% {
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.15, 0.65, 0.4, 1);
+  }
+  18% {
+    transform: translate(var(--burst-x, 0), var(--burst-y, 0))
+      rotate(var(--confetti-rotate, 180deg));
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.42, 0, 1, 1);
+  }
+  100% {
+    transform: translate(var(--fall-x, 0), var(--fall-y, 0))
+      rotate(calc(var(--confetti-rotate, 180deg) * 2));
+    opacity: 0;
+  }
+}
+
+.celebration-icon {
+  animation: celebration-pop 2.2s ease-out both;
+  opacity: 0;
+}
+
+@keyframes celebration-pop {
+  0% {
+    transform: scale(0.4) rotate(var(--pop-rotate, 0deg));
+    opacity: 0;
+  }
+  35% {
+    transform: scale(1.15) rotate(var(--pop-rotate, 0deg));
+    opacity: 1;
+  }
+  65% {
+    transform: scale(1) rotate(var(--pop-rotate, 0deg));
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(var(--pop-rotate, 0deg));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confetti-piece,
+  .celebration-icon {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

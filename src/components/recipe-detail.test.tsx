@@ -167,6 +167,29 @@ describe("RecipeDetail", () => {
 		expect(screen.getByText("Cook")).toBeInTheDocument();
 	});
 
+	it("opens and closes cook mode from the Steps section", async () => {
+		const user = userEvent.setup();
+		renderDetail(baseRecipe, vi.fn());
+
+		expect(screen.queryByText("Step 1 of 3")).not.toBeInTheDocument();
+
+		await user.click(screen.getByRole("button", { name: "Cook mode" }));
+
+		expect(screen.getByText("Step 1 of 3")).toBeInTheDocument();
+
+		await user.click(screen.getByRole("button", { name: "Exit cook mode" }));
+
+		expect(screen.queryByText("Step 1 of 3")).not.toBeInTheDocument();
+	});
+
+	it("hides the cook mode entry point when the recipe has no steps", () => {
+		renderDetail({ ...baseRecipe, steps: [] }, vi.fn());
+
+		expect(
+			screen.queryByRole("button", { name: "Cook mode" }),
+		).not.toBeInTheDocument();
+	});
+
 	it("omits the unit when it duplicates the ingredient text (TEST-243 AC1)", () => {
 		const recipeWithDuplicateUnit: Recipe = {
 			...baseRecipe,
