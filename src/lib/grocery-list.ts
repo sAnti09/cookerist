@@ -15,11 +15,6 @@ export type GroceryListItem = {
 	// Present (non-empty) only when source is "recipe" — the ingredients this
 	// item was aggregated from.
 	origins?: GroceryListItemOrigin[];
-	// Present (non-empty) only for recipe-sourced items combined from
-	// ingredients whose descriptions differ (e.g. "chopped" + "minced" garlic,
-	// TEST-255) — deduped, preserves detail that merging on the shared base
-	// name would otherwise drop.
-	descriptions?: string[];
 	// True when this item's quantity was estimated by converting between mass
 	// and volume (e.g. combining "2 cups sugar" with "500 g sugar") using an
 	// approximate ingredient density rather than a precise unit conversion —

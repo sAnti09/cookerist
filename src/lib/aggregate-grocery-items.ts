@@ -4,7 +4,7 @@ import { lookupLengthDensity } from "./ingredient-length-density";
 import { lookupPieceRatio } from "./ingredient-piece-ratio";
 import type { Recipe } from "./recipe";
 import { formatIngredientLine, scaleQuantity } from "./scale-servings";
-import { stripSizeDescriptor } from "./size-descriptor";
+import { isSizeWordUnit, stripSizeDescriptor } from "./size-descriptor";
 import {
 	convertFromBase,
 	getUnitDimension,
@@ -12,9 +12,16 @@ import {
 	resolveUnit,
 } from "./unit-conversion";
 
+// Shown wherever a list of GroceryListItems includes one flagged
+// `approximate` (grocery-list-detail.tsx and the create/edit form's
+// preview) — kept in one place so the two stay in sync.
+export const APPROXIMATE_ITEMS_NOTE =
+	"≈ estimated by converting between measurements (e.g. cups and grams) using an approximate ingredient density — actual amount may vary.";
+
 // Units that count discrete, whole ingredients — can't take a fractional
 // (0.25) amount. Extend this list as new countable units show up from Groq.
 export const COUNTABLE_UNITS: readonly string[] = [
+	"",
 	"piece",
 	"pieces",
 	"clove",
@@ -60,6 +67,21 @@ function roundUpToMultiple(value: number, multiple: number): number {
 
 export function isCountableUnit(unit: string): boolean {
 	return COUNTABLE_UNITS.includes(unit.trim().toLowerCase());
+}
+
+// An ingredient-agnostic unit the unit-conversion table doesn't recognize
+// (e.g. "can", "slice", "packet" — anything not in unit-conversion.ts or a
+// specific ingredient's ingredient-piece-ratio.ts entry) falls back to
+// matching on the literal unit string alone, since there's nothing else to
+// key on. Without folding a simple trailing-"s" plural first, "1 can" and
+// "2 cans" of the same ingredient would merge into two separate grocery-list
+// lines instead of one — not just a missing feature, an inconsistency with
+// COUNTABLE_UNITS already treating "can"/"cans" as equivalent for rounding.
+// Not a full pluralization rule (an "-es" plural like "box"/"boxes" won't
+// fold) — good enough for the common case without needing a dictionary.
+function canonicalizeUnitForMerging(unit: string): string {
+	const lower = unit.toLowerCase();
+	return lower.length > 1 && lower.endsWith("s") ? lower.slice(0, -1) : lower;
 }
 
 export function roundGroceryQuantity(quantity: number, unit: string): number {
@@ -109,10 +131,6 @@ type IngredientGroup = {
 	// whole garlic". Surfaced on the resulting GroceryListItem so the UI can
 	// flag the total as an estimate.
 	approximate: boolean;
-	// Unique, order-preserved descriptions collected from every ingredient
-	// merged into this group (e.g. "chopped", "minced") — kept as detail since
-	// combining on the shared base name would otherwise lose it (TEST-255).
-	descriptions: string[];
 	origins: GroceryListItemOrigin[];
 };
 
@@ -128,18 +146,21 @@ export function aggregateGroceryItems(
 			// than the full descriptive text (e.g. "garlic, chopped") so
 			// differently-described ingredients that are really the same item
 			// still merge — falling back to `text` for ingredients saved before
-			// the base name/description split existed (TEST-255).
+			// the base name/description split existed (TEST-255). `description`
+			// itself (prep detail like "chopped"/"minced") is never surfaced on
+			// the grocery list — see formatGroceryItemLine.
 			const rawBaseName = (ingredient.baseName ?? ingredient.text).trim();
 			// A leading/trailing size adjective (e.g. "medium onion") describes
 			// which specimen to grab, not a different grocery item, so it's
-			// stripped from the merge key/display name and folded into
-			// descriptions instead — same treatment as "chopped"/"minced" below.
-			// See size-descriptor.ts for what's stripped and why.
-			const { mergeKey: baseName, extractedSizeDescriptor } =
-				stripSizeDescriptor(rawBaseName);
-			const description = (ingredient.description ?? "").trim();
+			// stripped from the merge key/display name — see size-descriptor.ts.
+			const baseName = stripSizeDescriptor(rawBaseName);
 			const normalizedBaseName = baseName.toLowerCase();
-			const trimmedUnit = ingredient.unit.trim();
+			// Groq sometimes puts a size adjective in `unit` instead of the base
+			// name (e.g. "1 onion" as quantity 1, unit "large") — treated as
+			// unitless (same as unit "") so it doesn't block merging against an
+			// occurrence that put "large" somewhere else.
+			const rawUnit = ingredient.unit.trim();
+			const trimmedUnit = isSizeWordUnit(rawUnit) ? "" : rawUnit;
 			const origin: GroceryListItemOrigin = {
 				recipeId: recipe.id,
 				ingredientId: ingredient.id,
@@ -219,7 +240,7 @@ export function aggregateGroceryItems(
 
 			const key = bucket
 				? `${normalizedBaseName}::bucket:${bucket}`
-				: `${normalizedBaseName}::unit:${trimmedUnit.toLowerCase()}`;
+				: `${normalizedBaseName}::unit:${canonicalizeUnitForMerging(trimmedUnit)}`;
 
 			const existing = groups.get(key);
 			if (existing) {
@@ -229,30 +250,13 @@ export function aggregateGroceryItems(
 				if (!existing.unitsUsed.includes(trimmedUnit)) {
 					existing.unitsUsed.push(trimmedUnit);
 				}
-				if (description && !existing.descriptions.includes(description)) {
-					existing.descriptions.push(description);
-				}
-				if (
-					extractedSizeDescriptor &&
-					!existing.descriptions.includes(extractedSizeDescriptor)
-				) {
-					existing.descriptions.push(extractedSizeDescriptor);
-				}
 			} else {
-				const initialDescriptions = Array.from(
-					new Set(
-						[description, extractedSizeDescriptor].filter(
-							(value): value is string => Boolean(value),
-						),
-					),
-				);
 				groups.set(key, {
 					text: baseName,
 					bucket,
 					unitsUsed: [trimmedUnit],
 					quantity: contribution,
 					approximate,
-					descriptions: initialDescriptions,
 					origins: [origin],
 				});
 			}
@@ -326,7 +330,18 @@ export function aggregateGroceryItems(
 					const pieceUnitsUsed = group.unitsUsed.filter(
 						(unit) => resolveUnit(unit)?.toBase === 1,
 					);
-					displayUnit = pieceUnitsUsed[0] ?? "piece";
+					// Prefer a bare unitless display ("2 onion") over an explicit
+					// "whole"/"piece"/etc. when both were contributed to the same
+					// group — reads more naturally, and which one happened to be
+					// used first shouldn't be what decides this. Bare is also the
+					// fallback when nothing in the group used a toBase-1 unit at all
+					// (e.g. a group built entirely from "dozen"/"half dozen") --
+					// hardcoding "piece" there would show a unit that was never
+					// actually used (a group of "1 dozen" + "2 dozen" eggs
+					// previously displayed as "36 piece eggs").
+					displayUnit = pieceUnitsUsed.includes("")
+						? ""
+						: (pieceUnitsUsed[0] ?? "");
 					displayQuantity = group.quantity;
 				}
 			} else {
@@ -351,8 +366,6 @@ export function aggregateGroceryItems(
 				checked: false,
 				source: "recipe",
 				origins: group.origins,
-				descriptions:
-					group.descriptions.length > 0 ? group.descriptions : undefined,
 				approximate: group.approximate || undefined,
 			};
 		},
@@ -395,7 +408,7 @@ function checkedStateKey(item: GroceryListItem): string {
 	const dimension = isPieceRatioUnit ? "count" : getUnitDimension(item.unit);
 	return dimension
 		? `${normalizedText}::dim:${dimension}`
-		: `${normalizedText}::unit:${normalizedUnit}`;
+		: `${normalizedText}::unit:${canonicalizeUnitForMerging(normalizedUnit)}`;
 }
 
 // Carries checked state from a list's previous items onto its freshly
@@ -415,17 +428,14 @@ export function carryOverCheckedState(
 	}));
 }
 
-// Renders a grocery item's display line, appending any preserved descriptions
-// (TEST-255) after the base quantity/unit/name line, e.g.
-// "2 cloves garlic (chopped, minced)" — and, for a quantity estimated by
-// converting between mass and volume via an approximate ingredient density
-// (see ingredient-density.ts), prefixing it with "≈" so it doesn't read as
-// an exact total, e.g. "≈425 g sugar".
+// Renders a grocery item's display line — deliberately never includes
+// per-ingredient prep detail (e.g. "chopped", "minced"): that describes how
+// an ingredient is used in a recipe, not what to buy, so it has no place on
+// a shopping list. For a quantity estimated by converting between mass and
+// volume via an approximate ingredient density (see ingredient-density.ts),
+// prefixes it with "≈" so it doesn't read as an exact total, e.g.
+// "≈425 g sugar".
 export function formatGroceryItemLine(item: GroceryListItem): string {
 	const base = formatIngredientLine(item.quantity, item.unit, item.text);
-	const withApproximation = item.approximate ? `≈${base}` : base;
-	if (!item.descriptions || item.descriptions.length === 0) {
-		return withApproximation;
-	}
-	return `${withApproximation} (${item.descriptions.join(", ")})`;
+	return item.approximate ? `≈${base}` : base;
 }

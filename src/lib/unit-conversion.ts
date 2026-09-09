@@ -89,6 +89,16 @@ const UNIT_TABLE: Record<string, UnitDefinition> = {
 	// Count (base: one discrete item). These are exact multipliers (a dozen
 	// is always 12), unlike ingredient-piece-ratio.ts's container/piece
 	// ratios, which are approximate.
+	//
+	// "" (unitless) is deliberately included here, not left unresolved: the
+	// Groq prompt (see generate-recipe.ts) tells the model to return unit ""
+	// for a genuinely unitless whole item (e.g. "1 onion"), but doesn't
+	// forbid "whole"/"piece"/etc. for the exact same kind of item, so the two
+	// forms show up interchangeably across separate generations. Without ""
+	// resolving to the same count dimension, "1 onion" (unit "") and "1
+	// whole onion" (unit "whole") landed in different merge buckets and
+	// silently failed to combine on the grocery list.
+	"": { dimension: "count", toBase: 1 },
 	piece: { dimension: "count", toBase: 1 },
 	pieces: { dimension: "count", toBase: 1 },
 	whole: { dimension: "count", toBase: 1 },

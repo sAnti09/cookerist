@@ -3,9 +3,8 @@
 // onion" and "large onion" are still just "onion" at the store, so treating
 // the size as part of the ingredient's identity would needlessly block
 // grocery-list merging. Stripped from the merge key (see
-// stripSizeDescriptor) and folded into the ingredient's description
-// instead, so the detail isn't lost — same treatment "chopped"/"minced"
-// already get (TEST-255).
+// stripSizeDescriptor) and discarded — the grocery list doesn't display
+// per-ingredient detail at all (see formatGroceryItemLine).
 //
 // Checked longest-phrase-first so e.g. "extra large" doesn't get half
 // stripped into a stray "extra". Applied unconditionally to every
@@ -26,23 +25,13 @@ const SIZE_WORDS = [
 	"jumbo",
 ];
 
-export type SizeStripResult = {
-	// `baseName` with any leading/trailing size word removed, original casing
-	// preserved — unchanged (equal to the trimmed input) when no size word is
-	// found.
-	mergeKey: string;
-	// The removed word, lowercase, to fold into an ingredient's description —
-	// null when nothing was stripped.
-	extractedSizeDescriptor: string | null;
-};
-
 // Strips a leading or trailing size adjective from an ingredient's base
-// name, e.g. "medium onion" -> { mergeKey: "onion", extractedSizeDescriptor:
-// "medium" }. Only ever removes one occurrence, from one end — an ingredient
-// name isn't expected to carry a size word at both ends.
-export function stripSizeDescriptor(baseName: string): SizeStripResult {
+// name, e.g. "medium onion" -> "onion". Only ever removes one occurrence,
+// from one end — an ingredient name isn't expected to carry a size word at
+// both ends. Returns the name unchanged when no size word is found.
+export function stripSizeDescriptor(baseName: string): string {
 	const trimmed = baseName.trim().replace(/\s+/g, " ");
-	if (!trimmed) return { mergeKey: trimmed, extractedSizeDescriptor: null };
+	if (!trimmed) return trimmed;
 	const lower = trimmed.toLowerCase();
 
 	// A successful match below always leaves a non-empty remainder: `trimmed`
@@ -53,17 +42,20 @@ export function stripSizeDescriptor(baseName: string): SizeStripResult {
 	// startsWith/endsWith to find).
 	for (const sizeWord of SIZE_WORDS) {
 		if (lower.startsWith(`${sizeWord} `)) {
-			return {
-				mergeKey: trimmed.slice(sizeWord.length + 1),
-				extractedSizeDescriptor: sizeWord,
-			};
+			return trimmed.slice(sizeWord.length + 1);
 		}
 		if (lower.endsWith(` ${sizeWord}`)) {
-			return {
-				mergeKey: trimmed.slice(0, trimmed.length - sizeWord.length - 1),
-				extractedSizeDescriptor: sizeWord,
-			};
+			return trimmed.slice(0, trimmed.length - sizeWord.length - 1);
 		}
 	}
-	return { mergeKey: trimmed, extractedSizeDescriptor: null };
+	return trimmed;
+}
+
+// Whether `unit` (the whole, trimmed string — not a substring search) is
+// itself one of the size words above. Groq sometimes puts a size adjective
+// in the ingredient's `unit` field instead of its base name (e.g. "1 onion"
+// with unit "large" rather than baseName "large onion") — this catches that
+// case so it can be treated as unitless instead, same as the baseName case.
+export function isSizeWordUnit(unit: string): boolean {
+	return SIZE_WORDS.includes(unit.trim().toLowerCase());
 }

@@ -486,7 +486,7 @@ describe("aggregateGroceryItems", () => {
 					id: "ing-b",
 					text: "tomatoes",
 					quantity: 2,
-					unit: "cans",
+					unit: "jar",
 				}),
 			],
 		});
@@ -494,7 +494,7 @@ describe("aggregateGroceryItems", () => {
 		const result = aggregateGroceryItems([recipeA, recipeB]);
 
 		expect(result).toHaveLength(2);
-		expect(result.map((item) => item.unit).sort()).toEqual(["can", "cans"]);
+		expect(result.map((item) => item.unit).sort()).toEqual(["can", "jar"]);
 	});
 
 	it("merges eggs across generic count phrasings into an exact individual-item total, not a rounded-up dozen count", () => {
@@ -718,7 +718,7 @@ describe("aggregateGroceryItems", () => {
 		});
 	});
 
-	it("falls back to a generic 'piece' display unit for a count group whose only unit is a multiplier like dozen, not an individual-item alias", () => {
+	it("falls back to a bare unitless display for a count group whose only unit is a multiplier like dozen, not an individual-item alias", () => {
 		const recipe = makeRecipe({
 			id: "recipe-a",
 			ingredients: [
@@ -734,12 +734,13 @@ describe("aggregateGroceryItems", () => {
 		// No ingredient-specific piece ratio, and the only unit ever used
 		// ("dozen") isn't itself an individual-item alias (its toBase is 12,
 		// not 1) -- there's nothing in `unitsUsed` to echo back, so this falls
-		// to the generic "piece" label. 2 dozen = 24.
+		// to a bare unitless display rather than a "piece" label that was
+		// never actually used. 2 dozen = 24.
 		const result = aggregateGroceryItems([recipe]);
 
 		expect(result[0]).toMatchObject({
 			text: "dinner rolls",
-			unit: "piece",
+			unit: "",
 			quantity: 24,
 			approximate: undefined,
 		});
@@ -942,7 +943,7 @@ describe("aggregateGroceryItems", () => {
 		expect(aggregateGroceryItems([])).toEqual([]);
 	});
 
-	it("combines ingredients with the same base name but different descriptions, preserving both as detail (TEST-255 AC2)", () => {
+	it("combines ingredients with the same base name but different descriptions (TEST-255 AC2)", () => {
 		const recipeA = makeRecipe({
 			id: "recipe-a",
 			ingredients: [
@@ -980,45 +981,8 @@ describe("aggregateGroceryItems", () => {
 			text: "garlic",
 			unit: "bulb",
 			quantity: 1,
-			descriptions: ["chopped", "minced"],
 			approximate: true,
 		});
-	});
-
-	it("does not add a description twice, and omits the field entirely when there is none", () => {
-		const recipe = makeRecipe({
-			id: "recipe-a",
-			ingredients: [
-				makeIngredient({
-					id: "ing-1",
-					baseName: "garlic",
-					description: "chopped",
-					quantity: 1,
-					unit: "cloves",
-				}),
-				makeIngredient({
-					id: "ing-2",
-					baseName: "garlic",
-					description: "chopped",
-					quantity: 1,
-					unit: "cloves",
-				}),
-				makeIngredient({
-					id: "ing-3",
-					baseName: "onion",
-					description: "",
-					quantity: 1,
-					unit: "whole",
-				}),
-			],
-		});
-
-		const result = aggregateGroceryItems([recipe]);
-
-		const garlic = result.find((item) => item.text === "garlic");
-		expect(garlic?.descriptions).toEqual(["chopped"]);
-		const onion = result.find((item) => item.text === "onion");
-		expect(onion?.descriptions).toBeUndefined();
 	});
 
 	it("falls back to the ingredient's text as the base name for ingredients saved before the split existed (TEST-255)", () => {
@@ -1092,11 +1056,10 @@ describe("aggregateGroceryItems", () => {
 			text: "onion",
 			unit: "whole",
 			quantity: 2,
-			descriptions: ["medium"],
 		});
 	});
 
-	it("merges a size word alongside an already-present description without duplicating it", () => {
+	it("merges a size-described ingredient with a differently-described one under the same base name", () => {
 		const recipeA = makeRecipe({
 			id: "recipe-a",
 			ingredients: [
@@ -1129,10 +1092,178 @@ describe("aggregateGroceryItems", () => {
 			text: "onion",
 			quantity: 2,
 		});
-		expect(result[0].descriptions).toEqual(
-			expect.arrayContaining(["large", "diced", "chopped"]),
-		);
-		expect(result[0].descriptions).toHaveLength(3);
+	});
+
+	it("merges a bare unitless whole item with an explicit 'whole'/'piece' unit for the same ingredient", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					baseName: "large onion",
+					description: "",
+					quantity: 1,
+					unit: "whole",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					baseName: "onion",
+					description: "",
+					quantity: 1,
+					unit: "",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "onion",
+			unit: "",
+			quantity: 2,
+		});
+	});
+
+	it("merges when Groq puts the size word in the unit field instead of the base name", () => {
+		// Real data observed in the wild: same baseName ("onion") in both, but
+		// one occurrence has the size word as its `unit` ("large") rather than
+		// folded into `description` or `baseName` like the size-descriptor
+		// stripping above expects.
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					baseName: "onion",
+					description: "sliced",
+					quantity: 1,
+					unit: "large",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					baseName: "onion",
+					description: "large, quartered",
+					quantity: 1,
+					unit: "",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "onion",
+			unit: "",
+			quantity: 2,
+		});
+	});
+
+	it("merges an unrecognized unit's singular and plural spelling (e.g. 'can'/'cans')", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					baseName: "diced tomatoes",
+					quantity: 1,
+					unit: "can",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					baseName: "diced tomatoes",
+					quantity: 2,
+					unit: "cans",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "diced tomatoes",
+			quantity: 3,
+		});
+	});
+
+	it("does not fold two genuinely different unrecognized units together", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					baseName: "cheese",
+					quantity: 1,
+					unit: "block",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					baseName: "cheese",
+					quantity: 4,
+					unit: "slices",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(2);
+	});
+
+	it("displays a group built entirely from a scaled count unit (e.g. 'dozen') without a bogus 'piece' label", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					baseName: "eggs",
+					quantity: 1,
+					unit: "dozen",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					baseName: "eggs",
+					quantity: 2,
+					unit: "dozen",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "eggs",
+			unit: "",
+			quantity: 36,
+		});
 	});
 
 	it("merges eggs across differently-sized descriptions too, since the user chose to leave size to the shopper", () => {
@@ -1168,7 +1299,6 @@ describe("aggregateGroceryItems", () => {
 			text: "eggs",
 			unit: "eggs",
 			quantity: 12,
-			descriptions: ["large"],
 		});
 	});
 
@@ -1305,20 +1435,8 @@ describe("formatGroceryItemLine", () => {
 		};
 	}
 
-	it("renders the base quantity/unit/name line with no descriptions", () => {
+	it("renders the base quantity/unit/name line", () => {
 		expect(formatGroceryItemLine(makeItem())).toBe("5 cloves garlic");
-	});
-
-	it("appends preserved descriptions in parentheses (TEST-255 AC2)", () => {
-		expect(
-			formatGroceryItemLine(makeItem({ descriptions: ["chopped", "minced"] })),
-		).toBe("5 cloves garlic (chopped, minced)");
-	});
-
-	it("omits the parentheses for an empty descriptions array", () => {
-		expect(formatGroceryItemLine(makeItem({ descriptions: [] }))).toBe(
-			"5 cloves garlic",
-		);
 	});
 
 	it("prefixes the line with ≈ for an approximate (density-estimated) quantity", () => {
@@ -1332,20 +1450,6 @@ describe("formatGroceryItemLine", () => {
 				}),
 			),
 		).toBe("≈212.5 g sugar");
-	});
-
-	it("prefixes before the descriptions parentheses when both are present", () => {
-		expect(
-			formatGroceryItemLine(
-				makeItem({
-					text: "sugar",
-					quantity: 212.5,
-					unit: "g",
-					approximate: true,
-					descriptions: ["packed"],
-				}),
-			),
-		).toBe("≈212.5 g sugar (packed)");
 	});
 
 	it("does not prefix when approximate is false or unset", () => {

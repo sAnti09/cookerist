@@ -1,5 +1,8 @@
 import { Checkbox } from "#/components/ui/checkbox";
-import { formatGroceryItemLine } from "#/lib/aggregate-grocery-items";
+import {
+	APPROXIMATE_ITEMS_NOTE,
+	formatGroceryItemLine,
+} from "#/lib/aggregate-grocery-items";
 import type { GroceryList, GroceryListItem } from "#/lib/grocery-list";
 import { applyGroceryItemsCheckedToRecipes } from "#/lib/propagate-grocery-check";
 import type { Recipe } from "#/lib/recipe";
@@ -132,10 +135,7 @@ export function GroceryListDetail({
 				) : null}
 
 				{hasApproximateItems ? (
-					<p className="mt-3 text-ink-dim text-xs">
-						≈ estimated by converting between measurements (e.g. cups and grams)
-						using an approximate ingredient density — actual amount may vary.
-					</p>
+					<p className="mt-3 text-ink-dim text-xs">{APPROXIMATE_ITEMS_NOTE}</p>
 				) : null}
 			</section>
 		</div>

@@ -70,6 +70,16 @@ describe("resolveUnit / getUnitDimension", () => {
 		expect(convertToBase(1, "piece")).toBe(1);
 	});
 
+	it("resolves an empty (unitless) string to the count dimension, same as 'whole'/'piece'", () => {
+		// Groq's prompt asks for unit "" on a genuinely unitless whole item
+		// (e.g. "1 onion") but doesn't forbid "whole"/"piece" for the exact
+		// same kind of item, so the two forms show up interchangeably across
+		// generations -- they need to land in the same dimension or grocery
+		// merging silently fails for otherwise-identical items.
+		expect(getUnitDimension("")).toBe("count");
+		expect(convertToBase(1, "")).toBe(1);
+	});
+
 	it("returns null for ingredient-specific count units and unrecognized units", () => {
 		// "clove"/"bunch" aren't generic count units -- they're only meaningful
 		// relative to a specific ingredient's container (see
