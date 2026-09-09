@@ -162,6 +162,11 @@ export function Home() {
 	}
 
 	function submit(prompt: string, replaceId?: string) {
+		// A search is a Recipes-view action — jump back there so the loading
+		// row/result is actually visible, even if the user searched while
+		// looking at their Grocery Lists.
+		if (view === "grocery") setView("recipes");
+
 		const localId = replaceId ?? crypto.randomUUID();
 		setPending((rows) => [
 			{ localId, prompt, status: "loading" },
@@ -435,7 +440,7 @@ export function Home() {
 						</div>
 					</div>
 					<p className="mt-6 text-center text-xs text-ink-dim">
-						Cooked up with love by James Limpiado
+						Cooked up with love by <b>James Limpiado</b>
 					</p>
 				</footer>
 			</div>

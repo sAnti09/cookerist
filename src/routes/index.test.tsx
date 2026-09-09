@@ -278,9 +278,13 @@ describe("Home", () => {
 		it("credits the app's creator at the bottom of the page", () => {
 			renderHome();
 
-			expect(
-				screen.getByText(/cooked up with love by james limpiado/i),
-			).toBeInTheDocument();
+			// Find the container by matching part of the text
+			const creditElement = screen.getByText(/cooked up with love by/i);
+
+			// Assert the full normalized textContent of that container
+			expect(creditElement).toHaveTextContent(
+				/cooked up with love by james limpiado/i,
+			);
 		});
 
 		it("does nothing until the reset is confirmed", async () => {
@@ -594,6 +598,27 @@ describe("Home", () => {
 			expect(
 				screen.getByRole("heading", { name: "Recipes" }),
 			).toBeInTheDocument();
+		});
+
+		it("switches back to the Recipes view when a search is submitted while viewing grocery lists", async () => {
+			generateRecipeMock.mockResolvedValueOnce({
+				type: "success",
+				recipe: validRecipe,
+			});
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "Grocery lists" }));
+			expect(
+				screen.getByRole("heading", { name: "Grocery Lists" }),
+			).toBeInTheDocument();
+
+			await submitPrompt("shrimp pasta for 2");
+
+			expect(
+				screen.getByRole("heading", { name: "Recipes" }),
+			).toBeInTheDocument();
+			expect(await screen.findByText(validRecipe.title)).toBeInTheDocument();
 		});
 
 		it("shows a distinct empty state with a create entry point when no lists exist", async () => {
