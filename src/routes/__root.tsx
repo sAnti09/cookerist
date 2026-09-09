@@ -27,11 +27,40 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 			{
 				title: "Cookerist",
 			},
+			{
+				name: "theme-color",
+				content: "#D9793A",
+			},
+			{
+				name: "apple-mobile-web-app-capable",
+				content: "yes",
+			},
+			{
+				name: "apple-mobile-web-app-status-bar-style",
+				content: "default",
+			},
+			{
+				name: "apple-mobile-web-app-title",
+				content: "Cookerist",
+			},
 		],
 		links: [
 			{
 				rel: "stylesheet",
 				href: appCss,
+			},
+			{
+				rel: "manifest",
+				href: "/manifest.webmanifest",
+			},
+			{
+				rel: "icon",
+				href: "/favicon.svg",
+				type: "image/svg+xml",
+			},
+			{
+				rel: "apple-touch-icon",
+				href: "/apple-touch-icon.png",
 			},
 		],
 	}),
@@ -69,6 +98,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 						]}
 					/>
 				</QueryClientProvider>
+				<script
+					// biome-ignore lint/security/noDangerouslySetInnerHtml: static string, no user input; registers the app-shell service worker after load so it never competes with initial page resources
+					dangerouslySetInnerHTML={{
+						__html:
+							"(function(){if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}})();",
+					}}
+				/>
 				<Scripts />
 			</body>
 		</html>

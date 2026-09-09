@@ -242,6 +242,68 @@ describe("Home", () => {
 		expect(screen.getByText(/no recipes yet/i)).toBeInTheDocument();
 	});
 
+	describe("FAQ", () => {
+		it("explains data privacy, mobile install steps for both platforms, and data removal", () => {
+			renderHome();
+
+			expect(screen.getByRole("heading", { name: "FAQ" })).toBeInTheDocument();
+			expect(screen.getByText(/is my data private/i)).toBeInTheDocument();
+			expect(screen.getByText(/android \(chrome\)/i)).toBeInTheDocument();
+			expect(screen.getByText(/ios \(safari\)/i)).toBeInTheDocument();
+			expect(
+				screen.getByText(/uninstalling cookerist deletes/i),
+			).toBeInTheDocument();
+		});
+
+		it("credits the app's creator at the bottom of the page", () => {
+			renderHome();
+
+			expect(
+				screen.getByText(/cooked up with love by james limpiado/i),
+			).toBeInTheDocument();
+		});
+
+		it("does nothing until the reset is confirmed", async () => {
+			seedRecipes(1);
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "reset all data" }));
+			expect(
+				screen.getByRole("heading", { name: "Reset all data?" }),
+			).toBeInTheDocument();
+
+			await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+			expect(
+				screen.queryByRole("heading", { name: "Reset all data?" }),
+			).not.toBeInTheDocument();
+			expect(screen.getByText("Recipe 0")).toBeInTheDocument();
+			expect(window.localStorage.getItem("cookerist:recipes")).not.toBeNull();
+		});
+
+		it("clears every localStorage key and reloads once the reset is confirmed", async () => {
+			seedRecipes(1);
+			saveGroceryList(makeGroceryList());
+			window.localStorage.setItem("cookerist:theme", "dark");
+			const reload = vi.fn();
+			Object.defineProperty(window, "location", {
+				configurable: true,
+				value: { ...window.location, reload },
+			});
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "reset all data" }));
+			await user.click(
+				screen.getByRole("button", { name: "Reset everything" }),
+			);
+
+			expect(window.localStorage.length).toBe(0);
+			expect(reload).toHaveBeenCalledTimes(1);
+		});
+	});
+
 	it("renders only the first 10 recipes and loads more on scroll intersection", async () => {
 		seedRecipes(12);
 		renderHome();

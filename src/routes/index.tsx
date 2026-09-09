@@ -11,6 +11,7 @@ import {
 	RecipeResultRow,
 } from "#/components/result-row";
 import { Button } from "#/components/ui/button";
+import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { ThemeToggle } from "#/components/ui/theme-toggle";
 import { type ResultsView, ViewToggle } from "#/components/ui/view-toggle";
 import { filterRecipes, hasActiveFilters } from "#/lib/filter-recipes";
@@ -33,6 +34,7 @@ import {
 	updateRecipe,
 	updateRecipes,
 } from "#/lib/recipes-storage";
+import { resetAllData } from "#/lib/reset-all-data";
 import { cn } from "#/lib/utils";
 import { generateRecipe } from "#/server/generate-recipe";
 
@@ -58,6 +60,7 @@ export function Home() {
 	const [creatingGroceryList, setCreatingGroceryList] = useState(false);
 	const [editingGroceryList, setEditingGroceryList] =
 		useState<GroceryList | null>(null);
+	const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 	const sentinelRef = useRef<HTMLDivElement | null>(null);
 	const mutation = useMutation({
 		mutationFn: (prompt: string) => generateRecipe({ data: prompt }),
@@ -142,6 +145,11 @@ export function Home() {
 
 	function handleEditGroceryList(list: GroceryList) {
 		setEditingGroceryList(list);
+	}
+
+	function handleResetAllData() {
+		resetAllData();
+		window.location.reload();
 	}
 
 	function handleGroceryListSaved(list: GroceryList) {
@@ -350,7 +358,79 @@ export function Home() {
 						))
 					)}
 				</div>
+
+				<footer className="mt-10 border-t border-line pt-7 text-sm text-ink-dim">
+					<h2 className="display-title mb-2.5 text-base font-semibold text-ink">
+						FAQ
+					</h2>
+					<div className="flex flex-col gap-4">
+						<div>
+							<p className="font-semibold text-ink">Is my data private?</p>
+							<p className="mt-1">
+								Yes. Every recipe, grocery list, and setting lives only in this
+								browser's local storage — nothing is sent to or saved on a
+								server, and Cookerist has no accounts or sign-in.
+							</p>
+						</div>
+						<div>
+							<p className="font-semibold text-ink">
+								Can I use Cookerist on my phone?
+							</p>
+							<p className="mt-1">
+								Yes — Cookerist installs like a native app on Android and iOS
+								straight from your browser, no app store required.
+							</p>
+							<ul className="mt-2 list-disc space-y-1 pl-5">
+								<li>
+									<span className="font-medium text-ink">
+										Android (Chrome):
+									</span>{" "}
+									open this page, tap the ⋮ menu, then choose "Install app" (or
+									"Add to Home screen").
+								</li>
+								<li>
+									<span className="font-medium text-ink">iOS (Safari):</span>{" "}
+									open this page, tap the Share icon, then choose "Add to Home
+									Screen".
+								</li>
+							</ul>
+						</div>
+						<div>
+							<p className="font-semibold text-ink">
+								What happens to my data if I remove the app?
+							</p>
+							<p className="mt-1">
+								On mobile, uninstalling Cookerist deletes its local storage
+								along with it, so every saved recipe and grocery list goes too.
+								You can also{" "}
+								<button
+									type="button"
+									className="font-medium text-accent underline underline-offset-2 hover:text-ink"
+									onClick={() => setResetConfirmOpen(true)}
+								>
+									reset all data
+								</button>{" "}
+								right now, which clears everything Cookerist has saved in this
+								browser.
+							</p>
+						</div>
+					</div>
+					<p className="mt-6 text-center text-xs text-ink-dim">
+						Cooked up with love by James Limpiado
+					</p>
+				</footer>
 			</div>
+			<ConfirmDialog
+				open={resetConfirmOpen}
+				title="Reset all data?"
+				description="This permanently deletes every recipe, grocery list, and preference saved in this browser. This can't be undone."
+				confirmLabel="Reset everything"
+				onConfirm={() => {
+					setResetConfirmOpen(false);
+					handleResetAllData();
+				}}
+				onCancel={() => setResetConfirmOpen(false)}
+			/>
 			{creatingGroceryList || editingGroceryList ? (
 				<GroceryListCreateForm
 					recipes={recipes}
