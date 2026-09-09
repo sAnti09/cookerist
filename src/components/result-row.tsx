@@ -12,6 +12,11 @@ export type PendingRow = {
 	prompt: string;
 	status: "loading" | "error";
 	message?: string;
+	// True when the error is Groq's on-topic rejection rather than a
+	// generation failure — retrying the exact same prompt would just fail
+	// the same way again, so this row's Retry behaves differently (see
+	// PendingResultRow below).
+	offTopic?: boolean;
 };
 
 export function PendingResultRow({
@@ -19,7 +24,7 @@ export function PendingResultRow({
 	onRetry,
 }: {
 	row: PendingRow;
-	onRetry: (prompt: string, localId: string) => void;
+	onRetry: (row: PendingRow) => void;
 }) {
 	if (row.status === "loading") {
 		return (
@@ -37,11 +42,7 @@ export function PendingResultRow({
 	return (
 		<div className="card border-warn bg-warn-wash p-4">
 			<p className="text-sm text-warn">{row.message}</p>
-			<Button
-				variant="secondary"
-				className="mt-3"
-				onClick={() => onRetry(row.prompt, row.localId)}
-			>
+			<Button variant="secondary" className="mt-3" onClick={() => onRetry(row)}>
 				Retry
 			</Button>
 		</div>

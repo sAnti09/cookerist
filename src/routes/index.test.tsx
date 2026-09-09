@@ -161,6 +161,26 @@ describe("Home", () => {
 		expect(window.localStorage.getItem("cookerist:recipes")).toBeNull();
 	});
 
+	it("retrying an off-topic rejection clears the notice and refills the prompt field instead of resubmitting", async () => {
+		generateRecipeMock.mockResolvedValueOnce({ type: "off_topic" });
+		renderHome();
+
+		await submitPrompt("what's the capital of France?");
+		const retryButton = await screen.findByRole("button", { name: "Retry" });
+
+		const user = userEvent.setup();
+		await user.click(retryButton);
+
+		expect(
+			screen.queryByText(/doesn't look like a cooking request/i),
+		).not.toBeInTheDocument();
+		expect(screen.getByLabelText("Describe a dish")).toHaveValue(
+			"what's the capital of France?",
+		);
+		// Only the original submission called Groq — retry did not re-call it.
+		expect(generateRecipeMock).toHaveBeenCalledTimes(1);
+	});
+
 	it("shows a retry action on failure, and retry re-triggers generation", async () => {
 		generateRecipeMock.mockResolvedValueOnce({
 			type: "error",

@@ -1,23 +1,39 @@
 import { Send } from "lucide-react";
-import type { FormEvent } from "react";
-import { useState } from "react";
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Button } from "#/components/ui/button";
 import { Textarea } from "#/components/ui/textarea";
 
 type PromptFormProps = {
+	value: string;
+	onChange: (value: string) => void;
 	onSubmit: (prompt: string) => void;
 	disabled?: boolean;
 };
 
-export function PromptForm({ onSubmit, disabled }: PromptFormProps) {
-	const [value, setValue] = useState("");
+export function PromptForm({
+	value,
+	onChange,
+	onSubmit,
+	disabled,
+}: PromptFormProps) {
+	function trySubmit() {
+		const trimmed = value.trim();
+		if (!trimmed) return;
+		onChange("");
+		onSubmit(trimmed);
+	}
 
 	function handleSubmit(event: FormEvent) {
 		event.preventDefault();
-		const trimmed = value.trim();
-		if (!trimmed) return;
-		setValue("");
-		onSubmit(trimmed);
+		trySubmit();
+	}
+
+	// Enter submits, same as clicking the button — Shift+Enter still inserts
+	// a newline, matching the common chat-input convention.
+	function handleKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+		if (event.key !== "Enter" || event.shiftKey) return;
+		event.preventDefault();
+		trySubmit();
 	}
 
 	return (
@@ -27,7 +43,8 @@ export function PromptForm({ onSubmit, disabled }: PromptFormProps) {
 		>
 			<Textarea
 				value={value}
-				onChange={(event) => setValue(event.target.value)}
+				onChange={(event) => onChange(event.target.value)}
+				onKeyDown={handleKeyDown}
 				placeholder="What do you want to cook?"
 				rows={1}
 				aria-label="Describe a dish"

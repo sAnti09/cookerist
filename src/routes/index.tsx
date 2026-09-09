@@ -51,6 +51,7 @@ export function Home() {
 	const [groceryLists, setGroceryLists] = useState<GroceryList[]>([]);
 	const [view, setView] = useState<ResultsView>("recipes");
 	const [pending, setPending] = useState<PendingRow[]>([]);
+	const [promptValue, setPromptValue] = useState("");
 	const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | "all">(
@@ -181,12 +182,12 @@ export function Home() {
 					return;
 				}
 
-				const message =
-					result.type === "off_topic" ? OFF_TOPIC_MESSAGE : result.message;
+				const offTopic = result.type === "off_topic";
+				const message = offTopic ? OFF_TOPIC_MESSAGE : result.message;
 				setPending((rows) =>
 					rows.map((row) =>
 						row.localId === localId
-							? { ...row, status: "error", message }
+							? { ...row, status: "error", message, offTopic }
 							: row,
 					),
 				);
@@ -200,6 +201,20 @@ export function Home() {
 					),
 				);
 			});
+	}
+
+	// An off-topic rejection means the prompt itself was the problem, so
+	// retrying it verbatim would just fail the same way again — instead,
+	// drop the notification and hand the prompt back to the search field so
+	// the user can rephrase it. Any other error is a generation failure, not
+	// a prompt problem, so it retries the same prompt as before.
+	function handleRetry(row: PendingRow) {
+		if (row.offTopic) {
+			setPending((rows) => rows.filter((r) => r.localId !== row.localId));
+			setPromptValue(row.prompt);
+			return;
+		}
+		submit(row.prompt, row.localId);
 	}
 
 	return (
@@ -228,7 +243,11 @@ export function Home() {
 				</div>
 
 				<div className="mt-8">
-					<PromptForm onSubmit={submit} />
+					<PromptForm
+						value={promptValue}
+						onChange={setPromptValue}
+						onSubmit={submit}
+					/>
 				</div>
 
 				<div className="mt-8 mb-4">
@@ -312,7 +331,7 @@ export function Home() {
 								<PendingResultRow
 									key={row.localId}
 									row={row}
-									onRetry={submit}
+									onRetry={handleRetry}
 								/>
 							))}
 							{recipes.length === 0 && pending.length === 0 ? (
