@@ -1,8 +1,24 @@
-import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Recipe } from "#/lib/recipe";
 import { RecipeDetail } from "./recipe-detail";
+
+const continueRecipeMock = vi.fn();
+
+vi.mock("#/server/generate-recipe", () => ({
+	continueRecipe: (...args: unknown[]) => continueRecipeMock(...args),
+}));
+
+function renderDetail(recipe: Recipe, onUpdate: (recipe: Recipe) => void) {
+	const queryClient = new QueryClient();
+	return render(
+		<QueryClientProvider client={queryClient}>
+			<RecipeDetail recipe={recipe} onUpdate={onUpdate} />
+		</QueryClientProvider>,
+	);
+}
 
 const baseRecipe: Recipe = {
 	id: "recipe-1",
@@ -32,8 +48,12 @@ const baseRecipe: Recipe = {
 };
 
 describe("RecipeDetail", () => {
+	beforeEach(() => {
+		continueRecipeMock.mockReset();
+	});
+
 	it("renders the prompt, overview, and scaled ingredient quantities", () => {
-		render(<RecipeDetail recipe={baseRecipe} onUpdate={vi.fn()} />);
+		renderDetail(baseRecipe, vi.fn());
 
 		expect(screen.getByText(baseRecipe.prompt)).toBeInTheDocument();
 		expect(screen.getByText(baseRecipe.overview)).toBeInTheDocument();
@@ -42,11 +62,9 @@ describe("RecipeDetail", () => {
 	});
 
 	it("does not repeat the difficulty badge or estimated time (already shown on the collapsed row)", () => {
-		render(
-			<RecipeDetail
-				recipe={{ ...baseRecipe, difficulty: "hard", estimatedMinutes: 90 }}
-				onUpdate={vi.fn()}
-			/>,
+		renderDetail(
+			{ ...baseRecipe, difficulty: "hard", estimatedMinutes: 90 },
+			vi.fn(),
 		);
 
 		expect(screen.queryByText("Hard")).not.toBeInTheDocument();
@@ -56,8 +74,11 @@ describe("RecipeDetail", () => {
 	it("rescales ingredient quantities in real time when servings increase", async () => {
 		const onUpdate = vi.fn();
 		const user = userEvent.setup();
+		const queryClient = new QueryClient();
 		const { rerender } = render(
-			<RecipeDetail recipe={baseRecipe} onUpdate={onUpdate} />,
+			<QueryClientProvider client={queryClient}>
+				<RecipeDetail recipe={baseRecipe} onUpdate={onUpdate} />
+			</QueryClientProvider>,
 		);
 
 		await user.click(screen.getByRole("button", { name: "Increase servings" }));
@@ -68,10 +89,12 @@ describe("RecipeDetail", () => {
 		});
 
 		rerender(
-			<RecipeDetail
-				recipe={{ ...baseRecipe, currentServings: 3 }}
-				onUpdate={onUpdate}
-			/>,
+			<QueryClientProvider client={queryClient}>
+				<RecipeDetail
+					recipe={{ ...baseRecipe, currentServings: 3 }}
+					onUpdate={onUpdate}
+				/>
+			</QueryClientProvider>,
 		);
 
 		expect(screen.getByText(/450 g shrimp/)).toBeInTheDocument();
@@ -81,12 +104,7 @@ describe("RecipeDetail", () => {
 	it("does not decrease servings below 1", async () => {
 		const onUpdate = vi.fn();
 		const user = userEvent.setup();
-		render(
-			<RecipeDetail
-				recipe={{ ...baseRecipe, currentServings: 1 }}
-				onUpdate={onUpdate}
-			/>,
-		);
+		renderDetail({ ...baseRecipe, currentServings: 1 }, onUpdate);
 
 		await user.click(screen.getByRole("button", { name: "Decrease servings" }));
 
@@ -96,7 +114,7 @@ describe("RecipeDetail", () => {
 	it("toggles a single ingredient's checked state", async () => {
 		const onUpdate = vi.fn();
 		const user = userEvent.setup();
-		render(<RecipeDetail recipe={baseRecipe} onUpdate={onUpdate} />);
+		renderDetail(baseRecipe, onUpdate);
 
 		await user.click(screen.getByText(/300 g shrimp/));
 
@@ -112,7 +130,7 @@ describe("RecipeDetail", () => {
 	it("checks all ingredients via the check-all control", async () => {
 		const onUpdate = vi.fn();
 		const user = userEvent.setup();
-		render(<RecipeDetail recipe={baseRecipe} onUpdate={onUpdate} />);
+		renderDetail(baseRecipe, onUpdate);
 
 		await user.click(screen.getByLabelText("Check all"));
 
@@ -128,7 +146,7 @@ describe("RecipeDetail", () => {
 	it("toggles a step's checked state", async () => {
 		const onUpdate = vi.fn();
 		const user = userEvent.setup();
-		render(<RecipeDetail recipe={baseRecipe} onUpdate={onUpdate} />);
+		renderDetail(baseRecipe, onUpdate);
 
 		await user.click(screen.getByText("Chop garlic"));
 
@@ -143,7 +161,7 @@ describe("RecipeDetail", () => {
 	});
 
 	it("groups steps under their section headings when present", () => {
-		render(<RecipeDetail recipe={baseRecipe} onUpdate={vi.fn()} />);
+		renderDetail(baseRecipe, vi.fn());
 
 		expect(screen.getByText("Prep")).toBeInTheDocument();
 		expect(screen.getByText("Cook")).toBeInTheDocument();
@@ -172,9 +190,110 @@ describe("RecipeDetail", () => {
 				{ id: "s2", section: null, text: "Add pasta", checked: false },
 			],
 		};
-		render(<RecipeDetail recipe={flatRecipe} onUpdate={vi.fn()} />);
+		renderDetail(flatRecipe, vi.fn());
 
 		expect(screen.queryByText("Prep")).not.toBeInTheDocument();
 		expect(screen.getByText("Boil water")).toBeInTheDocument();
+	});
+
+	it("shows no load-more notice when the recipe isn't truncated", () => {
+		renderDetail(baseRecipe, vi.fn());
+
+		expect(
+			screen.queryByRole("button", { name: "Load more" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("shows a load-more notice for a truncated recipe and merges in the continuation on success", async () => {
+		const onUpdate = vi.fn();
+		const user = userEvent.setup();
+		continueRecipeMock.mockResolvedValueOnce({
+			type: "success",
+			ingredients: [{ text: "parmesan", quantity: 50, unit: "g" }],
+			steps: [{ section: null, text: "Plate and serve." }],
+			truncated: false,
+		});
+
+		renderDetail({ ...baseRecipe, truncated: true }, onUpdate);
+
+		expect(
+			screen.getByText(
+				"This recipe got cut off before it finished generating.",
+			),
+		).toBeInTheDocument();
+
+		await user.click(screen.getByRole("button", { name: "Load more" }));
+
+		await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1));
+		const updated = onUpdate.mock.calls[0]?.[0] as Recipe;
+		expect(updated.truncated).toBe(false);
+		expect(updated.ingredients).toHaveLength(3);
+		expect(updated.ingredients[2]).toMatchObject({
+			text: "parmesan",
+			quantity: 50,
+			unit: "g",
+			checked: false,
+		});
+		expect(updated.steps).toHaveLength(4);
+		expect(updated.steps[3]).toMatchObject({
+			section: null,
+			text: "Plate and serve.",
+			checked: false,
+		});
+
+		const callArgs = continueRecipeMock.mock.calls[0]?.[0];
+		expect(callArgs.data.prompt).toBe(baseRecipe.prompt);
+		expect(callArgs.data.soFar.ingredients).toEqual([
+			{ text: "shrimp", quantity: 300, unit: "g" },
+			{ text: "garlic", quantity: 4, unit: "cloves" },
+		]);
+	});
+
+	it("keeps the recipe truncated when the continuation is itself cut off again", async () => {
+		const onUpdate = vi.fn();
+		const user = userEvent.setup();
+		continueRecipeMock.mockResolvedValueOnce({
+			type: "success",
+			ingredients: [],
+			steps: [],
+			truncated: true,
+		});
+
+		renderDetail({ ...baseRecipe, truncated: true }, onUpdate);
+		await user.click(screen.getByRole("button", { name: "Load more" }));
+
+		await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1));
+		expect((onUpdate.mock.calls[0]?.[0] as Recipe).truncated).toBe(true);
+	});
+
+	it("shows an inline error message when the continuation server call reports an error", async () => {
+		const user = userEvent.setup();
+		continueRecipeMock.mockResolvedValueOnce({
+			type: "error",
+			message: "Malformed recipe continuation response from Groq",
+		});
+
+		renderDetail({ ...baseRecipe, truncated: true }, vi.fn());
+		await user.click(screen.getByRole("button", { name: "Load more" }));
+
+		expect(
+			await screen.findByText(
+				"Malformed recipe continuation response from Groq",
+			),
+		).toBeInTheDocument();
+	});
+
+	it("shows a generic inline error message when the continuation call rejects", async () => {
+		const user = userEvent.setup();
+		continueRecipeMock.mockRejectedValueOnce(new Error("network down"));
+
+		renderDetail({ ...baseRecipe, truncated: true }, vi.fn());
+		await user.click(screen.getByRole("button", { name: "Load more" }));
+
+		expect(
+			await screen.findByText(
+				"Couldn't load the rest of the recipe. Please try again.",
+			),
+		).toBeInTheDocument();
 	});
 });

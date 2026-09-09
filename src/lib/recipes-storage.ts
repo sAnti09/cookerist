@@ -21,9 +21,11 @@ export function loadRecipes(): Recipe[] {
 	try {
 		const parsed = JSON.parse(raw);
 		if (!Array.isArray(parsed)) return [];
-		return parsed
-			.filter(isRecipe)
-			.map((recipe) => ({ ...recipe, favorite: recipe.favorite ?? false }));
+		return parsed.filter(isRecipe).map((recipe) => ({
+			...recipe,
+			favorite: recipe.favorite ?? false,
+			truncated: recipe.truncated ?? false,
+		}));
 	} catch {
 		return [];
 	}
@@ -75,7 +77,11 @@ export function toggleFavoriteRecipe(id: string): Recipe[] {
 	return next;
 }
 
-export function toStoredRecipe(prompt: string, input: RecipeResponse): Recipe {
+export function toStoredRecipe(
+	prompt: string,
+	input: RecipeResponse,
+	truncated = false,
+): Recipe {
 	return {
 		id: crypto.randomUUID(),
 		createdAt: new Date().toISOString(),
@@ -101,5 +107,6 @@ export function toStoredRecipe(prompt: string, input: RecipeResponse): Recipe {
 		})),
 		expanded: false,
 		favorite: false,
+		truncated,
 	};
 }

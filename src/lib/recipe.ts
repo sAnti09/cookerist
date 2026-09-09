@@ -36,6 +36,10 @@ export type Recipe = {
 	steps: Step[];
 	expanded: boolean;
 	favorite: boolean;
+	// True when Groq's response was cut off mid-generation (TEST-243) — the
+	// recipe detail view offers a "Load more" action to fetch the rest.
+	// Optional: absent on recipes saved before this field existed.
+	truncated?: boolean;
 };
 
 export function formatEstimatedTime(minutes: number): string {
