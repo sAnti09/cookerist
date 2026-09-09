@@ -3,12 +3,14 @@ import {
 	type FormEvent,
 	type KeyboardEvent as ReactKeyboardEvent,
 	useEffect,
+	useRef,
 	useState,
 } from "react";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { ServingsStepper } from "#/components/ui/servings-stepper";
 import {
+	APPROXIMATE_ITEMS_NOTE,
 	aggregateGroceryItems,
 	type CustomGroceryIngredient,
 	carryOverCheckedState,
@@ -53,6 +55,7 @@ export function GroceryListCreateForm({
 		() => editingList?.recipeIds ?? [],
 	);
 	const [recipeSearch, setRecipeSearch] = useState("");
+	const recipeSearchInputRef = useRef<HTMLInputElement>(null);
 	const [customIngredients, setCustomIngredients] = useState<
 		DraftCustomIngredient[]
 	>(() =>
@@ -120,6 +123,11 @@ export function GroceryListCreateForm({
 	function handleAddRecipe(id: string) {
 		setSelectedRecipeIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
 		setRecipeSearch("");
+		// Selecting a recipe from the dropdown moves focus to its (now-removed)
+		// button, so the browser drops focus entirely — pull it back to the
+		// search field so adding several recipes in a row doesn't require
+		// re-clicking in between each one.
+		recipeSearchInputRef.current?.focus();
 	}
 
 	function handleRemoveRecipe(id: string) {
@@ -245,6 +253,7 @@ export function GroceryListCreateForm({
 											aria-hidden="true"
 										/>
 										<input
+											ref={recipeSearchInputRef}
 											type="search"
 											value={recipeSearch}
 											onChange={(event) => setRecipeSearch(event.target.value)}
@@ -403,13 +412,20 @@ export function GroceryListCreateForm({
 								Nothing yet — select a recipe or add a custom ingredient.
 							</p>
 						) : (
-							<ul className="mt-2 grid grid-cols-1 list-disc gap-1.5 pl-5 text-sm min-[420px]:grid-cols-2">
-								{previewItems.map((item) => (
-									<li key={item.id} className="tabular-nums">
-										{formatGroceryItemLine(item)}
-									</li>
-								))}
-							</ul>
+							<>
+								<ul className="mt-2 grid grid-cols-1 list-disc gap-1.5 pl-5 text-sm min-[420px]:grid-cols-2">
+									{previewItems.map((item) => (
+										<li key={item.id} className="tabular-nums">
+											{formatGroceryItemLine(item)}
+										</li>
+									))}
+								</ul>
+								{previewItems.some((item) => item.approximate) ? (
+									<p className="mt-2 text-ink-dim text-xs">
+										{APPROXIMATE_ITEMS_NOTE}
+									</p>
+								) : null}
+							</>
 						)}
 					</div>
 

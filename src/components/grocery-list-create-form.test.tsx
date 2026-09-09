@@ -89,6 +89,27 @@ describe("GroceryListCreateForm", () => {
 		expect(screen.getByLabelText("Search recipes to add")).toHaveValue("");
 	});
 
+	it("keeps focus in the search field after adding a recipe, so multiple can be added without re-clicking", async () => {
+		const user = userEvent.setup();
+		renderForm({
+			recipes: [
+				makeRecipe({ id: "recipe-1", title: "Shrimp Pasta" }),
+				makeRecipe({
+					id: "recipe-2",
+					title: "Garlic Bread",
+					prompt: "garlic bread",
+				}),
+			],
+		});
+		const searchField = screen.getByLabelText("Search recipes to add");
+
+		await addRecipe(user, "Shrimp Pasta");
+		expect(searchField).toHaveFocus();
+
+		await addRecipe(user, "Garlic Bread");
+		expect(searchField).toHaveFocus();
+	});
+
 	it("shows a 'no matching recipes' message for an unmatched query", async () => {
 		const user = userEvent.setup();
 		renderForm({ recipes: [makeRecipe({ title: "Shrimp Pasta" })] });
@@ -169,7 +190,7 @@ describe("GroceryListCreateForm", () => {
 		expect(screen.getByText(/1 lb shrimp/)).toBeInTheDocument();
 	});
 
-	it("combines differently-described ingredients under a shared base name in the preview, preserving both descriptions (TEST-255 AC2)", async () => {
+	it("combines differently-described ingredients under a shared base name in the preview (TEST-255 AC2)", async () => {
 		const user = userEvent.setup();
 		renderForm({
 			recipes: [
@@ -212,10 +233,24 @@ describe("GroceryListCreateForm", () => {
 
 		// 2 cloves + 3 cloves = 5 cloves -> 5/10 bulb (garlic's known piece
 		// ratio, see ingredient-piece-ratio.ts), rounded up to 1 bulb and
-		// flagged approximate ("≈") since it required that estimate.
+		// flagged approximate ("≈") since it required that estimate. Prep
+		// detail ("chopped"/"minced") doesn't appear — it's not shown on the
+		// grocery list at all.
+		expect(screen.getByText("≈1 bulb garlic")).toBeInTheDocument();
 		expect(
-			screen.getByText("≈1 bulb garlic (chopped, minced)"),
+			screen.getByText(/estimated by converting between measurements/i),
 		).toBeInTheDocument();
+	});
+
+	it("does not show the approximate-items note when nothing in the preview is estimated", async () => {
+		const user = userEvent.setup();
+		renderForm({ recipes: [makeRecipe({ title: "Shrimp Pasta" })] });
+
+		await addRecipe(user, "Shrimp Pasta");
+
+		expect(
+			screen.queryByText(/estimated by converting between measurements/i),
+		).not.toBeInTheDocument();
 	});
 
 	it("removes a recipe's ingredients from the preview when it's removed", async () => {
