@@ -127,6 +127,41 @@ type Recipe = {
 - Ingredient quantities must be stored as a clean numeric `quantity` + `unit` (not baked into a free-text string) specifically so the serving-count scaling can do simple multiplication client-side.
 - Ask Groq to return this shape directly (structured outputs / JSON mode) rather than parsing free text.
 
+## Grocery list aggregation logic (TEST-237, extended this session)
+
+Ingredients from multiple recipes merge into one grocery-list line by **base name** (normalized, case/whitespace-insensitive) plus a **bucket** determined by unit. Implemented across `src/lib/aggregate-grocery-items.ts`, `src/lib/unit-conversion.ts`, `src/lib/ingredient-density.ts`, and `src/lib/ingredient-piece-ratio.ts`.
+
+### Bucket resolution (checked in this order, per ingredient occurrence)
+1. **Piece-ratio sub-piece** (e.g. "clove" for garlic) — if the ingredient has a known container↔piece ratio (`ingredient-piece-ratio.ts`), converts to container-equivalents via that ratio. The one case that's an *estimate* — flags the merged item `approximate: true`.
+2. **Piece-ratio container** (e.g. "bulb"/"bunch"/"loaf") — already container-equivalent, exact, no ratio math.
+3. **Mass** (g/kg/mg/oz/lb) — joins the mass bucket, converted to grams. Exact.
+4. **Volume** (cup/tbsp/ml/l/...) — if the ingredient has a known density (`ingredient-density.ts`), converts to grams via that density and **also joins the mass bucket** (approximate) — most dry/liquid staples are actually bought by weight, not by the cup (e.g. "2 cups flour" + "500 g flour" merge into one weight). No density entry → joins the volume bucket instead (ml), exact.
+5. **Generic count word** (dozen/piece/egg/whole/ear/head/loaf/...) — exact multiplier (`unit-conversion.ts`'s `"count"` dimension: dozen=12, half dozen=6, everything else=1).
+6. **Unrecognized unit** — no bucket; falls back to merging only on an exact literal unit-string match (pre-extension behavior).
+
+### Display unit per bucket
+- **Mass**: prefers the largest *native* mass unit actually used (so a lone "1 lb shrimp" stays "1 lb") — unless any density estimate contributed, in which case always picks mg/g/kg by magnitude instead (a disproportionately small native unit, e.g. "500 mg" next to an estimated "~200 g", would otherwise wrongly anchor the display).
+- **Volume / unrecognized**: largest actually-used unit (tbsp + cup → cup).
+- **Count, with a piece-ratio entry**: *always* the container unit (bulb/bunch/loaf), rounded up — that's what's actually purchasable, regardless of which units the recipes used.
+- **Count, no piece-ratio entry**: *always* the individual-item count ("18 eggs", never "2 dozen" — rolling up would overstate what's needed).
+
+### Rounding (always up, never down — under-buying is worse than over-buying)
+- mg/ml → next multiple of 100.
+- Countable units (`COUNTABLE_UNITS` in `aggregate-grocery-items.ts`) → next whole number.
+- Everything else → next multiple of 0.25.
+
+### Density table (`ingredient-density.ts`)
+132 ingredients, g/mL, sourced from USDA FoodData Central's SR Legacy dataset (`food_portion.csv`, release 2018-04) — `density = gram_weight / (amount × mL_per_unit)`, with a handful of manual corrections where a raw SR Legacy portion doesn't represent what a recipe means by the ingredient (e.g. "heavy cream"'s only cup portion is the post-whip, aerated volume). Matched to an ingredient's `baseName` via decreasing-length word-suffix lookup (checks the last 3, then 2, then 1 words), so a specific product (e.g. "brown sugar") is checked before its generic fallback ("sugar") — this also means a word that's only a *modifier*, not the head noun, never misfires (e.g. "sugar snap peas" doesn't match "sugar", since the head noun "peas" is what gets checked). No entry → no cross-dimension merging for that ingredient; guessing wrong is worse than not merging. Deliberately excludes liquids normally bought/measured by volume (water, milk, oil, broth, wine) even when their real density is known — adding one would force same-unit merges (e.g. "6 cups water" + "0.25 cup water") into an unwanted, less-useful mass conversion.
+
+### Piece-ratio table (`ingredient-piece-ratio.ts`)
+Approximate pieces-per-container for ingredients commonly sold in bulk: garlic (10 cloves/bulb), celery (9 stalks/bunch), green onion & scallion (6 stalks/bunch), bread (20 slices/loaf). General culinary-knowledge estimates, not from a dataset — extend as new common cases come up.
+
+### The `approximate` flag
+Set on a `GroceryListItem` whenever its quantity involved a density or piece-ratio estimate (never for an exact merge, even across differently-spelled units of the same dimension). `formatGroceryItemLine` prefixes the line with "≈"; `GroceryListDetail` shows an explanatory caption when any item in the list is approximate.
+
+### Known limitation
+Cross-dimension merging (mass ↔ volume, or piece ↔ container) only works for ingredients with a table entry — one with no entry (most of them) merges only within its own dimension, same as before this session (e.g. "2 cups quinoa" + "500 g quinoa" stay separate). Also unaddressed: an LLM-driven `baseName` inconsistency (e.g. Groq emitting `baseName: "medium onion"` for one occurrence and `baseName: "onion"` for another) can prevent a merge that should happen — deliberately not fixed yet, pending a decision on whether to patch the Groq prompt, add client-side normalization, or both.
+
 ## Coding standards
 - TypeScript strict mode everywhere; no `any` without a comment justifying it.
 - Biome handles lint + format; run it in CI and as a pre-commit check.
@@ -179,5 +214,5 @@ type Recipe = {
 
 ## Open items / assumptions to revisit
 - ~~Exact Groq-hosted model(s) to call~~ Done (TEST-149): the Llama 3.x models originally planned (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`) are no longer available on this Groq account's model catalog as of implementation time (`GET /openai/v1/models` no longer lists any `llama-*` text model — Groq's hosted lineup had moved on to `openai/gpt-oss-*`, `qwen/*`, `groq/compound*`, etc.). Verified against this account: `openai/gpt-oss-120b` for recipe generation, `openai/gpt-oss-20b` for the on-topic check — both support `response_format: {type: "json_object"}` as long as the system prompt contains the literal word "json" somewhere (Groq's API rejects JSON mode otherwise). If the catalog changes again, re-check with `GET https://api.groq.com/openai/v1/models` before assuming a model name still exists.
-- Unit system (metric vs. US customary) — MVP assumption: use whatever unit Groq naturally returns per-ingredient; no forced conversion system unless requested later.
+- ~~Unit system (metric vs. US customary) — MVP assumption: use whatever unit Groq naturally returns per-ingredient; no forced conversion system unless requested later.~~ Partially revisited (TEST-237 extension): grocery-list aggregation now merges compatible units and, for known ingredients, bridges across mass/volume/count dimensions — see "Grocery list aggregation logic" above. Each individual recipe's own ingredient list is still displayed exactly as Groq returned it, unconverted.
 - ~~GitHub org/repo name — to be finalized when the repository is created.~~ Done: [github.com/sAnti09/cookerist](https://github.com/sAnti09/cookerist) (public, `main` branch).

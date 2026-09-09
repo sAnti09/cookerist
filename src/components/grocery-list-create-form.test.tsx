@@ -210,8 +210,11 @@ describe("GroceryListCreateForm", () => {
 		await addRecipe(user, "Shrimp Pasta");
 		await addRecipe(user, "Garlic Bread");
 
+		// 2 cloves + 3 cloves = 5 cloves -> 5/10 bulb (garlic's known piece
+		// ratio, see ingredient-piece-ratio.ts), rounded up to 1 bulb and
+		// flagged approximate ("≈") since it required that estimate.
 		expect(
-			screen.getByText("5 cloves garlic (chopped, minced)"),
+			screen.getByText("≈1 bulb garlic (chopped, minced)"),
 		).toBeInTheDocument();
 	});
 
@@ -674,7 +677,9 @@ describe("GroceryListCreateForm", () => {
 
 			await addRecipe(user, "Garlic Bread");
 
-			expect(screen.getByText(/2 cloves garlic/)).toBeInTheDocument();
+			// 2 cloves -> 2/10 bulb (garlic's known piece ratio, see
+			// ingredient-piece-ratio.ts), rounded up to 1 bulb.
+			expect(screen.getByText(/≈1 bulb garlic/)).toBeInTheDocument();
 		});
 
 		it("shows a confirmation dialog before saving that mentions replacing the prior recipe relationship", async () => {

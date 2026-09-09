@@ -87,6 +87,7 @@ export function GroceryListDetail({
 		.filter((title): title is string => Boolean(title));
 	const recipeItems = list.items.filter((item) => item.source === "recipe");
 	const customItems = list.items.filter((item) => item.source === "custom");
+	const hasApproximateItems = list.items.some((item) => item.approximate);
 
 	return (
 		<div className="flex flex-col gap-5">
@@ -128,6 +129,13 @@ export function GroceryListDetail({
 						<h5 className="text-sm font-semibold">Custom</h5>
 						<ItemList items={customItems} onToggle={handleToggleItem} />
 					</div>
+				) : null}
+
+				{hasApproximateItems ? (
+					<p className="mt-3 text-ink-dim text-xs">
+						≈ estimated by converting between measurements (e.g. cups and grams)
+						using an approximate ingredient density — actual amount may vary.
+					</p>
 				) : null}
 			</section>
 		</div>

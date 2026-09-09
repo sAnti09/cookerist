@@ -217,4 +217,31 @@ describe("GroceryListDetail", () => {
 
 		expect(screen.getByLabelText("Check all")).toBeChecked();
 	});
+
+	it("does not show the approximate-quantity note when no item is approximate", () => {
+		renderDetail();
+
+		expect(
+			screen.queryByText(/estimated by converting/),
+		).not.toBeInTheDocument();
+	});
+
+	it("shows a note explaining the ≈ symbol when a list has an approximate item", () => {
+		renderDetail({
+			items: [
+				{
+					id: "item-1",
+					text: "sugar",
+					quantity: 212.5,
+					unit: "g",
+					checked: false,
+					source: "recipe",
+					approximate: true,
+				},
+			],
+		});
+
+		expect(screen.getByText(/≈212.5 g sugar/)).toBeInTheDocument();
+		expect(screen.getByText(/estimated by converting/)).toBeInTheDocument();
+	});
 });
