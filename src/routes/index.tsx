@@ -197,13 +197,15 @@ export function Home() {
 			</div>
 			<div className="mx-auto max-w-2xl p-8 pt-0">
 				<div className="flex flex-col items-center text-center">
-					<h1 className="display-title flex items-center gap-2 text-4xl font-semibold text-ink">
+					<h1 className="display-title inline-flex items-center text-4xl font-semibold text-ink">
+						<span>C</span>
+						<span>o</span>
 						<Flame
-							className="size-8 text-accent"
+							className="flame-flicker-wordmark size-7 shrink-0 text-accent"
 							fill="currentColor"
 							aria-hidden="true"
 						/>
-						Cookerist
+						<span>kerist</span>
 					</h1>
 					<p className="mt-2 text-sm text-ink-dim">
 						Tell us what you want to cook — we'll handle the rest.

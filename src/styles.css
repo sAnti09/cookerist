@@ -234,6 +234,36 @@ a {
   }
 }
 
+/* Calmer than .flame-flicker: the loading flame is meant to draw the eye
+   during a short wait, but this one sits inline in the wordmark and is on
+   screen the whole time the user browses their list, so it uses a smaller
+   scale/rotation range and a slower loop to read as a gentle idle glow
+   rather than something demanding attention. */
+.flame-flicker-wordmark {
+  animation: flame-flicker-wordmark 2.6s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+
+@keyframes flame-flicker-wordmark {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+  25% {
+    opacity: 0.92;
+    transform: scale(0.97) rotate(-1deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.03) rotate(1deg);
+  }
+  75% {
+    opacity: 0.95;
+    transform: scale(0.99) rotate(-0.5deg);
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
