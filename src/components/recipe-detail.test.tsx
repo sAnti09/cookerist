@@ -174,9 +174,7 @@ describe("RecipeDetail", () => {
 				{ id: "ing-1", text: "egg", quantity: 1, unit: "egg", checked: false },
 			],
 		};
-		render(
-			<RecipeDetail recipe={recipeWithDuplicateUnit} onUpdate={vi.fn()} />,
-		);
+		renderDetail(recipeWithDuplicateUnit, vi.fn());
 
 		expect(screen.getByText("1 egg")).toBeInTheDocument();
 		expect(screen.queryByText(/1 egg egg/)).not.toBeInTheDocument();

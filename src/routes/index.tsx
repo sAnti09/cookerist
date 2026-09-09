@@ -163,7 +163,11 @@ export function Home() {
 			.mutateAsync(prompt)
 			.then((result) => {
 				if (result.type === "success") {
-					const recipe = toStoredRecipe(prompt, result.recipe);
+					const recipe = toStoredRecipe(
+						prompt,
+						result.recipe,
+						result.truncated,
+					);
 					setRecipes(saveRecipe(recipe));
 					setPending((rows) => rows.filter((row) => row.localId !== localId));
 					return;
@@ -197,15 +201,18 @@ export function Home() {
 			</div>
 			<div className="mx-auto max-w-2xl p-8 pt-0">
 				<div className="flex flex-col items-center text-center">
-					<h1 className="display-title inline-flex items-center text-4xl font-semibold text-ink">
-						<span>C</span>
-						<span>o</span>
+					<h1
+						className="display-title inline-flex items-center text-4xl font-semibold text-ink"
+						aria-label="Cookerist"
+					>
+						<span aria-hidden="true">C</span>
+						<span aria-hidden="true">o</span>
 						<Flame
 							className="flame-flicker-wordmark size-7 shrink-0 text-accent"
 							fill="currentColor"
 							aria-hidden="true"
 						/>
-						<span>kerist</span>
+						<span aria-hidden="true">kerist</span>
 					</h1>
 					<p className="mt-2 text-sm text-ink-dim">
 						Tell us what you want to cook — we'll handle the rest.
