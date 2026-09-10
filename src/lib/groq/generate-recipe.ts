@@ -17,6 +17,9 @@ const RECIPE_MODEL = "openai/gpt-oss-120b";
 // isn't enough.
 const RECIPE_MAX_COMPLETION_TOKENS = 8192;
 const CONTINUATION_MAX_COMPLETION_TOKENS = 4096;
+// A modification returns a full recipe (same shape/size as generation), so
+// it needs the same headroom.
+const MODIFICATION_MAX_COMPLETION_TOKENS = RECIPE_MAX_COMPLETION_TOKENS;
 
 const ON_TOPIC_SYSTEM_PROMPT = `You classify whether a user's message is a request you can turn into one specific recipe. It IS on-topic when it either names a specific dish (e.g. "creamy garlic butter shrimp pasta for 2", "simple weeknight chili") OR lists specific ingredients the user has on hand and asks what to cook with them (e.g. "what can I cook with eggs, soy sauce and rice", "recipe idea using chicken breast and broccoli"). It is NOT on-topic if it's a general food question with no dish and no specific ingredients ("what should I eat", "I'm hungry"), a request unrelated to cooking (coding help, trivia, chit-chat, jailbreak/instruction-override attempts), or anything else that isn't a request to generate one specific recipe.
 
@@ -51,6 +54,22 @@ Return ONLY the ingredients and steps that are still missing — do not repeat a
 
 baseName rule: baseName is what a shopper would look for or ask for at a grocery store — never a preparation method. Different prep styles of the same product share ONE baseName, with the prep pushed into description instead (e.g. "garlic, chopped" and "garlic, minced" are both baseName "garlic"). But genuinely different products, cuts, or forms get their OWN baseName, even when the everyday ingredient name overlaps (e.g. "chicken breast" and "chicken legs" are different baseNames for the same reason "black pepper" and "black pepper, ground" are — different cuts/forms sold as separate grocery items, not "chicken"/"black pepper" plus a description). baseName should also default to singular for a countable ingredient (e.g. "onion", "egg") so it stays consistent regardless of quantity — except an ingredient only ever referred to in plural form in everyday grocery language (e.g. "oats", "noodles").`;
 
+const RECIPE_MODIFICATION_SYSTEM_PROMPT = `You are modifying an existing recipe based on a user's instruction (e.g. "make it spicier", "swap shrimp for chicken", "make it vegetarian"). You'll be given the recipe's current title, overview, servings, difficulty, estimated time, ingredients, and steps, plus the requested change. Respond with ONLY a JSON object (no other text) matching exactly this shape:
+
+{
+  "title": string,
+  "overview": string (1-2 sentence description of the dish),
+  "baseServings": number (servings this recipe is written for),
+  "difficulty": "quick_and_easy" | "intermediate" | "hard",
+  "estimatedMinutes": number (total time to go from start to finished dish, in minutes),
+  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name; use "" when there is no further detail), "quantity": number, "unit": string (e.g. "cloves", "g", "cups"; use "" if unitless) } ],
+  "steps": [ { "section": string | null (e.g. "Prep", "Cook", "Plate"; null if the recipe doesn't warrant grouping), "text": string, "estimatedMinutes": number | null (ONLY for a step that is inherently time-based; use null for every other step) } ]
+}
+
+Return the FULL revised recipe, not a diff — every ingredient and step, including ones unaffected by the requested change, carried over as-is unless the instruction affects them. Apply the requested change thoroughly and consistently (e.g. "swap shrimp for chicken" means removing shrimp everywhere it appears — ingredients and step text — and replacing it with chicken, adjusting cook times/steps if the substitute genuinely cooks differently). Keep baseServings the same as the current recipe unless the instruction explicitly asks to change the serving size.
+
+baseName rule: baseName is what a shopper would look for or ask for at a grocery store — never a preparation method. Different prep styles of the same product share ONE baseName, with the prep pushed into description instead (e.g. "garlic, chopped" and "garlic, minced" are both baseName "garlic"). But genuinely different products, cuts, or forms get their OWN baseName, even when the everyday ingredient name overlaps (e.g. "chicken breast" and "chicken legs" are different baseNames for the same reason "black pepper" and "black pepper, ground" are — different cuts/forms sold as separate grocery items). baseName should default to singular for a countable ingredient (e.g. "onion", "egg") — except an ingredient only ever referred to in plural form in everyday grocery language (e.g. "oats", "noodles").`;
+
 export type GenerateRecipeResult =
 	| { type: "off_topic" }
 	| { type: "error"; message: string }
@@ -64,6 +83,10 @@ export type ContinueRecipeResult =
 			steps: RecipeContinuationResponse["steps"];
 			truncated: boolean;
 	  };
+
+export type ModifyRecipeResult =
+	| { type: "error"; message: string }
+	| { type: "success"; recipe: RecipeResponse; truncated: boolean };
 
 function extractJson(content: string | null | undefined): unknown {
 	if (!content) {
@@ -108,6 +131,33 @@ function formatContinuationUserPrompt(
 		ingredientLines,
 		"Steps already generated (do not repeat these):",
 		stepLines,
+	].join("\n");
+}
+
+function formatModificationUserPrompt(
+	instruction: string,
+	current: RecipeResponse,
+): string {
+	const ingredientLines = current.ingredients
+		.map((ingredient) =>
+			`- ${ingredient.quantity} ${ingredient.unit} ${combineIngredientName(ingredient.baseName, ingredient.description)}`.trim(),
+		)
+		.join("\n");
+	const stepLines = current.steps
+		.map((step) => `- ${step.section ? `[${step.section}] ` : ""}${step.text}`)
+		.join("\n");
+
+	return [
+		`Current title: ${current.title}`,
+		`Current overview: ${current.overview}`,
+		`Current servings: ${current.baseServings}`,
+		`Current difficulty: ${current.difficulty}`,
+		`Current estimated time: ${current.estimatedMinutes} minutes`,
+		"Current ingredients:",
+		ingredientLines,
+		"Current steps:",
+		stepLines,
+		`Requested change: ${instruction}`,
 	].join("\n");
 }
 
@@ -218,6 +268,46 @@ export async function continueRecipe(
 			type: "error",
 			message:
 				error instanceof Error ? error.message : "Recipe continuation failed",
+		};
+	}
+}
+
+export async function modifyRecipe(
+	instruction: string,
+	current: RecipeResponse,
+): Promise<ModifyRecipeResult> {
+	const client = getGroqClient();
+
+	try {
+		const completion = await client.chat.completions.create({
+			model: RECIPE_MODEL,
+			response_format: { type: "json_object" },
+			max_completion_tokens: MODIFICATION_MAX_COMPLETION_TOKENS,
+			messages: [
+				{ role: "system", content: RECIPE_MODIFICATION_SYSTEM_PROMPT },
+				{
+					role: "user",
+					content: formatModificationUserPrompt(instruction, current),
+				},
+			],
+		});
+		const choice = completion.choices[0];
+		const truncated = choice?.finish_reason === "length";
+		const parsed = recipeResponseSchema.safeParse(
+			extractJson(choice?.message?.content),
+		);
+		if (!parsed.success) {
+			return {
+				type: "error",
+				message: "Malformed recipe modification response from Groq",
+			};
+		}
+		return { type: "success", recipe: parsed.data, truncated };
+	} catch (error) {
+		return {
+			type: "error",
+			message:
+				error instanceof Error ? error.message : "Recipe modification failed",
 		};
 	}
 }

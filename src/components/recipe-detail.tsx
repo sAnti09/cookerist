@@ -7,6 +7,7 @@ import { Checkbox } from "#/components/ui/checkbox";
 import { IngredientLine } from "#/components/ui/ingredient-line";
 import { ServingsStepper } from "#/components/ui/servings-stepper";
 import { combineIngredientName, groupSteps, type Recipe } from "#/lib/recipe";
+import { toWireIngredient, toWireStep } from "#/lib/recipe-wire";
 import { formatIngredientQuantity, scaleQuantity } from "#/lib/scale-servings";
 import { continueRecipe } from "#/server/generate-recipe";
 
@@ -29,19 +30,8 @@ export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
 				data: {
 					prompt: recipe.prompt,
 					soFar: {
-						ingredients: recipe.ingredients.map((ingredient) => ({
-							// Ingredients saved before the base name/description split
-							// (TEST-255) have neither field — fall back to the full text
-							// as the base name with no description.
-							baseName: ingredient.baseName ?? ingredient.text,
-							description: ingredient.description ?? "",
-							quantity: ingredient.quantity,
-							unit: ingredient.unit,
-						})),
-						steps: recipe.steps.map((step) => ({
-							section: step.section,
-							text: step.text,
-						})),
+						ingredients: recipe.ingredients.map(toWireIngredient),
+						steps: recipe.steps.map(toWireStep),
 					},
 				},
 			}),

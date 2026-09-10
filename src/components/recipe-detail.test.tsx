@@ -322,4 +322,13 @@ describe("RecipeDetail", () => {
 			),
 		).toBeInTheDocument();
 	});
+
+	it("does not render any modify-recipe UI (owned by RecipeModificationDialog now)", () => {
+		renderDetail(baseRecipe, vi.fn());
+
+		expect(screen.queryByText("Modify recipe")).not.toBeInTheDocument();
+		expect(
+			screen.queryByLabelText("Describe how to modify this recipe"),
+		).not.toBeInTheDocument();
+	});
 });

@@ -37,9 +37,12 @@ class MockIntersectionObserver {
 }
 
 const generateRecipeMock = vi.fn();
+const modifyRecipeMock = vi.fn();
 
 vi.mock("#/server/generate-recipe", () => ({
 	generateRecipe: (...args: unknown[]) => generateRecipeMock(...args),
+	continueRecipe: vi.fn(),
+	modifyRecipe: (...args: unknown[]) => modifyRecipeMock(...args),
 }));
 
 const validRecipe = {
@@ -71,6 +74,7 @@ async function submitPrompt(prompt: string) {
 
 beforeEach(() => {
 	generateRecipeMock.mockReset();
+	modifyRecipeMock.mockReset();
 	window.localStorage.clear();
 	MockIntersectionObserver.instances = [];
 	vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
@@ -475,6 +479,47 @@ describe("Home", () => {
 				expect.objectContaining({ title: "Recipe 0", expanded: false }),
 			]),
 		);
+	});
+
+	it("expands a recipe forked via 'Create as new recipe', collapsing whichever was open before", async () => {
+		seedRecipe({ title: "Original Recipe" });
+		modifyRecipeMock.mockResolvedValueOnce({
+			type: "success",
+			recipe: { ...validRecipe, title: "Forked Recipe" },
+			truncated: false,
+		});
+		const user = userEvent.setup();
+		renderHome();
+
+		// Expand the original first, so there's something for the accordion to
+		// collapse once the fork takes over as the sole expanded recipe.
+		await user.click(screen.getByRole("button", { name: /^Original Recipe/ }));
+
+		await user.click(
+			screen.getByRole("button", { name: "Modify Original Recipe" }),
+		);
+		await user.type(
+			screen.getByLabelText("Describe how to modify this recipe"),
+			"make it spicier",
+		);
+		await user.click(screen.getByRole("button", { name: "Submit" }));
+		await screen.findByRole("button", { name: "Approve" });
+		await user.click(
+			screen.getByRole("button", { name: "Create as new recipe" }),
+		);
+
+		await waitFor(() =>
+			expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+		);
+
+		const stored = loadRecipes();
+		const forked = stored.find((r) => r.title === "Forked Recipe");
+		const original = stored.find((r) => r.title === "Original Recipe");
+		expect(forked?.expanded).toBe(true);
+		expect(original?.expanded).toBe(false);
+		expect(
+			screen.getByRole("button", { name: "Collapse Forked Recipe" }),
+		).toBeInTheDocument();
 	});
 
 	it("persists checkbox and servings changes to localStorage immediately", async () => {

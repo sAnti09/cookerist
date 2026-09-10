@@ -39,6 +39,7 @@ describe("toStoredRecipe", () => {
 		expect(recipe.expanded).toBe(false);
 		expect(recipe.favorite).toBe(false);
 		expect(recipe.truncated).toBe(false);
+		expect(recipe.modificationCount).toBe(0);
 		expect(recipe.ingredients[0]).toMatchObject({
 			text: "shrimp",
 			baseName: "shrimp",
@@ -214,6 +215,20 @@ describe("loadRecipes / saveRecipe", () => {
 
 		expect(loaded).toHaveLength(1);
 		expect(loaded[0].truncated).toBe(false);
+	});
+
+	it("defaults modificationCount to 0 for recipes saved before it existed", () => {
+		const legacyRecipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const { modificationCount, ...withoutModificationCount } = legacyRecipe;
+		window.localStorage.setItem(
+			"cookerist:recipes",
+			JSON.stringify([withoutModificationCount]),
+		);
+
+		const loaded = loadRecipes();
+
+		expect(loaded).toHaveLength(1);
+		expect(loaded[0].modificationCount).toBe(0);
 	});
 });
 

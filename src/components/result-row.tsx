@@ -1,6 +1,7 @@
-import { ChevronDown, Clock, Flame, Star, Trash2 } from "lucide-react";
+import { ChevronDown, Clock, Flame, Star, Trash2, Wand2 } from "lucide-react";
 import { useState } from "react";
 import { RecipeDetail } from "#/components/recipe-detail";
+import { RecipeModificationDialog } from "#/components/recipe-modification-dialog";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DifficultyBadge } from "#/components/ui/difficulty-badge";
@@ -55,14 +56,17 @@ export function RecipeResultRow({
 	onToggleExpand,
 	onToggleFavorite,
 	onUpdate,
+	onCreateRecipe,
 }: {
 	recipe: Recipe;
 	onDelete: (id: string) => void;
 	onToggleExpand: (id: string) => void;
 	onToggleFavorite: (id: string) => void;
 	onUpdate: (recipe: Recipe) => void;
+	onCreateRecipe: (recipe: Recipe) => void;
 }) {
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
+	const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
 	const date = new Date(recipe.createdAt).toLocaleDateString(undefined, {
 		year: "numeric",
 		month: "short",
@@ -153,6 +157,29 @@ export function RecipeResultRow({
 					<Button
 						variant="secondary"
 						className={cn(
+							"group/modify shrink-0 rounded-[10px] px-2 transition-opacity",
+							!recipe.expanded &&
+								// pointer-events-none while hidden — otherwise this still
+								// intercepts taps on touch devices, which never trigger the
+								// hover state that would normally reveal it first.
+								"pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+						)}
+						aria-label={`Modify ${recipe.title}`}
+						onClick={(event) => {
+							event.stopPropagation();
+							setModifyDialogOpen(true);
+						}}
+					>
+						<Wand2
+							className={cn(
+								"size-4 transition-colors group-hover/modify:text-accent",
+								recipe.pendingModification ? "text-accent" : "text-ink-dim",
+							)}
+						/>
+					</Button>
+					<Button
+						variant="secondary"
+						className={cn(
 							"group/delete shrink-0 rounded-[10px] px-2 transition-opacity",
 							!recipe.expanded &&
 								// pointer-events-none while hidden — otherwise this still
@@ -219,6 +246,18 @@ export function RecipeResultRow({
 						onDelete(recipe.id);
 					}}
 					onCancel={() => setConfirmingDelete(false)}
+				/>
+			</div>
+			{/* Stops the dialog's own backdrop/form/button clicks from bubbling up
+			to the card's expand-toggle handler above. */}
+			{/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: only stops click-event propagation, adds no new interaction — RecipeModificationDialog's own controls remain the real, keyboard-accessible ones. */}
+			<div onClick={(event) => event.stopPropagation()}>
+				<RecipeModificationDialog
+					recipe={recipe}
+					open={modifyDialogOpen}
+					onClose={() => setModifyDialogOpen(false)}
+					onUpdate={onUpdate}
+					onCreateRecipe={onCreateRecipe}
 				/>
 			</div>
 		</div>

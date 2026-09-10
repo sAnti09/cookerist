@@ -48,6 +48,33 @@ export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
 	hard: "Hard",
 };
 
+// A revised full recipe returned by a "modify recipe" Groq call, held for
+// review before the user approves or discards it — the approved `Recipe`
+// itself is left untouched until then. `instructions` accumulates one entry
+// per modification round (oldest first) so refining re-prompts against this
+// draft rather than the original, letting edits compound.
+export type PendingModification = {
+	instructions: string[];
+	draft: {
+		title: string;
+		overview: string;
+		baseServings: number;
+		difficulty?: Difficulty | null;
+		estimatedMinutes?: number | null;
+		ingredients: Ingredient[];
+		steps: Step[];
+		truncated: boolean;
+	};
+};
+
+// A modification is a full recipe-generation-cost Groq call, not the cheap
+// classifier — capped per recipe (not per draft), and never refunded: every
+// successful call counts against this budget the moment it's generated,
+// whether that draft is later approved or discarded, so approving one
+// modification and starting a fresh draft doesn't reset it. Compare against
+// `Recipe.modificationCount`, not `PendingModification.instructions.length`.
+export const MAX_MODIFICATIONS = 2;
+
 export type Recipe = {
 	id: string;
 	createdAt: string;
@@ -67,6 +94,15 @@ export type Recipe = {
 	// recipe detail view offers a "Load more" action to fetch the rest.
 	// Optional: absent on recipes saved before this field existed.
 	truncated?: boolean;
+	// Set while a "modify recipe" draft is awaiting approval/discard. Optional:
+	// absent whenever there's no modification in progress.
+	pendingModification?: PendingModification;
+	// Total number of successful "modify recipe" Groq calls made against this
+	// recipe, ever — incremented the moment a call succeeds, regardless of
+	// whether that draft is later approved or discarded. Capped at
+	// MAX_MODIFICATIONS. Optional: absent on recipes saved before this
+	// feature existed — treat as 0.
+	modificationCount?: number;
 };
 
 export function formatEstimatedTime(minutes: number): string {

@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { continueRecipe, generateRecipe } from "./generate-recipe";
+import {
+	continueRecipe,
+	generateRecipe,
+	modifyRecipe,
+} from "./generate-recipe";
+import type { RecipeResponse } from "./schema";
 
 const createMock = vi.fn();
 
@@ -26,7 +31,7 @@ function rawResponse(content: string, finishReason = "stop") {
 	};
 }
 
-const validRecipe = {
+const validRecipe: RecipeResponse = {
 	title: "Garlic Butter Shrimp Pasta",
 	overview: "A quick, creamy shrimp pasta.",
 	baseServings: 2,
@@ -395,6 +400,103 @@ describe("continueRecipe", () => {
 		createMock.mockRejectedValueOnce(new Error("timeout"));
 
 		const result = await continueRecipe("shrimp pasta for 2", soFar);
+
+		expect(result).toEqual({ type: "error", message: "timeout" });
+	});
+});
+
+describe("modifyRecipe", () => {
+	it("returns the revised recipe on success", async () => {
+		const revised = {
+			...validRecipe,
+			ingredients: [
+				{
+					baseName: "chicken breast",
+					description: "",
+					quantity: 300,
+					unit: "g",
+				},
+			],
+		};
+		createMock.mockResolvedValueOnce(jsonResponse(revised));
+
+		const result = await modifyRecipe("swap shrimp for chicken", validRecipe);
+
+		expect(result).toEqual({
+			type: "success",
+			recipe: revised,
+			truncated: false,
+		});
+		expect(createMock).toHaveBeenCalledTimes(1);
+		const callArgs = createMock.mock.calls[0]?.[0];
+		expect(callArgs.max_completion_tokens).toBeGreaterThanOrEqual(4096);
+		expect(callArgs.messages[1].content).toContain(validRecipe.title);
+		expect(callArgs.messages[1].content).toContain("swap shrimp for chicken");
+	});
+
+	it("marks the result truncated when finish_reason is length", async () => {
+		createMock.mockResolvedValueOnce(jsonResponse(validRecipe, "length"));
+
+		const result = await modifyRecipe("make it spicier", validRecipe);
+
+		expect(result).toEqual({
+			type: "success",
+			recipe: validRecipe,
+			truncated: true,
+		});
+	});
+
+	it("repairs a truncated modification response and still returns the complete leading ingredients/steps", async () => {
+		const elaborateRecipe: RecipeResponse = {
+			...validRecipe,
+			ingredients: [
+				{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
+				{
+					baseName: "garlic",
+					description: "minced",
+					quantity: 4,
+					unit: "cloves",
+				},
+			],
+			steps: [
+				{ section: "Prep", text: "Peel and devein the shrimp." },
+				{ section: "Cook", text: "Cook the pasta until al dente." },
+			],
+		};
+		const full = JSON.stringify(elaborateRecipe);
+		const cutAt = full.indexOf("al dente");
+		const truncatedContent = full.slice(0, cutAt + 2);
+
+		createMock.mockResolvedValueOnce(rawResponse(truncatedContent, "length"));
+
+		const result = await modifyRecipe("make it spicier", validRecipe);
+
+		expect(result.type).toBe("success");
+		if (result.type === "success") {
+			expect(result.truncated).toBe(true);
+			expect(result.recipe.title).toBe(validRecipe.title);
+			expect(result.recipe.ingredients).toEqual(elaborateRecipe.ingredients);
+			expect(result.recipe.steps).toEqual([elaborateRecipe.steps[0]]);
+		}
+	});
+
+	it("returns an error when the modification response is malformed", async () => {
+		createMock.mockResolvedValueOnce(
+			jsonResponse({ title: "Missing everything else" }),
+		);
+
+		const result = await modifyRecipe("make it spicier", validRecipe);
+
+		expect(result).toEqual({
+			type: "error",
+			message: "Malformed recipe modification response from Groq",
+		});
+	});
+
+	it("returns an error when the modification call throws", async () => {
+		createMock.mockRejectedValueOnce(new Error("timeout"));
+
+		const result = await modifyRecipe("make it spicier", validRecipe);
 
 		expect(result).toEqual({ type: "error", message: "timeout" });
 	});

@@ -11,6 +11,7 @@ import { RecipeResultRow } from "./result-row";
 // QueryClientProvider ancestor even in tests that never trigger it.
 vi.mock("#/server/generate-recipe", () => ({
 	continueRecipe: vi.fn(),
+	modifyRecipe: vi.fn(),
 }));
 
 const recipe: Recipe = {
@@ -40,6 +41,7 @@ function renderRow(
 		onToggleExpand: vi.fn(),
 		onToggleFavorite: vi.fn(),
 		onUpdate: vi.fn(),
+		onCreateRecipe: vi.fn(),
 		...overrides,
 	};
 	const queryClient = new QueryClient();
@@ -300,5 +302,108 @@ describe("RecipeResultRow", () => {
 
 		expect(props.onDelete).not.toHaveBeenCalled();
 		expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+	});
+
+	describe("modify icon", () => {
+		it("only reveals the modify control on hover while collapsed, and doesn't let it be clicked while hidden", () => {
+			renderRow();
+
+			const modifyButton = screen.getByRole("button", {
+				name: `Modify ${recipe.title}`,
+			});
+			expect(modifyButton).toHaveClass("opacity-0");
+			expect(modifyButton).toHaveClass("pointer-events-none");
+		});
+
+		it("keeps the modify control visible and clickable once expanded", () => {
+			renderRow({ recipe: { ...recipe, expanded: true } });
+
+			const modifyButton = screen.getByRole("button", {
+				name: `Modify ${recipe.title}`,
+			});
+			expect(modifyButton).not.toHaveClass("opacity-0");
+			expect(modifyButton).not.toHaveClass("pointer-events-none");
+		});
+
+		it("opens the modification dialog on a collapsed row without expanding it", async () => {
+			const user = userEvent.setup();
+			const { props } = renderRow();
+
+			await user.click(
+				screen.getByRole("button", { name: `Modify ${recipe.title}` }),
+			);
+
+			expect(props.onToggleExpand).not.toHaveBeenCalled();
+			expect(
+				screen.getByLabelText("Describe how to modify this recipe"),
+			).toBeInTheDocument();
+		});
+
+		it("opens the modification dialog on an already-expanded row too", async () => {
+			const user = userEvent.setup();
+			const { props } = renderRow({ recipe: { ...recipe, expanded: true } });
+
+			await user.click(
+				screen.getByRole("button", { name: `Modify ${recipe.title}` }),
+			);
+
+			expect(props.onToggleExpand).not.toHaveBeenCalled();
+			expect(
+				screen.getByLabelText("Describe how to modify this recipe"),
+			).toBeInTheDocument();
+		});
+
+		it("does not trigger delete when clicked", async () => {
+			const user = userEvent.setup();
+			const { props } = renderRow({ recipe: { ...recipe, expanded: true } });
+
+			await user.click(
+				screen.getByRole("button", { name: `Modify ${recipe.title}` }),
+			);
+
+			expect(props.onDelete).not.toHaveBeenCalled();
+		});
+
+		it("closes via the dialog's own close button", async () => {
+			const user = userEvent.setup();
+			renderRow();
+
+			await user.click(
+				screen.getByRole("button", { name: `Modify ${recipe.title}` }),
+			);
+			expect(
+				screen.getByLabelText("Describe how to modify this recipe"),
+			).toBeInTheDocument();
+
+			await user.click(screen.getByRole("button", { name: "Close" }));
+
+			expect(
+				screen.queryByLabelText("Describe how to modify this recipe"),
+			).not.toBeInTheDocument();
+		});
+
+		it("shows the wand icon in accent color when a modification is pending", () => {
+			renderRow({
+				recipe: {
+					...recipe,
+					pendingModification: {
+						instructions: ["make it spicier"],
+						draft: {
+							title: recipe.title,
+							overview: recipe.overview,
+							baseServings: recipe.baseServings,
+							ingredients: recipe.ingredients,
+							steps: recipe.steps,
+							truncated: false,
+						},
+					},
+				},
+			});
+
+			const modifyButton = screen.getByRole("button", {
+				name: `Modify ${recipe.title}`,
+			});
+			expect(modifyButton.querySelector("svg")).toHaveClass("text-accent");
+		});
 	});
 });

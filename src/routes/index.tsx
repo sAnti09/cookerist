@@ -191,6 +191,15 @@ export function Home() {
 		setRecipes(updateRecipe(recipe));
 	}
 
+	function handleCreateRecipe(recipe: Recipe) {
+		setRecipes(saveRecipe(recipe));
+		// Expand the newly forked recipe (accordion-style, collapsing whichever
+		// one was previously open) and scroll it into view — it's prepended to
+		// the top of the list, but the viewport may be scrolled elsewhere.
+		setRecipes(setExpandedRecipe(recipe.id));
+		setPendingScrollToElementId(`recipe-${recipe.id}`);
+	}
+
 	function handleUpdateRecipes(recipesToUpdate: Recipe[]) {
 		setRecipes(updateRecipes(recipesToUpdate));
 	}
@@ -434,6 +443,7 @@ export function Home() {
 											onToggleExpand={handleToggleExpand}
 											onToggleFavorite={handleToggleFavorite}
 											onUpdate={handleUpdateRecipe}
+											onCreateRecipe={handleCreateRecipe}
 										/>
 									))
 							)}

@@ -25,6 +25,7 @@ export function loadRecipes(): Recipe[] {
 			...recipe,
 			favorite: recipe.favorite ?? false,
 			truncated: recipe.truncated ?? false,
+			modificationCount: recipe.modificationCount ?? 0,
 		}));
 	} catch {
 		return [];
@@ -111,5 +112,6 @@ export function toStoredRecipe(
 		expanded: false,
 		favorite: false,
 		truncated,
+		modificationCount: 0,
 	};
 }
