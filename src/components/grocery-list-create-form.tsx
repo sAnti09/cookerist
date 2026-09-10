@@ -278,7 +278,7 @@ export function GroceryListCreateForm({
 											onChange={(event) => setRecipeSearch(event.target.value)}
 											placeholder="Search recipes to add…"
 											aria-label="Search recipes to add"
-											className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-dim"
+											className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-dim sm:text-sm"
 										/>
 									</div>
 									{trimmedRecipeSearch ? (
@@ -380,7 +380,7 @@ export function GroceryListCreateForm({
 								onKeyDown={handleItemFieldKeyDown}
 								placeholder="Item, e.g. 1 pc chicken"
 								aria-label="Custom ingredient name"
-								className="w-full min-w-0 rounded-full border border-line bg-surface px-3 py-1.5 text-sm outline-none min-[420px]:flex-1"
+								className="w-full min-w-0 rounded-full border border-line bg-surface px-3 py-1.5 text-base outline-none min-[420px]:flex-1 sm:text-sm"
 							/>
 							<div className="flex flex-wrap items-center gap-2">
 								<input
@@ -392,7 +392,7 @@ export function GroceryListCreateForm({
 									onChange={(event) => setCustomQuantity(event.target.value)}
 									placeholder="Qty"
 									aria-label="Custom ingredient quantity"
-									className="w-20 rounded-full border border-line bg-surface px-3 py-1.5 text-sm tabular-nums outline-none [appearance:textfield]"
+									className="w-20 rounded-full border border-line bg-surface px-3 py-1.5 text-base tabular-nums outline-none [appearance:textfield] sm:text-sm"
 								/>
 								<input
 									type="text"
@@ -401,7 +401,7 @@ export function GroceryListCreateForm({
 									placeholder="Unit"
 									aria-label="Custom ingredient unit"
 									list="grocery-known-units"
-									className="w-24 rounded-full border border-line bg-surface px-3 py-1.5 text-sm outline-none"
+									className="w-24 rounded-full border border-line bg-surface px-3 py-1.5 text-base outline-none sm:text-sm"
 								/>
 								<datalist id="grocery-known-units">
 									{knownUnits.map((unit) => (
@@ -462,7 +462,7 @@ export function GroceryListCreateForm({
 							value={name}
 							onChange={(event) => handleNameChange(event.target.value)}
 							maxLength={GROCERY_LIST_NAME_MAX_LENGTH}
-							className="mt-2 w-full rounded-full border border-line bg-surface px-4 py-2 text-sm outline-none"
+							className="mt-2 w-full rounded-full border border-line bg-surface px-4 py-2 text-base outline-none sm:text-sm"
 						/>
 					</div>
 				</div>

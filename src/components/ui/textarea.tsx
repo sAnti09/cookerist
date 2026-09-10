@@ -30,7 +30,7 @@ export function Textarea({
 			ref={ref}
 			value={value}
 			className={cn(
-				"max-h-56 min-h-11 w-full resize-none overflow-y-auto bg-transparent text-sm text-ink outline-none placeholder:text-ink-dim disabled:cursor-not-allowed disabled:opacity-50",
+				"max-h-56 min-h-11 w-full resize-none overflow-y-auto bg-transparent text-base text-ink outline-none placeholder:text-ink-dim disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm",
 				className,
 			)}
 			{...props}

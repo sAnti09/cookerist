@@ -26,6 +26,33 @@ export function CookMode({ recipe, onUpdate, onClose }: CookModeProps) {
 	const [index, setIndex] = useState(0);
 	const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
 
+	// Cook mode is a full-screen overlay, but a fixed-position element doesn't
+	// stop the page underneath from scrolling (most visibly on iOS, where a
+	// swipe inside the overlay can rubber-band the body behind it). Pin the
+	// body in place for the duration and restore its exact scroll position on
+	// close.
+	useEffect(() => {
+		const scrollY = window.scrollY;
+		const body = document.body;
+		const previousPosition = body.style.position;
+		const previousTop = body.style.top;
+		const previousWidth = body.style.width;
+		const previousOverflow = body.style.overflow;
+
+		body.style.position = "fixed";
+		body.style.top = `-${scrollY}px`;
+		body.style.width = "100%";
+		body.style.overflow = "hidden";
+
+		return () => {
+			body.style.position = previousPosition;
+			body.style.top = previousTop;
+			body.style.width = previousWidth;
+			body.style.overflow = previousOverflow;
+			window.scrollTo(0, scrollY);
+		};
+	}, []);
+
 	useEffect(() => {
 		let cancelled = false;
 

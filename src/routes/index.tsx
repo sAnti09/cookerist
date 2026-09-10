@@ -400,7 +400,7 @@ export function Home() {
 									onChange={(event) => setSearchQuery(event.target.value)}
 									placeholder="Search your recipes…"
 									aria-label="Search recipes"
-									className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-dim"
+									className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-dim sm:text-sm"
 								/>
 							</div>
 							<select
@@ -409,7 +409,7 @@ export function Home() {
 									setDifficultyFilter(event.target.value as Difficulty | "all")
 								}
 								aria-label="Filter by difficulty"
-								className="card shrink-0 rounded-full bg-surface px-3 py-2 text-sm text-ink outline-none"
+								className="card shrink-0 rounded-full bg-surface px-3 py-2 text-base text-ink outline-none sm:text-sm"
 							>
 								<option value="all">All difficulties</option>
 								{Object.entries(DIFFICULTY_LABELS).map(([value, label]) => (
