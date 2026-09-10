@@ -14,6 +14,11 @@ interface MyRouterContext {
 	queryClient: QueryClient;
 }
 
+const SITE_URL = "https://cookerist.jameseuangel-limpiado.workers.dev";
+const SITE_DESCRIPTION =
+	"Type a dish — or the ingredients you have — and get a full recipe in seconds. Ingredients, steps, and a grocery list, saved right in your browser.";
+const OG_IMAGE_URL = `${SITE_URL}/og-image.png`;
+
 export const Route = createRootRouteWithContext<MyRouterContext>()({
 	head: () => ({
 		meta: [
@@ -26,6 +31,10 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 			},
 			{
 				title: "Cookerist",
+			},
+			{
+				name: "description",
+				content: SITE_DESCRIPTION,
 			},
 			{
 				name: "theme-color",
@@ -42,6 +51,61 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 			{
 				name: "apple-mobile-web-app-title",
 				content: "Cookerist",
+			},
+			// Open Graph (Facebook, LinkedIn, Discord, iMessage, etc.)
+			{
+				property: "og:type",
+				content: "website",
+			},
+			{
+				property: "og:site_name",
+				content: "Cookerist",
+			},
+			{
+				property: "og:url",
+				content: SITE_URL,
+			},
+			{
+				property: "og:title",
+				content: "Cookerist — turn a prompt into a recipe",
+			},
+			{
+				property: "og:description",
+				content: SITE_DESCRIPTION,
+			},
+			{
+				property: "og:image",
+				content: OG_IMAGE_URL,
+			},
+			{
+				property: "og:image:width",
+				content: "1200",
+			},
+			{
+				property: "og:image:height",
+				content: "630",
+			},
+			{
+				property: "og:image:alt",
+				content:
+					"Cookerist — type a dish or your ingredients, get a full recipe with ingredients and steps.",
+			},
+			// Twitter/X card
+			{
+				name: "twitter:card",
+				content: "summary_large_image",
+			},
+			{
+				name: "twitter:title",
+				content: "Cookerist — turn a prompt into a recipe",
+			},
+			{
+				name: "twitter:description",
+				content: SITE_DESCRIPTION,
+			},
+			{
+				name: "twitter:image",
+				content: OG_IMAGE_URL,
 			},
 		],
 		links: [
@@ -61,6 +125,10 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 			{
 				rel: "apple-touch-icon",
 				href: "/apple-touch-icon.png",
+			},
+			{
+				rel: "canonical",
+				href: SITE_URL,
 			},
 		],
 	}),
