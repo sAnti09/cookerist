@@ -88,6 +88,21 @@ describe("RecipeResultRow", () => {
 		expect(screen.queryByText(/min$/)).not.toBeInTheDocument();
 	});
 
+	it("shows calories per serving next to the estimated time when present", () => {
+		renderRow({
+			recipe: { ...recipe, estimatedMinutes: 25, caloriesPerServing: 620 },
+		});
+
+		expect(screen.getByText("25 min")).toBeInTheDocument();
+		expect(screen.getByText("620 cal")).toBeInTheDocument();
+	});
+
+	it("shows no calorie count for recipes with no caloriesPerServing", () => {
+		renderRow();
+
+		expect(screen.queryByText(/cal$/)).not.toBeInTheDocument();
+	});
+
 	it("calls onToggleExpand exactly once with the recipe id when the header is clicked", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow();

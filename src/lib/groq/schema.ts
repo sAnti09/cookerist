@@ -31,6 +31,7 @@ export const recipeResponseSchema = z.object({
 	baseServings: z.number().positive(),
 	difficulty: difficultySchema,
 	estimatedMinutes: z.number().positive(),
+	caloriesPerServing: z.number().positive(),
 	ingredients: z.array(ingredientItemSchema).min(1),
 	steps: z.array(stepItemSchema).min(1),
 });

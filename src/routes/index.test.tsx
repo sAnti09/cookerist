@@ -55,6 +55,7 @@ const validRecipe = {
 	baseServings: 2,
 	difficulty: "quick_and_easy" as const,
 	estimatedMinutes: 25,
+	caloriesPerServing: 620,
 	ingredients: [
 		{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
 	],

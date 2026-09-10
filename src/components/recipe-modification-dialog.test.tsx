@@ -42,6 +42,7 @@ const revisedRecipe = {
 	baseServings: 2,
 	difficulty: "quick_and_easy" as const,
 	estimatedMinutes: 25,
+	caloriesPerServing: 540,
 	ingredients: [
 		{ baseName: "chicken breast", description: "", quantity: 300, unit: "g" },
 		{ baseName: "garlic", description: "", quantity: 4, unit: "cloves" },
@@ -61,6 +62,7 @@ function pendingModificationFrom(
 			baseServings: revisedRecipe.baseServings,
 			difficulty: revisedRecipe.difficulty,
 			estimatedMinutes: revisedRecipe.estimatedMinutes,
+			caloriesPerServing: revisedRecipe.caloriesPerServing,
 			ingredients: [
 				{
 					id: "draft-ing-1",
@@ -281,6 +283,7 @@ describe("RecipeModificationDialog", () => {
 			baseServings: pendingModification.draft.baseServings,
 			difficulty: pendingModification.draft.difficulty,
 			estimatedMinutes: pendingModification.draft.estimatedMinutes,
+			caloriesPerServing: pendingModification.draft.caloriesPerServing,
 			ingredients: pendingModification.draft.ingredients,
 			steps: pendingModification.draft.steps,
 			truncated: pendingModification.draft.truncated,

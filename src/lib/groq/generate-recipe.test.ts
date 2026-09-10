@@ -37,6 +37,7 @@ const validRecipe: RecipeResponse = {
 	baseServings: 2,
 	difficulty: "quick_and_easy",
 	estimatedMinutes: 25,
+	caloriesPerServing: 620,
 	ingredients: [
 		{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
 	],
@@ -195,6 +196,36 @@ describe("generateRecipe", () => {
 		createMock
 			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
 			.mockResolvedValueOnce(jsonResponse(withoutNewFields));
+
+		const result = await generateRecipe("shrimp pasta for 2");
+
+		expect(result).toEqual({
+			type: "error",
+			message: "Malformed recipe response from Groq",
+		});
+	});
+
+	it("returns an error when the recipe response is missing caloriesPerServing", async () => {
+		const { caloriesPerServing, ...withoutCalories } = validRecipe;
+
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(jsonResponse(withoutCalories));
+
+		const result = await generateRecipe("shrimp pasta for 2");
+
+		expect(result).toEqual({
+			type: "error",
+			message: "Malformed recipe response from Groq",
+		});
+	});
+
+	it("returns an error when caloriesPerServing is not positive", async () => {
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(
+				jsonResponse({ ...validRecipe, caloriesPerServing: 0 }),
+			);
 
 		const result = await generateRecipe("shrimp pasta for 2");
 
@@ -432,6 +463,9 @@ describe("modifyRecipe", () => {
 		expect(callArgs.max_completion_tokens).toBeGreaterThanOrEqual(4096);
 		expect(callArgs.messages[1].content).toContain(validRecipe.title);
 		expect(callArgs.messages[1].content).toContain("swap shrimp for chicken");
+		expect(callArgs.messages[1].content).toContain(
+			"Current calories per serving: 620",
+		);
 	});
 
 	it("marks the result truncated when finish_reason is length", async () => {

@@ -31,6 +31,7 @@ const NO_MODIFICATIONS_LEFT_MESSAGE =
 // modification call needs some value for them, even if it's a rough guess.
 const FALLBACK_DIFFICULTY: Difficulty = "intermediate";
 const FALLBACK_ESTIMATED_MINUTES = 30;
+const FALLBACK_CALORIES_PER_SERVING = 400;
 
 export function RecipeModificationDialog({
 	recipe,
@@ -60,6 +61,8 @@ export function RecipeModificationDialog({
 						difficulty: source.difficulty ?? FALLBACK_DIFFICULTY,
 						estimatedMinutes:
 							source.estimatedMinutes ?? FALLBACK_ESTIMATED_MINUTES,
+						caloriesPerServing:
+							source.caloriesPerServing ?? FALLBACK_CALORIES_PER_SERVING,
 						ingredients: source.ingredients.map(toWireIngredient),
 						steps: source.steps.map(toWireStep),
 					},
@@ -124,6 +127,7 @@ export function RecipeModificationDialog({
 							baseServings: result.recipe.baseServings,
 							difficulty: result.recipe.difficulty,
 							estimatedMinutes: result.recipe.estimatedMinutes,
+							caloriesPerServing: result.recipe.caloriesPerServing,
 							ingredients: result.recipe.ingredients.map((ingredient) => ({
 								id: crypto.randomUUID(),
 								text: combineIngredientName(
@@ -166,6 +170,7 @@ export function RecipeModificationDialog({
 			baseServings: draft.baseServings,
 			difficulty: draft.difficulty,
 			estimatedMinutes: draft.estimatedMinutes,
+			caloriesPerServing: draft.caloriesPerServing,
 			ingredients: draft.ingredients,
 			steps: draft.steps,
 			truncated: draft.truncated,
@@ -199,6 +204,7 @@ export function RecipeModificationDialog({
 			currentServings: draft.baseServings,
 			difficulty: draft.difficulty,
 			estimatedMinutes: draft.estimatedMinutes,
+			caloriesPerServing: draft.caloriesPerServing,
 			ingredients: draft.ingredients,
 			steps: draft.steps,
 			expanded: false,

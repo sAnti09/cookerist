@@ -111,6 +111,7 @@ export function toStoredRecipe(
 		currentServings: input.baseServings,
 		difficulty: input.difficulty,
 		estimatedMinutes: input.estimatedMinutes,
+		caloriesPerServing: input.caloriesPerServing,
 		ingredients: input.ingredients.map((ingredient) => ({
 			id: crypto.randomUUID(),
 			text: combineIngredientName(ingredient.baseName, ingredient.description),

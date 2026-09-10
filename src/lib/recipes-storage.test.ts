@@ -17,6 +17,7 @@ const recipeInput: RecipeResponse = {
 	baseServings: 2,
 	difficulty: "quick_and_easy",
 	estimatedMinutes: 25,
+	caloriesPerServing: 620,
 	ingredients: [
 		{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
 	],
@@ -36,6 +37,7 @@ describe("toStoredRecipe", () => {
 		expect(recipe.currentServings).toBe(recipeInput.baseServings);
 		expect(recipe.difficulty).toBe("quick_and_easy");
 		expect(recipe.estimatedMinutes).toBe(25);
+		expect(recipe.caloriesPerServing).toBe(620);
 		expect(recipe.expanded).toBe(false);
 		expect(recipe.favorite).toBe(false);
 		expect(recipe.truncated).toBe(false);
@@ -170,6 +172,20 @@ describe("loadRecipes / saveRecipe", () => {
 		expect(loaded).toHaveLength(1);
 		expect(loaded[0].difficulty).toBeUndefined();
 		expect(loaded[0].estimatedMinutes).toBeUndefined();
+	});
+
+	it("loads pre-existing recipes saved before caloriesPerServing existed", () => {
+		const legacyRecipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const { caloriesPerServing, ...withoutCalories } = legacyRecipe;
+		window.localStorage.setItem(
+			"cookerist:recipes",
+			JSON.stringify([withoutCalories]),
+		);
+
+		const loaded = loadRecipes();
+
+		expect(loaded).toHaveLength(1);
+		expect(loaded[0].caloriesPerServing).toBeUndefined();
 	});
 
 	it("defaults favorite to false for recipes saved before it existed", () => {

@@ -5,7 +5,11 @@ import { RecipeModificationDialog } from "#/components/recipe-modification-dialo
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DifficultyBadge } from "#/components/ui/difficulty-badge";
-import { formatEstimatedTime, type Recipe } from "#/lib/recipe";
+import {
+	formatCaloriesPerServing,
+	formatEstimatedTime,
+	type Recipe,
+} from "#/lib/recipe";
 import { cn } from "#/lib/utils";
 
 export type PendingRow = {
@@ -122,6 +126,12 @@ export const RecipeResultRow = memo(function RecipeResultRow({
 							<span className="inline-flex items-center gap-1 tabular-nums">
 								<Clock className="size-3" aria-hidden="true" />
 								{formatEstimatedTime(recipe.estimatedMinutes)}
+							</span>
+						) : null}
+						{recipe.caloriesPerServing != null ? (
+							<span className="inline-flex items-center gap-1 tabular-nums">
+								<Flame className="size-3" aria-hidden="true" />
+								{formatCaloriesPerServing(recipe.caloriesPerServing)}
 							</span>
 						) : null}
 						<Button

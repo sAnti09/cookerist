@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Step } from "./recipe";
-import { formatEstimatedTime, groupSteps } from "./recipe";
+import {
+	formatCaloriesPerServing,
+	formatEstimatedTime,
+	groupSteps,
+} from "./recipe";
 
 function step(section: string | null, text: string): Step {
 	return { id: text, section, text, checked: false };
@@ -56,5 +60,15 @@ describe("formatEstimatedTime", () => {
 
 	it("formats hours with a minutes remainder", () => {
 		expect(formatEstimatedTime(90)).toBe("1 hr 30 min");
+	});
+});
+
+describe("formatCaloriesPerServing", () => {
+	it("formats a whole number of calories", () => {
+		expect(formatCaloriesPerServing(620)).toBe("620 cal");
+	});
+
+	it("rounds a fractional calorie estimate", () => {
+		expect(formatCaloriesPerServing(619.6)).toBe("620 cal");
 	});
 });

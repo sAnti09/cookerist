@@ -61,6 +61,7 @@ export type PendingModification = {
 		baseServings: number;
 		difficulty?: Difficulty | null;
 		estimatedMinutes?: number | null;
+		caloriesPerServing?: number | null;
 		ingredients: Ingredient[];
 		steps: Step[];
 		truncated: boolean;
@@ -86,6 +87,8 @@ export type Recipe = {
 	// Optional: absent on recipes saved before TEST-229 added these fields.
 	difficulty?: Difficulty | null;
 	estimatedMinutes?: number | null;
+	// Optional: absent on recipes saved before this field existed.
+	caloriesPerServing?: number | null;
 	ingredients: Ingredient[];
 	steps: Step[];
 	expanded: boolean;
@@ -112,6 +115,10 @@ export function formatEstimatedTime(minutes: number): string {
 	return remainingMinutes === 0
 		? `${hours} hr`
 		: `${hours} hr ${remainingMinutes} min`;
+}
+
+export function formatCaloriesPerServing(calories: number): string {
+	return `${Math.round(calories)} cal`;
 }
 
 export type StepSection = {
