@@ -27,6 +27,7 @@ import {
 import { parseCustomIngredientInput } from "#/lib/parse-custom-ingredient";
 import type { Recipe } from "#/lib/recipe";
 import { formatIngredientQuantity } from "#/lib/scale-servings";
+import { useBodyScrollLock } from "#/lib/use-body-scroll-lock";
 
 // How many search matches to surface at once — enough to scan, not enough to
 // turn the dropdown back into "just show every recipe".
@@ -77,6 +78,12 @@ export function GroceryListCreateForm({
 		() => editingList?.name ?? null,
 	);
 	const [confirmOpen, setConfirmOpen] = useState(false);
+
+	// The form is only ever mounted while open (routes/index.tsx conditionally
+	// renders it), so the lock is unconditional here — unlike ConfirmDialog/
+	// RecipeModificationDialog/InstallInstructionsDialog, which stay mounted
+	// and self-gate on an `open` prop instead.
+	useBodyScrollLock(true);
 
 	useEffect(() => {
 		function onKeyDown(event: KeyboardEvent) {

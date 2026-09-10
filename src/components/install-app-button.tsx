@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
+import { useBodyScrollLock } from "#/lib/use-body-scroll-lock";
 import { useInstallPrompt } from "#/lib/use-install-prompt";
 
 function InstallInstructionsDialog({
@@ -11,6 +12,8 @@ function InstallInstructionsDialog({
 	isIOS: boolean;
 	onClose: () => void;
 }) {
+	useBodyScrollLock(open);
+
 	useEffect(() => {
 		if (!open) return;
 		function onKeyDown(event: KeyboardEvent) {

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Button } from "#/components/ui/button";
+import { useBodyScrollLock } from "#/lib/use-body-scroll-lock";
 
 type ConfirmDialogProps = {
 	open: boolean;
@@ -20,6 +21,8 @@ export function ConfirmDialog({
 	onConfirm,
 	onCancel,
 }: ConfirmDialogProps) {
+	useBodyScrollLock(open);
+
 	useEffect(() => {
 		if (!open) return;
 		function onKeyDown(event: KeyboardEvent) {

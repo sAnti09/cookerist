@@ -12,6 +12,7 @@ import {
 } from "#/lib/recipe";
 import { diffRecipes } from "#/lib/recipe-diff";
 import { toWireIngredient, toWireStep } from "#/lib/recipe-wire";
+import { useBodyScrollLock } from "#/lib/use-body-scroll-lock";
 import { modifyRecipe } from "#/server/generate-recipe";
 
 type RecipeModificationDialogProps = {
@@ -66,6 +67,8 @@ export function RecipeModificationDialog({
 			});
 		},
 	});
+
+	useBodyScrollLock(open);
 
 	// Re-derive the initial form/error state only when the dialog transitions
 	// open — not on every recipe update while it's already open, since a
