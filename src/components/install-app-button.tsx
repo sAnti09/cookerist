@@ -3,6 +3,20 @@ import { Button } from "#/components/ui/button";
 import { useBodyScrollLock } from "#/lib/use-body-scroll-lock";
 import { useInstallPrompt } from "#/lib/use-install-prompt";
 
+// The instructions inside this dialog point the user at their browser's own
+// chrome (the ⋮/••• menu, the Share sheet) to finish the install. On mobile,
+// locking body scroll (position: fixed) can cause that chrome to collapse or
+// stay hidden, blocking the exact menu we're telling them to tap — so skip
+// the lock on mobile viewports specifically for this dialog.
+function isMobileViewport(): boolean {
+	if (typeof window === "undefined") return false;
+	try {
+		return window.matchMedia("(max-width: 767px)").matches;
+	} catch {
+		return false;
+	}
+}
+
 function InstallInstructionsDialog({
 	open,
 	isIOS,
@@ -14,7 +28,7 @@ function InstallInstructionsDialog({
 	inAppBrowserName: string | null;
 	onClose: () => void;
 }) {
-	useBodyScrollLock(open);
+	useBodyScrollLock(open && !isMobileViewport());
 
 	useEffect(() => {
 		if (!open) return;

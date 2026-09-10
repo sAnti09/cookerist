@@ -18,8 +18,27 @@ function stubUserAgent(userAgent: string) {
 	vi.stubGlobal("navigator", { ...window.navigator, userAgent });
 }
 
+function stubViewport(isMobile: boolean) {
+	vi.stubGlobal(
+		"matchMedia",
+		vi.fn().mockImplementation((query: string) => ({
+			matches: query.includes("max-width") ? isMobile : false,
+			media: query,
+			addListener: () => {},
+			removeListener: () => {},
+			addEventListener: () => {},
+			removeEventListener: () => {},
+			dispatchEvent: () => false,
+		})),
+	);
+}
+
 afterEach(() => {
 	vi.unstubAllGlobals();
+	document.body.style.position = "";
+	document.body.style.top = "";
+	document.body.style.width = "";
+	document.body.style.overflow = "";
 });
 
 describe("InstallAppButton", () => {
@@ -102,6 +121,26 @@ describe("InstallAppButton", () => {
 		await user.keyboard("{Escape}");
 
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+	});
+
+	it("locks body scroll for the instructions dialog on desktop viewports", async () => {
+		stubViewport(false);
+		render(<InstallAppButton />);
+		const user = userEvent.setup();
+
+		await user.click(screen.getByRole("button", { name: "Install app" }));
+
+		expect(document.body.style.overflow).toBe("hidden");
+	});
+
+	it("does not lock body scroll for the instructions dialog on mobile viewports, so the browser's own menu stays reachable", async () => {
+		stubViewport(true);
+		render(<InstallAppButton />);
+		const user = userEvent.setup();
+
+		await user.click(screen.getByRole("button", { name: "Install app" }));
+
+		expect(document.body.style.overflow).not.toBe("hidden");
 	});
 
 	it("shows an installed message instead of a button when already running standalone", () => {

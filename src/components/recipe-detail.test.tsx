@@ -175,7 +175,7 @@ describe("RecipeDetail", () => {
 
 		expect(screen.queryByText("Step 1 of 3")).not.toBeInTheDocument();
 
-		await user.click(screen.getByRole("button", { name: "Cook mode" }));
+		await user.click(screen.getByRole("button", { name: "Start Cooking" }));
 
 		expect(screen.getByText("Step 1 of 3")).toBeInTheDocument();
 
@@ -188,7 +188,7 @@ describe("RecipeDetail", () => {
 		renderDetail({ ...baseRecipe, steps: [] }, vi.fn());
 
 		expect(
-			screen.queryByRole("button", { name: "Cook mode" }),
+			screen.queryByRole("button", { name: "Start Cooking" }),
 		).not.toBeInTheDocument();
 	});
 

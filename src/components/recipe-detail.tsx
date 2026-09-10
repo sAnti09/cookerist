@@ -210,7 +210,7 @@ export const RecipeDetail = memo(function RecipeDetail({
 								onClick={() => setCookModeOpen(true)}
 							>
 								<ChefHat className="size-4" aria-hidden="true" />
-								Cook mode
+								Start Cooking
 							</Button>
 						) : null}
 					</div>
