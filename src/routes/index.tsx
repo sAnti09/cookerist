@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { FeatureSection } from "#/components/feature-section";
 import { GroceryListCreateForm } from "#/components/grocery-list-create-form";
 import { GroceryListRow } from "#/components/grocery-list-row";
+import { OfflineBanner } from "#/components/offline-banner";
 import { PromptForm } from "#/components/prompt-form";
 import {
 	PendingResultRow,
@@ -36,6 +37,7 @@ import {
 	updateRecipes,
 } from "#/lib/recipes-storage";
 import { resetAllData } from "#/lib/reset-all-data";
+import { useOnlineStatus } from "#/lib/use-online-status";
 import { cn } from "#/lib/utils";
 import { generateRecipe } from "#/server/generate-recipe";
 
@@ -48,6 +50,7 @@ const GENERIC_ERROR_MESSAGE =
 const PAGE_SIZE = 10;
 
 export function Home() {
+	const isOnline = useOnlineStatus();
 	const [recipes, setRecipes] = useState<Recipe[]>([]);
 	const [groceryLists, setGroceryLists] = useState<GroceryList[]>([]);
 	const [view, setView] = useState<ResultsView>("recipes");
@@ -295,7 +298,7 @@ export function Home() {
 
 	return (
 		<>
-			<div className="sticky top-0 z-20 flex justify-end p-4">
+			<div className="flex justify-end p-4 sm:sticky sm:top-0 sm:z-20">
 				<ThemeToggle />
 			</div>
 			<div className="mx-auto max-w-2xl p-8 pt-0">
@@ -323,7 +326,9 @@ export function Home() {
 						value={promptValue}
 						onChange={setPromptValue}
 						onSubmit={submit}
+						disabled={!isOnline}
 					/>
+					<OfflineBanner isOnline={isOnline} />
 				</div>
 
 				<div className="mt-8 mb-4">

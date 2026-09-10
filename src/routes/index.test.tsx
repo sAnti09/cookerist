@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroceryList } from "#/lib/grocery-list";
@@ -130,6 +130,28 @@ describe("Home", () => {
 		expect(
 			screen.getByRole("heading", { name: "Cookerist" }),
 		).toBeInTheDocument();
+	});
+
+	it("disables the prompt form and shows a notice while offline", async () => {
+		vi.stubGlobal("navigator", { ...window.navigator, onLine: false });
+		renderHome();
+
+		expect(screen.getByText(/you're offline/i)).toBeInTheDocument();
+		expect(screen.getByLabelText("Describe a dish")).toBeDisabled();
+		expect(screen.getByRole("button", { name: "Get recipe" })).toBeDisabled();
+	});
+
+	it("re-enables the prompt form once back online", async () => {
+		vi.stubGlobal("navigator", { ...window.navigator, onLine: false });
+		renderHome();
+		expect(screen.getByLabelText("Describe a dish")).toBeDisabled();
+
+		act(() => {
+			window.dispatchEvent(new Event("online"));
+		});
+
+		expect(screen.getByLabelText("Describe a dish")).not.toBeDisabled();
+		expect(screen.queryByText(/you're offline/i)).not.toBeInTheDocument();
 	});
 
 	it("shows a loading row immediately, then a saved result on success", async () => {
