@@ -38,6 +38,39 @@ describe("useInstallPrompt", () => {
 		expect(result.current.isIOS).toBe(true);
 	});
 
+	it("detects Facebook's in-app browser from the user agent", () => {
+		stubUserAgent(
+			"Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 [FB_IAB/FB4A;FBAV/440.0]",
+		);
+		const { result } = renderHook(() => useInstallPrompt());
+
+		expect(result.current.inAppBrowserName).toBe("Facebook");
+	});
+
+	it("distinguishes Messenger's in-app browser from the base Facebook app", () => {
+		stubUserAgent(
+			"Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 [FB_IAB/MESSENGER;FBAV/440.0]",
+		);
+		const { result } = renderHook(() => useInstallPrompt());
+
+		expect(result.current.inAppBrowserName).toBe("Messenger");
+	});
+
+	it("detects Instagram's in-app browser from the user agent", () => {
+		stubUserAgent(
+			"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Instagram 300.0.0.0.0",
+		);
+		const { result } = renderHook(() => useInstallPrompt());
+
+		expect(result.current.inAppBrowserName).toBe("Instagram");
+	});
+
+	it("does not flag an ordinary browser as an in-app browser", () => {
+		const { result } = renderHook(() => useInstallPrompt());
+
+		expect(result.current.inAppBrowserName).toBeNull();
+	});
+
 	it("captures beforeinstallprompt and exposes a working promptInstall", async () => {
 		const { result } = renderHook(() => useInstallPrompt());
 

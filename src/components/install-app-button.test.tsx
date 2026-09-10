@@ -60,6 +60,28 @@ describe("InstallAppButton", () => {
 		expect(screen.queryByText(/android \(chrome\)/i)).not.toBeInTheDocument();
 	});
 
+	it("shows an in-app browser warning with the app name when detected", async () => {
+		stubUserAgent(
+			"Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 [FB_IAB/FB4A;FBAV/440.0]",
+		);
+		render(<InstallAppButton />);
+		const user = userEvent.setup();
+
+		await user.click(screen.getByRole("button", { name: "Install app" }));
+
+		expect(screen.getByText(/facebook's in-app browser/i)).toBeInTheDocument();
+		expect(screen.getByText(/open in browser/i)).toBeInTheDocument();
+	});
+
+	it("does not show an in-app browser warning in an ordinary browser", async () => {
+		render(<InstallAppButton />);
+		const user = userEvent.setup();
+
+		await user.click(screen.getByRole("button", { name: "Install app" }));
+
+		expect(screen.queryByText(/in-app browser/i)).not.toBeInTheDocument();
+	});
+
 	it("closes the instructions dialog via the Got it button", async () => {
 		render(<InstallAppButton />);
 		const user = userEvent.setup();

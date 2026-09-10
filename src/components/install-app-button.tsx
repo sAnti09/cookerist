@@ -6,10 +6,12 @@ import { useInstallPrompt } from "#/lib/use-install-prompt";
 function InstallInstructionsDialog({
 	open,
 	isIOS,
+	inAppBrowserName,
 	onClose,
 }: {
 	open: boolean;
 	isIOS: boolean;
+	inAppBrowserName: string | null;
 	onClose: () => void;
 }) {
 	useBodyScrollLock(open);
@@ -45,6 +47,15 @@ function InstallInstructionsDialog({
 				>
 					Install Cookerist
 				</h2>
+				{inAppBrowserName && (
+					<p className="card mt-3 border-warn bg-warn-wash p-3 text-sm text-warn">
+						You're viewing this in {inAppBrowserName}'s in-app browser, which
+						blocks app installs. Tap the{" "}
+						<span className="font-medium">••• (or ⋮) menu</span>, choose{" "}
+						<span className="font-medium">"Open in Browser"</span>, then come
+						back here to install.
+					</p>
+				)}
 				<ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-dim">
 					{isIOS ? (
 						<li>
@@ -76,8 +87,13 @@ function InstallInstructionsDialog({
 }
 
 export function InstallAppButton() {
-	const { installed, canPromptNatively, isIOS, promptInstall } =
-		useInstallPrompt();
+	const {
+		installed,
+		canPromptNatively,
+		isIOS,
+		inAppBrowserName,
+		promptInstall,
+	} = useInstallPrompt();
 	const [showInstructions, setShowInstructions] = useState(false);
 
 	if (installed) {
@@ -104,6 +120,7 @@ export function InstallAppButton() {
 			<InstallInstructionsDialog
 				open={showInstructions}
 				isIOS={isIOS}
+				inAppBrowserName={inAppBrowserName}
 				onClose={() => setShowInstructions(false)}
 			/>
 		</>

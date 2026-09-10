@@ -28,6 +28,25 @@ function isIOSDevice(): boolean {
 	return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
+// In-app webviews (opened from a chat/social app's own link preview) block
+// beforeinstallprompt and can't be escaped via a menu the user already
+// knows to look for, so we name the culprit and tell them to hop out to a
+// real browser first. Order matters: Messenger's UA is a subset of the
+// broader Facebook-family FBAN/FBAV/FB_IAB tokens, so it must be checked first.
+function detectInAppBrowser(): string | null {
+	if (typeof navigator === "undefined") return null;
+	const ua = navigator.userAgent;
+	if (/FBAN|FBAV|FB_IAB/i.test(ua)) {
+		return /MESSENGER/i.test(ua) ? "Messenger" : "Facebook";
+	}
+	if (/Instagram/i.test(ua)) return "Instagram";
+	if (/Line\//i.test(ua)) return "LINE";
+	if (/MicroMessenger/i.test(ua)) return "WeChat";
+	if (/musical_ly|BytedanceWebview|TikTok/i.test(ua)) return "TikTok";
+	if (/LinkedInApp/i.test(ua)) return "LinkedIn";
+	return null;
+}
+
 export function useInstallPrompt() {
 	const [deferredPrompt, setDeferredPrompt] =
 		useState<BeforeInstallPromptEvent | null>(null);
@@ -65,6 +84,7 @@ export function useInstallPrompt() {
 		installed,
 		canPromptNatively: deferredPrompt !== null,
 		isIOS: isIOSDevice(),
+		inAppBrowserName: detectInAppBrowser(),
 		promptInstall,
 	};
 }
