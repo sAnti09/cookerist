@@ -67,7 +67,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 			},
 			{
 				property: "og:title",
-				content: "Cookerist — turn a prompt into a recipe",
+				content: "Cookerist — Prompt it. Shop for it. Cook it.",
 			},
 			{
 				property: "og:description",
@@ -97,7 +97,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 			},
 			{
 				name: "twitter:title",
-				content: "Cookerist — turn a prompt into a recipe",
+				content: "Cookerist — Prompt it. Shop for it. Cook it.",
 			},
 			{
 				name: "twitter:description",
