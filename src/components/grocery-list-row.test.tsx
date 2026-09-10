@@ -188,13 +188,13 @@ describe("GroceryListRow", () => {
 		).toBeInTheDocument();
 	});
 
-	it("only reveals the delete and expand controls on hover while collapsed", () => {
+	it("only reveals the delete and expand controls on hover at desktop widths while collapsed", () => {
 		renderRow();
 
 		const expandButton = screen.getByRole("button", {
 			name: `Expand ${list.name}`,
 		});
-		expect(expandButton.parentElement).toHaveClass("opacity-0");
+		expect(expandButton.parentElement).toHaveClass("sm:opacity-0");
 	});
 
 	it("keeps the controls visible without hovering once expanded", () => {
@@ -203,7 +203,16 @@ describe("GroceryListRow", () => {
 		const collapseButton = screen.getByRole("button", {
 			name: `Collapse ${list.name}`,
 		});
-		expect(collapseButton.parentElement).not.toHaveClass("opacity-0");
+		expect(collapseButton.parentElement).not.toHaveClass("sm:opacity-0");
+	});
+
+	it("never hides the controls behind hover at mobile widths, even while collapsed", () => {
+		renderRow();
+
+		const expandButton = screen.getByRole("button", {
+			name: `Expand ${list.name}`,
+		});
+		expect(expandButton.parentElement).not.toHaveClass("opacity-0");
 	});
 
 	it("does not delete until the confirmation dialog is confirmed, and never expands or collapses the row", async () => {

@@ -183,6 +183,43 @@ pre code {
     box-shadow: var(--card-shadow);
     border-radius: 18px;
   }
+
+  /* Recipe/grocery row action-button clusters (result-row.tsx,
+  grocery-list-row.tsx): three buttons in DOM order (primary action, delete,
+  expand/collapse) that stay right-aligned like today at sm+ but wrap onto a
+  second line below narrow width, so the title/metadata column isn't forced
+  to share a row with all three. Repositioning is done with grid-area, not by
+  reordering the buttons themselves — so there's a single set of buttons
+  (nothing duplicated/hidden to keep in sync or confuse a screen reader or
+  test query) and tab order always matches DOM/reading order. */
+  .row-actions {
+    display: grid;
+    grid-template-columns: auto auto;
+    grid-template-areas:
+      'primary expand'
+      '.       delete';
+    align-items: center;
+    justify-items: end;
+    column-gap: 0.25rem;
+    row-gap: 0.375rem;
+  }
+  .row-actions > :first-child {
+    grid-area: primary;
+  }
+  .row-actions > :nth-child(2) {
+    grid-area: delete;
+  }
+  .row-actions > :last-child {
+    grid-area: expand;
+  }
+
+  @media (min-width: 640px) {
+    .row-actions {
+      grid-template-columns: repeat(3, auto);
+      grid-template-areas: 'primary delete expand';
+      row-gap: 0;
+    }
+  }
 }
 
 button,

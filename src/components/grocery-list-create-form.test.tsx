@@ -1,10 +1,23 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { GroceryList } from "#/lib/grocery-list";
 import type { Recipe } from "#/lib/recipe";
 import { GroceryListCreateForm } from "./grocery-list-create-form";
+
+// jsdom doesn't implement the PointerEvent constructor (or wire clientX
+// through fireEvent's pointerDown/pointerMove/pointerUp shorthands), so drag
+// gestures in tests use a plain Event with the fields our handlers read
+// assigned directly onto it.
+function pointerEvent(
+	type: string,
+	init: { clientX: number; pointerId: number },
+) {
+	const event = new Event(type, { bubbles: true, cancelable: true });
+	Object.assign(event, init);
+	return event;
+}
 
 function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
 	return {
@@ -277,7 +290,18 @@ describe("GroceryListCreateForm", () => {
 		const { props, rerender } = renderForm({ recipes: [recipe] });
 
 		await addRecipe(user, "Shrimp Pasta");
-		await user.click(screen.getByRole("button", { name: "Increase servings" }));
+
+		// The servings control is drag-to-scrub, not a click stepper — drag
+		// right by more than one step's worth of pixels to increase by 1.
+		const scrub = screen.getByRole("button", {
+			name: /Servings for Shrimp Pasta/i,
+		});
+		fireEvent(scrub, pointerEvent("pointerdown", { pointerId: 1, clientX: 0 }));
+		fireEvent(
+			scrub,
+			pointerEvent("pointermove", { pointerId: 1, clientX: 20 }),
+		);
+		fireEvent(scrub, pointerEvent("pointerup", { pointerId: 1, clientX: 20 }));
 
 		expect(props.onUpdateRecipe).toHaveBeenCalledWith({
 			...recipe,

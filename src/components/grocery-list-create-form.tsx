@@ -10,7 +10,7 @@ import {
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { IngredientLine } from "#/components/ui/ingredient-line";
-import { ServingsStepper } from "#/components/ui/servings-stepper";
+import { ServingsScrub } from "#/components/ui/servings-scrub";
 import {
 	APPROXIMATE_ITEMS_NOTE,
 	aggregateGroceryItems,
@@ -314,11 +314,12 @@ export function GroceryListCreateForm({
 												<span className="min-w-0 flex-1 break-words text-sm">
 													{recipe.title}
 												</span>
-												<ServingsStepper
+												<ServingsScrub
 													value={recipe.currentServings}
 													onChange={(next) =>
 														handleServingsChange(recipe, next)
 													}
+													label={`Servings for ${recipe.title}`}
 												/>
 												<Button
 													variant="secondary"
@@ -378,6 +379,10 @@ export function GroceryListCreateForm({
 								value={customText}
 								onChange={(event) => setCustomText(event.target.value)}
 								onKeyDown={handleItemFieldKeyDown}
+								// Without this, Chrome on Android infers a "Next" action (since
+								// Quantity/Unit follow in the form) and just advances focus
+								// instead of firing handleItemFieldKeyDown's Enter handler below.
+								enterKeyHint="done"
 								placeholder="Item, e.g. 1 pc chicken"
 								aria-label="Custom ingredient name"
 								className="w-full min-w-0 rounded-full border border-line bg-surface px-3 py-1.5 text-base outline-none min-[420px]:flex-1 sm:text-sm"

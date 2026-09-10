@@ -157,16 +157,18 @@ export const RecipeResultRow = memo(function RecipeResultRow({
 						</Button>
 					</div>
 				</div>
-				<div className="flex shrink-0 items-center gap-1">
+				<div className="row-actions shrink-0">
 					<Button
 						variant="secondary"
 						className={cn(
 							"group/modify shrink-0 rounded-[10px] px-2 transition-opacity",
 							!recipe.expanded &&
-								// pointer-events-none while hidden — otherwise this still
-								// intercepts taps on touch devices, which never trigger the
-								// hover state that would normally reveal it first.
-								"pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+								// Hover-reveal only applies at sm+ (desktop, where hover
+								// exists) — pointer-events-none while hidden there so it
+								// doesn't intercept clicks before the hover state reveals
+								// it. Always visible below sm (mobile/touch), since touch
+								// has no hover state to reveal it with.
+								"sm:pointer-events-none sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100",
 						)}
 						aria-label={`Modify ${recipe.title}`}
 						onClick={(event) => {
@@ -186,10 +188,9 @@ export const RecipeResultRow = memo(function RecipeResultRow({
 						className={cn(
 							"group/delete shrink-0 rounded-[10px] px-2 transition-opacity",
 							!recipe.expanded &&
-								// pointer-events-none while hidden — otherwise this still
-								// intercepts taps on touch devices, which never trigger the
-								// hover state that would normally reveal it first.
-								"pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+								// See the Modify button above — hover-reveal is desktop-only
+								// (sm+); always visible on mobile/touch.
+								"sm:pointer-events-none sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100",
 						)}
 						aria-label={`Delete ${recipe.title}`}
 						onClick={(event) => {

@@ -94,9 +94,12 @@ export const GroceryListRow = memo(function GroceryListRow({
 				</button>
 				<div
 					className={cn(
-						"flex shrink-0 items-center gap-1",
+						"row-actions shrink-0 transition-opacity",
 						!list.expanded &&
-							"opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
+							// Hover-reveal only applies at sm+ (desktop, where hover
+							// exists) — always visible on mobile/touch, since touch has no
+							// hover state to reveal these with.
+							"sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
 					)}
 				>
 					<Button

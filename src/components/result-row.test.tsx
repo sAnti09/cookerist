@@ -152,18 +152,28 @@ describe("RecipeResultRow", () => {
 		).not.toHaveClass("opacity-0");
 	});
 
-	it("only reveals the delete control on hover while collapsed, and doesn't let it be clicked while hidden", () => {
+	it("only reveals the delete control on hover at desktop widths while collapsed, and doesn't let it be clicked while hidden there", () => {
 		renderRow();
 
 		const deleteButton = screen.getByRole("button", {
 			name: `Delete ${recipe.title}`,
 		});
-		expect(deleteButton).toHaveClass("opacity-0");
-		expect(deleteButton).toHaveClass("pointer-events-none");
+		expect(deleteButton).toHaveClass("sm:opacity-0");
+		expect(deleteButton).toHaveClass("sm:pointer-events-none");
 	});
 
 	it("keeps the delete control visible and clickable once expanded", () => {
 		renderRow({ recipe: { ...recipe, expanded: true } });
+
+		const deleteButton = screen.getByRole("button", {
+			name: `Delete ${recipe.title}`,
+		});
+		expect(deleteButton).not.toHaveClass("sm:opacity-0");
+		expect(deleteButton).not.toHaveClass("sm:pointer-events-none");
+	});
+
+	it("never hides the delete control behind hover at mobile widths, even while collapsed", () => {
+		renderRow();
 
 		const deleteButton = screen.getByRole("button", {
 			name: `Delete ${recipe.title}`,
@@ -305,18 +315,28 @@ describe("RecipeResultRow", () => {
 	});
 
 	describe("modify icon", () => {
-		it("only reveals the modify control on hover while collapsed, and doesn't let it be clicked while hidden", () => {
+		it("only reveals the modify control on hover at desktop widths while collapsed, and doesn't let it be clicked while hidden there", () => {
 			renderRow();
 
 			const modifyButton = screen.getByRole("button", {
 				name: `Modify ${recipe.title}`,
 			});
-			expect(modifyButton).toHaveClass("opacity-0");
-			expect(modifyButton).toHaveClass("pointer-events-none");
+			expect(modifyButton).toHaveClass("sm:opacity-0");
+			expect(modifyButton).toHaveClass("sm:pointer-events-none");
 		});
 
 		it("keeps the modify control visible and clickable once expanded", () => {
 			renderRow({ recipe: { ...recipe, expanded: true } });
+
+			const modifyButton = screen.getByRole("button", {
+				name: `Modify ${recipe.title}`,
+			});
+			expect(modifyButton).not.toHaveClass("sm:opacity-0");
+			expect(modifyButton).not.toHaveClass("sm:pointer-events-none");
+		});
+
+		it("never hides the modify control behind hover at mobile widths, even while collapsed", () => {
+			renderRow();
 
 			const modifyButton = screen.getByRole("button", {
 				name: `Modify ${recipe.title}`,
