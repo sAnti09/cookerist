@@ -78,9 +78,10 @@ export function RecipeResultRow({
 		// toggle a second time when those controls already handle it themselves.
 		// biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: intentionally mouse/touch-only — this div is never focusable, so it adds no new keyboard/AT interaction; keyboard users already reach the same action via the header (role="button") or the chevron button below.
 		<div
+			id={`recipe-${recipe.id}`}
 			data-testid={`recipe-row-${recipe.id}`}
 			className={cn(
-				"group card cursor-pointer p-4 transition-colors",
+				"group card scroll-mt-6 cursor-pointer p-4 transition-colors",
 				recipe.expanded ? "bg-bg2" : "bg-card hover:bg-bg2",
 			)}
 			onClick={() => onToggleExpand(recipe.id)}
@@ -90,7 +91,7 @@ export function RecipeResultRow({
 				<div
 					role="button"
 					tabIndex={0}
-					className="flex-1 cursor-pointer text-left"
+					className="flex-1 cursor-pointer text-left outline-none"
 					aria-expanded={recipe.expanded}
 					onClick={(event) => {
 						event.stopPropagation();

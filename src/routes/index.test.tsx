@@ -3,8 +3,13 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroceryList } from "#/lib/grocery-list";
-import { saveGroceryList } from "#/lib/grocery-storage";
-import { loadRecipes, saveRecipe, toStoredRecipe } from "#/lib/recipes-storage";
+import { saveGroceryList, setExpandedGroceryList } from "#/lib/grocery-storage";
+import {
+	loadRecipes,
+	saveRecipe,
+	setExpandedRecipe,
+	toStoredRecipe,
+} from "#/lib/recipes-storage";
 import { Home } from "./index";
 
 class MockIntersectionObserver {
@@ -360,6 +365,39 @@ describe("Home", () => {
 		);
 	});
 
+	it("loads and scrolls to a recipe left expanded from a previous session, even past the first page", async () => {
+		const scrollIntoViewMock = vi.fn();
+		Element.prototype.scrollIntoView = scrollIntoViewMock;
+
+		seedRecipes(15);
+		const target = loadRecipes()[12];
+		setExpandedRecipe(target.id);
+
+		renderHome();
+
+		await waitFor(() => {
+			expect(screen.getByText(target.title)).toBeInTheDocument();
+		});
+		// All 13 recipes up to and including the target must render — not just
+		// the default first page of 10 — for it to be scrollable into view.
+		expect(screen.getAllByText(/^Recipe \d+$/)).toHaveLength(13);
+		expect(scrollIntoViewMock).toHaveBeenCalled();
+	});
+
+	it("scrolls to and focuses a recipe when it's expanded by clicking it — not just on load", async () => {
+		const scrollIntoViewMock = vi.fn();
+		Element.prototype.scrollIntoView = scrollIntoViewMock;
+		seedRecipes(2);
+		renderHome();
+		const user = userEvent.setup();
+
+		const header = screen.getByRole("button", { name: /^Recipe 0/ });
+		await user.click(header);
+
+		expect(scrollIntoViewMock).toHaveBeenCalled();
+		expect(header).toHaveFocus();
+	});
+
 	it("deletes a recipe from the list and localStorage after confirming", async () => {
 		seedRecipes(1);
 		renderHome();
@@ -637,6 +675,41 @@ describe("Home", () => {
 				screen.getByRole("heading", { name: "Recipes" }),
 			).toBeInTheDocument();
 			expect(await screen.findByText(validRecipe.title)).toBeInTheDocument();
+		});
+
+		it("scrolls to and focuses a grocery list when it's expanded by clicking it", async () => {
+			const scrollIntoViewMock = vi.fn();
+			Element.prototype.scrollIntoView = scrollIntoViewMock;
+			saveGroceryList(makeGroceryList({ name: "Weeknight Groceries" }));
+			renderHome();
+			const user = userEvent.setup();
+
+			await user.click(screen.getByRole("button", { name: "Grocery lists" }));
+			const header = screen.getByRole("button", {
+				name: "Weeknight Groceries",
+			});
+			await user.click(header);
+
+			expect(scrollIntoViewMock).toHaveBeenCalled();
+			expect(header).toHaveFocus();
+		});
+
+		it("loads and scrolls to a grocery list left expanded from a previous session, switching to the Grocery Lists view", async () => {
+			const scrollIntoViewMock = vi.fn();
+			Element.prototype.scrollIntoView = scrollIntoViewMock;
+			const list = makeGroceryList({ name: "Weeknight Groceries" });
+			saveGroceryList(list);
+			setExpandedGroceryList(list.id);
+
+			renderHome();
+
+			await waitFor(() => {
+				expect(
+					screen.getByRole("heading", { name: "Grocery Lists" }),
+				).toBeInTheDocument();
+			});
+			expect(screen.getByText("Weeknight Groceries")).toBeInTheDocument();
+			expect(scrollIntoViewMock).toHaveBeenCalled();
 		});
 
 		it("shows a distinct empty state with a create entry point when no lists exist", async () => {

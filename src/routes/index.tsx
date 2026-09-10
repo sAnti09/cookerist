@@ -42,7 +42,7 @@ import { generateRecipe } from "#/server/generate-recipe";
 export const Route = createFileRoute("/")({ component: Home });
 
 const OFF_TOPIC_MESSAGE =
-	"That doesn't look like a cooking request — try describing a specific dish you'd like to make.";
+	"That doesn't look like a cooking request — try describing a specific dish, or listing ingredients you have on hand.";
 const GENERIC_ERROR_MESSAGE =
 	"Something went wrong generating that recipe. Please try again.";
 const PAGE_SIZE = 10;
@@ -63,15 +63,70 @@ export function Home() {
 	const [editingGroceryList, setEditingGroceryList] =
 		useState<GroceryList | null>(null);
 	const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+	// Whichever row (recipe or grocery list) most recently became expanded —
+	// on a click, or restored from a previous session on load — so it can be
+	// scrolled to and focused once it's actually on the page. Holds the row's
+	// DOM id (`recipe-<id>` / `grocery-list-<id>`) rather than a bare id so
+	// one effect can serve both kinds.
+	const [pendingScrollToElementId, setPendingScrollToElementId] = useState<
+		string | null
+	>(null);
 	const sentinelRef = useRef<HTMLDivElement | null>(null);
+	const isInitialFilterMount = useRef(true);
 	const mutation = useMutation({
 		mutationFn: (prompt: string) => generateRecipe({ data: prompt }),
 	});
 
 	useEffect(() => {
-		setRecipes(loadRecipes());
-		setGroceryLists(loadGroceryLists());
+		const loadedRecipes = loadRecipes();
+		const loadedGroceryLists = loadGroceryLists();
+		setRecipes(loadedRecipes);
+		setGroceryLists(loadedGroceryLists);
+
+		// A recipe or grocery list left expanded from a previous session
+		// survives the reload (TEST-158) — scroll/focus it back into view once
+		// it's on the page. Recipe pagination only renders the first page by
+		// default, so make sure it's actually there first; a recipe takes
+		// priority since the Recipes tab is the default view on load.
+		const expandedRecipeIndex = loadedRecipes.findIndex(
+			(recipe) => recipe.expanded,
+		);
+		if (expandedRecipeIndex !== -1) {
+			setVisibleCount((count) => Math.max(count, expandedRecipeIndex + 1));
+			setPendingScrollToElementId(
+				`recipe-${loadedRecipes[expandedRecipeIndex].id}`,
+			);
+			return;
+		}
+		const expandedGroceryList = loadedGroceryLists.find(
+			(list) => list.expanded,
+		);
+		if (expandedGroceryList) {
+			setView("grocery");
+			setPendingScrollToElementId(`grocery-list-${expandedGroceryList.id}`);
+		}
 	}, []);
+
+	// Runs again once state changes actually render the target row — on the
+	// initial pass right after it's set (a click, or the effect above), it
+	// may not be in the DOM yet (pagination hasn't caught up, or the view
+	// tab hasn't switched).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: recipes/groceryLists/visibleCount/view intentionally retrigger this to re-check the DOM once they render the target row, not read directly
+	useEffect(() => {
+		if (!pendingScrollToElementId) return;
+		const row = document.getElementById(pendingScrollToElementId);
+		if (!row) return;
+		row.scrollIntoView({ block: "start" });
+		// Move focus to the row's own title control (already keyboard-reachable
+		// on its own) rather than the row itself, which is a click-only target
+		// — this is what actually keeps an expanded panel from getting
+		// scrolled/laid out out of view again the next time something above it
+		// collapses.
+		row.querySelector<HTMLElement>('[role="button"], button')?.focus({
+			preventScroll: true,
+		});
+		setPendingScrollToElementId(null);
+	}, [pendingScrollToElementId, recipes, groceryLists, visibleCount, view]);
 
 	const filters = {
 		search: searchQuery,
@@ -83,6 +138,13 @@ export function Home() {
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally re-runs on filter change to reset pagination, not to read the values
 	useEffect(() => {
+		// Skip the mount run — filters start inactive, so there's nothing to
+		// reset yet, and resetting here would stomp on a larger visibleCount
+		// the scroll-to-expanded-recipe effect above may have just set.
+		if (isInitialFilterMount.current) {
+			isInitialFilterMount.current = false;
+			return;
+		}
 		setVisibleCount(PAGE_SIZE);
 	}, [searchQuery, difficultyFilter, favoritesOnly]);
 
@@ -113,7 +175,13 @@ export function Home() {
 
 	function handleToggleExpand(id: string) {
 		const recipe = recipes.find((r) => r.id === id);
-		setRecipes(setExpandedRecipe(recipe?.expanded ? null : id));
+		const expanding = !recipe?.expanded;
+		setRecipes(setExpandedRecipe(expanding ? id : null));
+		// Collapsing whichever recipe was previously expanded can shift this
+		// one up or down the page (its content was likely much taller) —
+		// scroll/focus it back into view rather than leaving it wherever that
+		// reflow happens to land it.
+		if (expanding) setPendingScrollToElementId(`recipe-${id}`);
 	}
 
 	function handleUpdateRecipe(recipe: Recipe) {
@@ -134,7 +202,9 @@ export function Home() {
 
 	function handleToggleExpandGroceryList(id: string) {
 		const list = groceryLists.find((l) => l.id === id);
-		setGroceryLists(setExpandedGroceryList(list?.expanded ? null : id));
+		const expanding = !list?.expanded;
+		setGroceryLists(setExpandedGroceryList(expanding ? id : null));
+		if (expanding) setPendingScrollToElementId(`grocery-list-${id}`);
 	}
 
 	function handleUpdateGroceryList(list: GroceryList) {

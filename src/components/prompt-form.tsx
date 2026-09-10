@@ -39,13 +39,13 @@ export function PromptForm({
 	return (
 		<form
 			onSubmit={handleSubmit}
-			className="card flex items-end gap-2 rounded-full bg-surface py-[0.4rem] pr-[0.4rem] pl-[1.3rem] focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
+			className="card flex items-center gap-2 rounded-[28px] bg-surface py-[0.4rem] pr-[0.4rem] pl-[1.3rem] focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
 		>
 			<Textarea
 				value={value}
 				onChange={(event) => onChange(event.target.value)}
 				onKeyDown={handleKeyDown}
-				placeholder="What do you want to cook?"
+				placeholder="What do you want to cook — or what's in your fridge?"
 				rows={1}
 				aria-label="Describe a dish"
 				disabled={disabled}

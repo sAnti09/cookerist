@@ -48,9 +48,10 @@ export function GroceryListRow({
 		// when those controls already handle it themselves.
 		// biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: intentionally mouse/touch-only — this div is never focusable, so it adds no new keyboard/AT interaction; keyboard users already reach the same action via the header button, the progress-bar button, or the chevron button below.
 		<div
+			id={`grocery-list-${list.id}`}
 			data-testid={`grocery-list-row-${list.id}`}
 			className={cn(
-				"group card cursor-pointer p-4 transition-colors",
+				"group card scroll-mt-6 cursor-pointer p-4 transition-colors",
 				list.expanded ? "bg-bg2" : "bg-card hover:bg-bg2",
 			)}
 			onClick={() => onToggleExpand(list.id)}
@@ -58,7 +59,7 @@ export function GroceryListRow({
 			<div className="flex items-start justify-between gap-3">
 				<button
 					type="button"
-					className="flex-1 cursor-pointer text-left"
+					className="flex-1 cursor-pointer text-left outline-none"
 					aria-expanded={list.expanded}
 					onClick={(event) => {
 						event.stopPropagation();
