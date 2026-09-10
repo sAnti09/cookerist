@@ -22,7 +22,7 @@ export function Checkbox({
 	return (
 		<label
 			className={cn(
-				"inline-flex cursor-pointer items-start gap-2 text-sm",
+				"inline-flex cursor-pointer items-start gap-2 align-top text-sm",
 				className,
 			)}
 		>
