@@ -3,6 +3,7 @@ import {
 	type FormEvent,
 	type KeyboardEvent as ReactKeyboardEvent,
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
@@ -85,12 +86,24 @@ export function GroceryListCreateForm({
 		return () => document.removeEventListener("keydown", onKeyDown);
 	}, [onClose]);
 
-	const selectedRecipes = selectedRecipeIds
-		.map((id) => recipes.find((recipe) => recipe.id === id))
-		.filter((recipe): recipe is Recipe => Boolean(recipe));
-	const previewItems = aggregateGroceryItems(
-		selectedRecipes,
-		customIngredients,
+	// Memoized on [selectedRecipeIds, recipes] rather than recomputed inline —
+	// otherwise every keystroke in the custom-ingredient/recipe-search fields
+	// below (which re-render this whole form) would rebuild this array with
+	// new object references, which in turn would make the aggregation and
+	// known-units memos below recompute on every keystroke too.
+	const selectedRecipes = useMemo(
+		() =>
+			selectedRecipeIds
+				.map((id) => recipes.find((recipe) => recipe.id === id))
+				.filter((recipe): recipe is Recipe => Boolean(recipe)),
+		[selectedRecipeIds, recipes],
+	);
+	// The full unit-conversion/density/piece-ratio aggregation pipeline —
+	// memoized so it only reruns when the selected recipes or custom
+	// ingredients actually change, not on every keystroke elsewhere in the form.
+	const previewItems = useMemo(
+		() => aggregateGroceryItems(selectedRecipes, customIngredients),
+		[selectedRecipes, customIngredients],
 	);
 	const canSave = selectedRecipes.length > 0 || customIngredients.length > 0;
 	const defaultName = generateGroceryListName(
@@ -99,16 +112,21 @@ export function GroceryListCreateForm({
 	const name = customName ?? defaultName;
 
 	// Only recipe ingredients feed the suggestions — custom ingredients the
-	// user is still typing shouldn't suggest themselves back.
-	const knownUnits = Array.from(
-		new Set(
-			recipes.flatMap((recipe) =>
-				recipe.ingredients.map((ingredient) => ingredient.unit.trim()),
-			),
-		),
-	)
-		.filter(Boolean)
-		.sort((a, b) => a.localeCompare(b));
+	// user is still typing shouldn't suggest themselves back. Memoized on
+	// `recipes` for the same reason as `previewItems` above.
+	const knownUnits = useMemo(
+		() =>
+			Array.from(
+				new Set(
+					recipes.flatMap((recipe) =>
+						recipe.ingredients.map((ingredient) => ingredient.unit.trim()),
+					),
+				),
+			)
+				.filter(Boolean)
+				.sort((a, b) => a.localeCompare(b)),
+		[recipes],
+	);
 
 	const trimmedRecipeSearch = recipeSearch.trim();
 	const recipeSearchResults = trimmedRecipeSearch

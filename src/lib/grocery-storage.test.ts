@@ -49,7 +49,7 @@ describe("loadGroceryLists / saveGroceryList", () => {
 
 	it("round-trips a saved grocery list through localStorage", () => {
 		const list = makeList();
-		saveGroceryList(list);
+		saveGroceryList([], list);
 
 		expect(loadGroceryLists()).toEqual([list]);
 	});
@@ -58,8 +58,8 @@ describe("loadGroceryLists / saveGroceryList", () => {
 		const first = makeList({ name: "first" });
 		const second = makeList({ name: "second" });
 
-		saveGroceryList(first);
-		saveGroceryList(second);
+		const afterFirst = saveGroceryList([], first);
+		saveGroceryList(afterFirst, second);
 
 		expect(loadGroceryLists().map((l) => l.name)).toEqual(["second", "first"]);
 	});
@@ -98,7 +98,7 @@ describe("loadGroceryLists / saveGroceryList", () => {
 	});
 
 	it("keeps this feature's lists under a separate storage key from recipes", () => {
-		saveGroceryList(makeList());
+		saveGroceryList([], makeList());
 
 		expect(window.localStorage.getItem("cookerist:recipes")).toBeNull();
 		expect(
@@ -111,10 +111,10 @@ describe("deleteGroceryList", () => {
 	it("removes the matching list and persists the rest", () => {
 		const first = makeList({ name: "first" });
 		const second = makeList({ name: "second" });
-		saveGroceryList(first);
-		saveGroceryList(second);
+		const afterFirst = saveGroceryList([], first);
+		const afterSecond = saveGroceryList(afterFirst, second);
 
-		const result = deleteGroceryList(first.id);
+		const result = deleteGroceryList(afterSecond, first.id);
 
 		expect(result).toEqual([second]);
 		expect(loadGroceryLists()).toEqual([second]);
@@ -122,9 +122,9 @@ describe("deleteGroceryList", () => {
 
 	it("is a no-op when the id isn't found", () => {
 		const list = makeList();
-		saveGroceryList(list);
+		const lists = saveGroceryList([], list);
 
-		expect(deleteGroceryList("not-a-real-id")).toEqual([list]);
+		expect(deleteGroceryList(lists, "not-a-real-id")).toEqual([list]);
 	});
 });
 
@@ -132,11 +132,11 @@ describe("updateGroceryList", () => {
 	it("replaces the matching list in place and persists it", () => {
 		const first = makeList({ name: "first" });
 		const second = makeList({ name: "second" });
-		saveGroceryList(first);
-		saveGroceryList(second);
+		const afterFirst = saveGroceryList([], first);
+		const afterSecond = saveGroceryList(afterFirst, second);
 
 		const updatedFirst = { ...first, expanded: true };
-		const result = updateGroceryList(updatedFirst);
+		const result = updateGroceryList(afterSecond, updatedFirst);
 
 		expect(result).toEqual([second, updatedFirst]);
 		expect(loadGroceryLists()).toEqual([second, updatedFirst]);
@@ -144,9 +144,21 @@ describe("updateGroceryList", () => {
 
 	it("is a no-op when the id isn't found", () => {
 		const list = makeList();
-		saveGroceryList(list);
+		const lists = saveGroceryList([], list);
 
-		expect(updateGroceryList({ ...list, id: "not-a-real-id" })).toEqual([list]);
+		expect(updateGroceryList(lists, { ...list, id: "not-a-real-id" })).toEqual([
+			list,
+		]);
+	});
+
+	it("keeps every other list's object reference unchanged (perf: avoids re-rendering unrelated rows)", () => {
+		const first = makeList({ name: "first" });
+		const second = makeList({ name: "second" });
+		const lists = saveGroceryList(saveGroceryList([], first), second);
+
+		const result = updateGroceryList(lists, { ...first, expanded: true });
+
+		expect(result.find((l) => l.id === second.id)).toBe(second);
 	});
 });
 
@@ -154,10 +166,10 @@ describe("setExpandedGroceryList", () => {
 	it("expands the matching list and collapses every other one", () => {
 		const first = makeList({ name: "first", expanded: true });
 		const second = makeList({ name: "second" });
-		saveGroceryList(first);
-		saveGroceryList(second);
+		const afterFirst = saveGroceryList([], first);
+		const afterSecond = saveGroceryList(afterFirst, second);
 
-		const result = setExpandedGroceryList(first.id);
+		const result = setExpandedGroceryList(afterSecond, first.id);
 
 		expect(result.find((l) => l.id === first.id)?.expanded).toBe(true);
 		expect(result.find((l) => l.id === second.id)?.expanded).toBe(false);
@@ -165,10 +177,26 @@ describe("setExpandedGroceryList", () => {
 
 	it("collapses every list when passed null", () => {
 		const list = makeList({ expanded: true });
-		saveGroceryList(list);
+		const lists = saveGroceryList([], list);
 
-		const result = setExpandedGroceryList(null);
+		const result = setExpandedGroceryList(lists, null);
 
 		expect(result.every((l) => l.expanded === false)).toBe(true);
+	});
+
+	it("keeps lists whose expanded state doesn't change referentially identical (perf)", () => {
+		const first = makeList({ name: "first" });
+		const second = makeList({ name: "second" });
+		const third = makeList({ name: "third" });
+		const lists = saveGroceryList(
+			saveGroceryList(saveGroceryList([], first), second),
+			third,
+		);
+		const firstBefore = lists.find((l) => l.id === first.id);
+
+		const expandedSecond = setExpandedGroceryList(lists, second.id);
+		const expandedThird = setExpandedGroceryList(expandedSecond, third.id);
+
+		expect(expandedThird.find((l) => l.id === first.id)).toBe(firstBefore);
 	});
 });

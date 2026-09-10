@@ -3,7 +3,11 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroceryList } from "#/lib/grocery-list";
-import { saveGroceryList, setExpandedGroceryList } from "#/lib/grocery-storage";
+import {
+	loadGroceryLists,
+	saveGroceryList,
+	setExpandedGroceryList,
+} from "#/lib/grocery-storage";
 import {
 	loadRecipes,
 	saveRecipe,
@@ -87,6 +91,7 @@ afterEach(() => {
 function seedRecipes(count: number) {
 	for (let i = 0; i < count; i++) {
 		saveRecipe(
+			loadRecipes(),
 			toStoredRecipe(`prompt ${i}`, { ...validRecipe, title: `Recipe ${i}` }),
 		);
 	}
@@ -124,7 +129,10 @@ function seedRecipe(overrides: {
 		title: overrides.title,
 		difficulty: overrides.difficulty ?? validRecipe.difficulty,
 	});
-	saveRecipe({ ...recipe, favorite: overrides.favorite ?? false });
+	saveRecipe(loadRecipes(), {
+		...recipe,
+		favorite: overrides.favorite ?? false,
+	});
 }
 
 describe("Home", () => {
@@ -357,7 +365,7 @@ describe("Home", () => {
 
 		it("clears every localStorage key and reloads once the reset is confirmed", async () => {
 			seedRecipes(1);
-			saveGroceryList(makeGroceryList());
+			saveGroceryList(loadGroceryLists(), makeGroceryList());
 			window.localStorage.setItem("cookerist:theme", "dark");
 			const reload = vi.fn();
 			Object.defineProperty(window, "location", {
@@ -397,7 +405,7 @@ describe("Home", () => {
 
 		seedRecipes(15);
 		const target = loadRecipes()[12];
-		setExpandedRecipe(target.id);
+		setExpandedRecipe(loadRecipes(), target.id);
 
 		renderHome();
 
@@ -699,7 +707,10 @@ describe("Home", () => {
 
 		it("switches to the Grocery Lists view and back via the icon toggle", async () => {
 			seedRecipes(1);
-			saveGroceryList(makeGroceryList({ name: "Weeknight Groceries" }));
+			saveGroceryList(
+				loadGroceryLists(),
+				makeGroceryList({ name: "Weeknight Groceries" }),
+			);
 			renderHome();
 			const user = userEvent.setup();
 
@@ -747,7 +758,10 @@ describe("Home", () => {
 		it("scrolls to and focuses a grocery list when it's expanded by clicking it", async () => {
 			const scrollIntoViewMock = vi.fn();
 			Element.prototype.scrollIntoView = scrollIntoViewMock;
-			saveGroceryList(makeGroceryList({ name: "Weeknight Groceries" }));
+			saveGroceryList(
+				loadGroceryLists(),
+				makeGroceryList({ name: "Weeknight Groceries" }),
+			);
 			renderHome();
 			const user = userEvent.setup();
 
@@ -765,8 +779,8 @@ describe("Home", () => {
 			const scrollIntoViewMock = vi.fn();
 			Element.prototype.scrollIntoView = scrollIntoViewMock;
 			const list = makeGroceryList({ name: "Weeknight Groceries" });
-			saveGroceryList(list);
-			setExpandedGroceryList(list.id);
+			const lists = saveGroceryList(loadGroceryLists(), list);
+			setExpandedGroceryList(lists, list.id);
 
 			renderHome();
 
@@ -792,7 +806,7 @@ describe("Home", () => {
 		});
 
 		it("keeps the create entry point available once lists already exist", async () => {
-			saveGroceryList(makeGroceryList());
+			saveGroceryList(loadGroceryLists(), makeGroceryList());
 			renderHome();
 			const user = userEvent.setup();
 
@@ -873,7 +887,10 @@ describe("Home", () => {
 		});
 
 		it("deletes a grocery list from the list and localStorage after confirming", async () => {
-			saveGroceryList(makeGroceryList({ name: "Weeknight Groceries" }));
+			saveGroceryList(
+				loadGroceryLists(),
+				makeGroceryList({ name: "Weeknight Groceries" }),
+			);
 			renderHome();
 			const user = userEvent.setup();
 
@@ -895,7 +912,10 @@ describe("Home", () => {
 		});
 
 		it("expands a grocery list row in place and collapses it again on second click", async () => {
-			saveGroceryList(makeGroceryList({ name: "Weeknight Groceries" }));
+			saveGroceryList(
+				loadGroceryLists(),
+				makeGroceryList({ name: "Weeknight Groceries" }),
+			);
 			renderHome();
 			const user = userEvent.setup();
 
@@ -916,8 +936,7 @@ describe("Home", () => {
 		it("only keeps one grocery list row expanded at a time and persists it", async () => {
 			const first = makeGroceryList({ name: "First List" });
 			const second = makeGroceryList({ name: "Second List" });
-			saveGroceryList(first);
-			saveGroceryList(second);
+			saveGroceryList(saveGroceryList(loadGroceryLists(), first), second);
 			renderHome();
 			const user = userEvent.setup();
 
@@ -941,7 +960,7 @@ describe("Home", () => {
 		it("opens the edit form pre-populated and saves changes over the existing list", async () => {
 			seedRecipe({ title: "Garlic Shrimp Pasta" });
 			const recipe = loadRecipes()[0];
-			saveGroceryList({
+			saveGroceryList(loadGroceryLists(), {
 				id: "list-1",
 				createdAt: "2026-01-01T00:00:00.000Z",
 				name: "Weeknight Groceries",

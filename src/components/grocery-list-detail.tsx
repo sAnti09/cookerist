@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Checkbox } from "#/components/ui/checkbox";
 import { IngredientLine } from "#/components/ui/ingredient-line";
 import {
@@ -47,7 +48,7 @@ function ItemList({
 	);
 }
 
-export function GroceryListDetail({
+export const GroceryListDetail = memo(function GroceryListDetail({
 	list,
 	recipes,
 	onUpdate,
@@ -139,4 +140,4 @@ export function GroceryListDetail({
 			</section>
 		</div>
 	);
-}
+});

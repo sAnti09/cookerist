@@ -102,7 +102,7 @@ describe("loadRecipes / saveRecipe", () => {
 		expect(loadRecipes()).toEqual([]);
 
 		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
-		saveRecipe(recipe);
+		saveRecipe([], recipe);
 
 		expect(loadRecipes()).toEqual([recipe]);
 	});
@@ -111,8 +111,8 @@ describe("loadRecipes / saveRecipe", () => {
 		const first = toStoredRecipe("first prompt", recipeInput);
 		const second = toStoredRecipe("second prompt", recipeInput);
 
-		saveRecipe(first);
-		saveRecipe(second);
+		const afterFirst = saveRecipe([], first);
+		saveRecipe(afterFirst, second);
 
 		expect(loadRecipes().map((r) => r.prompt)).toEqual([
 			"second prompt",
@@ -236,10 +236,10 @@ describe("deleteRecipe", () => {
 	it("removes the matching recipe and persists the rest", () => {
 		const first = toStoredRecipe("first prompt", recipeInput);
 		const second = toStoredRecipe("second prompt", recipeInput);
-		saveRecipe(first);
-		saveRecipe(second);
+		const afterFirst = saveRecipe([], first);
+		const afterSecond = saveRecipe(afterFirst, second);
 
-		const result = deleteRecipe(first.id);
+		const result = deleteRecipe(afterSecond, first.id);
 
 		expect(result).toEqual([second]);
 		expect(loadRecipes()).toEqual([second]);
@@ -247,9 +247,9 @@ describe("deleteRecipe", () => {
 
 	it("is a no-op when the id isn't found", () => {
 		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
-		saveRecipe(recipe);
+		const recipes = saveRecipe([], recipe);
 
-		expect(deleteRecipe("not-a-real-id")).toEqual([recipe]);
+		expect(deleteRecipe(recipes, "not-a-real-id")).toEqual([recipe]);
 	});
 });
 
@@ -257,11 +257,11 @@ describe("updateRecipe", () => {
 	it("replaces the matching recipe in place and persists it", () => {
 		const first = toStoredRecipe("first prompt", recipeInput);
 		const second = toStoredRecipe("second prompt", recipeInput);
-		saveRecipe(first);
-		saveRecipe(second);
+		const afterFirst = saveRecipe([], first);
+		const afterSecond = saveRecipe(afterFirst, second);
 
 		const updatedFirst = { ...first, currentServings: 4 };
-		const result = updateRecipe(updatedFirst);
+		const result = updateRecipe(afterSecond, updatedFirst);
 
 		expect(result).toEqual([second, updatedFirst]);
 		expect(loadRecipes()).toEqual([second, updatedFirst]);
@@ -269,9 +269,21 @@ describe("updateRecipe", () => {
 
 	it("is a no-op when the id isn't found", () => {
 		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
-		saveRecipe(recipe);
+		const recipes = saveRecipe([], recipe);
 
-		expect(updateRecipe({ ...recipe, id: "not-a-real-id" })).toEqual([recipe]);
+		expect(updateRecipe(recipes, { ...recipe, id: "not-a-real-id" })).toEqual([
+			recipe,
+		]);
+	});
+
+	it("keeps every other recipe's object reference unchanged (perf: avoids re-rendering unrelated rows)", () => {
+		const first = toStoredRecipe("first prompt", recipeInput);
+		const second = toStoredRecipe("second prompt", recipeInput);
+		const recipes = saveRecipe(saveRecipe([], first), second);
+
+		const result = updateRecipe(recipes, { ...first, currentServings: 4 });
+
+		expect(result.find((r) => r.id === second.id)).toBe(second);
 	});
 });
 
@@ -280,13 +292,13 @@ describe("updateRecipes", () => {
 		const first = toStoredRecipe("first prompt", recipeInput);
 		const second = toStoredRecipe("second prompt", recipeInput);
 		const third = toStoredRecipe("third prompt", recipeInput);
-		saveRecipe(first);
-		saveRecipe(second);
-		saveRecipe(third);
+		const afterFirst = saveRecipe([], first);
+		const afterSecond = saveRecipe(afterFirst, second);
+		const afterThird = saveRecipe(afterSecond, third);
 
 		const updatedFirst = { ...first, currentServings: 4 };
 		const updatedThird = { ...third, currentServings: 6 };
-		const result = updateRecipes([updatedFirst, updatedThird]);
+		const result = updateRecipes(afterThird, [updatedFirst, updatedThird]);
 
 		expect(result).toEqual([updatedThird, second, updatedFirst]);
 		expect(loadRecipes()).toEqual(result);
@@ -294,18 +306,18 @@ describe("updateRecipes", () => {
 
 	it("is a no-op for ids that aren't found", () => {
 		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
-		saveRecipe(recipe);
+		const recipes = saveRecipe([], recipe);
 
-		expect(updateRecipes([{ ...recipe, id: "not-a-real-id" }])).toEqual([
-			recipe,
-		]);
+		expect(
+			updateRecipes(recipes, [{ ...recipe, id: "not-a-real-id" }]),
+		).toEqual([recipe]);
 	});
 
 	it("returns the unmodified list when passed no recipes", () => {
 		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
-		saveRecipe(recipe);
+		const recipes = saveRecipe([], recipe);
 
-		expect(updateRecipes([])).toEqual([recipe]);
+		expect(updateRecipes(recipes, [])).toEqual([recipe]);
 	});
 });
 
@@ -313,10 +325,10 @@ describe("setExpandedRecipe", () => {
 	it("expands the matching recipe and collapses every other one", () => {
 		const first = toStoredRecipe("first prompt", recipeInput);
 		const second = toStoredRecipe("second prompt", recipeInput);
-		saveRecipe({ ...first, expanded: true });
-		saveRecipe(second);
+		const afterFirst = saveRecipe([], { ...first, expanded: true });
+		const afterSecond = saveRecipe(afterFirst, second);
 
-		const result = setExpandedRecipe(second.id);
+		const result = setExpandedRecipe(afterSecond, second.id);
 
 		expect(result.find((r) => r.id === first.id)?.expanded).toBe(false);
 		expect(result.find((r) => r.id === second.id)?.expanded).toBe(true);
@@ -325,11 +337,27 @@ describe("setExpandedRecipe", () => {
 
 	it("collapses everything when passed null", () => {
 		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
-		saveRecipe({ ...recipe, expanded: true });
+		const recipes = saveRecipe([], { ...recipe, expanded: true });
 
-		const result = setExpandedRecipe(null);
+		const result = setExpandedRecipe(recipes, null);
 
 		expect(result.every((r) => r.expanded === false)).toBe(true);
+	});
+
+	it("keeps recipes whose expanded state doesn't change referentially identical (perf)", () => {
+		const first = toStoredRecipe("first prompt", recipeInput);
+		const second = toStoredRecipe("second prompt", recipeInput);
+		const third = toStoredRecipe("third prompt", recipeInput);
+		const recipes = saveRecipe(
+			saveRecipe(saveRecipe([], first), second),
+			third,
+		);
+		const firstBefore = recipes.find((r) => r.id === first.id);
+
+		const expandedSecond = setExpandedRecipe(recipes, second.id);
+		const expandedThird = setExpandedRecipe(expandedSecond, third.id);
+
+		expect(expandedThird.find((r) => r.id === first.id)).toBe(firstBefore);
 	});
 });
 
@@ -337,10 +365,10 @@ describe("toggleFavoriteRecipe", () => {
 	it("flips the matching recipe's favorite state and persists it", () => {
 		const first = toStoredRecipe("first prompt", recipeInput);
 		const second = toStoredRecipe("second prompt", recipeInput);
-		saveRecipe(first);
-		saveRecipe(second);
+		const afterFirst = saveRecipe([], first);
+		const afterSecond = saveRecipe(afterFirst, second);
 
-		const result = toggleFavoriteRecipe(first.id);
+		const result = toggleFavoriteRecipe(afterSecond, first.id);
 
 		expect(result.find((r) => r.id === first.id)?.favorite).toBe(true);
 		expect(result.find((r) => r.id === second.id)?.favorite).toBe(false);
@@ -349,18 +377,18 @@ describe("toggleFavoriteRecipe", () => {
 
 	it("toggles back to false on a second call", () => {
 		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
-		saveRecipe(recipe);
+		const recipes = saveRecipe([], recipe);
 
-		toggleFavoriteRecipe(recipe.id);
-		const result = toggleFavoriteRecipe(recipe.id);
+		const afterFirstToggle = toggleFavoriteRecipe(recipes, recipe.id);
+		const result = toggleFavoriteRecipe(afterFirstToggle, recipe.id);
 
 		expect(result[0].favorite).toBe(false);
 	});
 
 	it("is a no-op when the id isn't found", () => {
 		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
-		saveRecipe(recipe);
+		const recipes = saveRecipe([], recipe);
 
-		expect(toggleFavoriteRecipe("not-a-real-id")).toEqual([recipe]);
+		expect(toggleFavoriteRecipe(recipes, "not-a-real-id")).toEqual([recipe]);
 	});
 });

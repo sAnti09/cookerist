@@ -1,5 +1,5 @@
 import { ChevronDown, Clock, Flame, Star, Trash2, Wand2 } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { RecipeDetail } from "#/components/recipe-detail";
 import { RecipeModificationDialog } from "#/components/recipe-modification-dialog";
 import { Button } from "#/components/ui/button";
@@ -50,7 +50,11 @@ export function PendingResultRow({
 	);
 }
 
-export function RecipeResultRow({
+// Memoized so an unrelated recipe's checkbox/servings/favorite change doesn't
+// re-render every other row on the page — this only helps when the callback
+// props below are themselves referentially stable (see the useCallback
+// wrapping in routes/index.tsx).
+export const RecipeResultRow = memo(function RecipeResultRow({
 	recipe,
 	onDelete,
 	onToggleExpand,
@@ -262,4 +266,4 @@ export function RecipeResultRow({
 			</div>
 		</div>
 	);
-}
+});

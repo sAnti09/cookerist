@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Flame, Plus, Search, Star } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FeatureSection } from "#/components/feature-section";
 import { GroceryListCreateForm } from "#/components/grocery-list-create-form";
 import { GroceryListRow } from "#/components/grocery-list-row";
@@ -76,6 +76,15 @@ export function Home() {
 	>(null);
 	const sentinelRef = useRef<HTMLDivElement | null>(null);
 	const isInitialFilterMount = useRef(true);
+	// Mirrors the latest recipes/groceryLists state so handlers passed to
+	// memoized row components (RecipeResultRow, GroceryListRow) can read
+	// current state without needing it in their own dependency array — that
+	// would otherwise force a new handler reference (and a re-render of every
+	// row) on every recipe/grocery-list change.
+	const recipesRef = useRef<Recipe[]>(recipes);
+	recipesRef.current = recipes;
+	const groceryListsRef = useRef<GroceryList[]>(groceryLists);
+	groceryListsRef.current = groceryLists;
 	const mutation = useMutation({
 		mutationFn: (prompt: string) => generateRecipe({ data: prompt }),
 	});
@@ -137,7 +146,15 @@ export function Home() {
 		favoritesOnly,
 	};
 	const filtersActive = hasActiveFilters(filters);
-	const filteredRecipes = filterRecipes(recipes, filters);
+	// `filters` above is a fresh object every render, so memoizing on it
+	// directly would never skip a recompute — depend on its primitive fields
+	// instead, so this only reruns the full-list filter when they (or
+	// `recipes`) actually change, not on every unrelated re-render.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally depends on the primitive filter fields rather than the `filters` object (see comment above)
+	const filteredRecipes = useMemo(
+		() => filterRecipes(recipes, filters),
+		[recipes, searchQuery, difficultyFilter, favoritesOnly],
+	);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally re-runs on filter change to reset pagination, not to read the values
 	useEffect(() => {
@@ -172,63 +189,72 @@ export function Home() {
 		return () => observer.disconnect();
 	}, [hasMore]);
 
-	function handleDelete(id: string) {
-		setRecipes(deleteRecipe(id));
-	}
+	// The handlers below are wrapped in useCallback with stable (empty, or
+	// ref-only) dependencies and use functional setState — they're passed as
+	// props into RecipeResultRow/GroceryListRow, which are React.memo'd so
+	// only the row that actually changed re-renders. A handler that changed
+	// reference on every recipes/groceryLists update would defeat that: every
+	// row would see a "new" prop and re-render regardless of memoization.
+	const handleDelete = useCallback((id: string) => {
+		setRecipes((current) => deleteRecipe(current, id));
+	}, []);
 
-	function handleToggleExpand(id: string) {
-		const recipe = recipes.find((r) => r.id === id);
+	const handleToggleExpand = useCallback((id: string) => {
+		const recipe = recipesRef.current.find((r) => r.id === id);
 		const expanding = !recipe?.expanded;
-		setRecipes(setExpandedRecipe(expanding ? id : null));
+		setRecipes((current) => setExpandedRecipe(current, expanding ? id : null));
 		// Collapsing whichever recipe was previously expanded can shift this
 		// one up or down the page (its content was likely much taller) —
 		// scroll/focus it back into view rather than leaving it wherever that
 		// reflow happens to land it.
 		if (expanding) setPendingScrollToElementId(`recipe-${id}`);
-	}
+	}, []);
 
-	function handleUpdateRecipe(recipe: Recipe) {
-		setRecipes(updateRecipe(recipe));
-	}
+	const handleUpdateRecipe = useCallback((recipe: Recipe) => {
+		setRecipes((current) => updateRecipe(current, recipe));
+	}, []);
 
-	function handleCreateRecipe(recipe: Recipe) {
-		setRecipes(saveRecipe(recipe));
+	const handleCreateRecipe = useCallback((recipe: Recipe) => {
 		// Expand the newly forked recipe (accordion-style, collapsing whichever
-		// one was previously open) and scroll it into view — it's prepended to
-		// the top of the list, but the viewport may be scrolled elsewhere.
-		setRecipes(setExpandedRecipe(recipe.id));
+		// one was previously open) — it's prepended to the top of the list, but
+		// the viewport may be scrolled elsewhere, so scroll it into view too.
+		setRecipes((current) =>
+			setExpandedRecipe(saveRecipe(current, recipe), recipe.id),
+		);
 		setPendingScrollToElementId(`recipe-${recipe.id}`);
-	}
+	}, []);
 
-	function handleUpdateRecipes(recipesToUpdate: Recipe[]) {
-		setRecipes(updateRecipes(recipesToUpdate));
-	}
+	const handleUpdateRecipes = useCallback((recipesToUpdate: Recipe[]) => {
+		setRecipes((current) => updateRecipes(current, recipesToUpdate));
+	}, []);
 
-	function handleToggleFavorite(id: string) {
-		setRecipes(toggleFavoriteRecipe(id));
-	}
+	const handleToggleFavorite = useCallback((id: string) => {
+		setRecipes((current) => toggleFavoriteRecipe(current, id));
+	}, []);
 
-	function handleDeleteGroceryList(id: string) {
-		setGroceryLists(deleteGroceryList(id));
-	}
+	const handleDeleteGroceryList = useCallback((id: string) => {
+		setGroceryLists((current) => deleteGroceryList(current, id));
+	}, []);
 
-	function handleToggleExpandGroceryList(id: string) {
-		const list = groceryLists.find((l) => l.id === id);
+	const handleToggleExpandGroceryList = useCallback((id: string) => {
+		const list = groceryListsRef.current.find((l) => l.id === id);
 		const expanding = !list?.expanded;
-		setGroceryLists(setExpandedGroceryList(expanding ? id : null));
+		setGroceryLists((current) =>
+			setExpandedGroceryList(current, expanding ? id : null),
+		);
 		if (expanding) setPendingScrollToElementId(`grocery-list-${id}`);
-	}
+	}, []);
 
-	function handleUpdateGroceryList(list: GroceryList) {
-		setGroceryLists(updateGroceryList(list));
-	}
+	const handleUpdateGroceryList = useCallback((list: GroceryList) => {
+		setGroceryLists((current) => updateGroceryList(current, list));
+	}, []);
+
+	const handleEditGroceryList = useCallback((list: GroceryList) => {
+		setEditingGroceryList(list);
+	}, []);
 
 	function handleCreateGroceryList() {
 		setCreatingGroceryList(true);
-	}
-
-	function handleEditGroceryList(list: GroceryList) {
-		setEditingGroceryList(list);
 	}
 
 	function handleResetAllData() {
@@ -237,8 +263,10 @@ export function Home() {
 	}
 
 	function handleGroceryListSaved(list: GroceryList) {
-		setGroceryLists(
-			editingGroceryList ? updateGroceryList(list) : saveGroceryList(list),
+		setGroceryLists((current) =>
+			editingGroceryList
+				? updateGroceryList(current, list)
+				: saveGroceryList(current, list),
 		);
 		setCreatingGroceryList(false);
 		setEditingGroceryList(null);
@@ -265,7 +293,7 @@ export function Home() {
 						result.recipe,
 						result.truncated,
 					);
-					setRecipes(saveRecipe(recipe));
+					setRecipes((current) => saveRecipe(current, recipe));
 					setPending((rows) => rows.filter((row) => row.localId !== localId));
 					return;
 				}

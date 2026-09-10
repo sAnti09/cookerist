@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { ChefHat } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { CookMode } from "#/components/cook-mode";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
@@ -19,7 +19,13 @@ type RecipeDetailProps = {
 const CONTINUATION_ERROR_MESSAGE =
 	"Couldn't load the rest of the recipe. Please try again.";
 
-export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
+// Memoized so toggling an ingredient/step in one expanded recipe doesn't
+// re-render other rows' detail panels (only one is normally expanded at a
+// time anyway, but this keeps it cheap regardless).
+export const RecipeDetail = memo(function RecipeDetail({
+	recipe,
+	onUpdate,
+}: RecipeDetailProps) {
 	const [continuationError, setContinuationError] = useState<string | null>(
 		null,
 	);
@@ -269,4 +275,4 @@ export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
 			) : null}
 		</>
 	);
-}
+});

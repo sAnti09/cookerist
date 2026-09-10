@@ -1,5 +1,5 @@
 import { ChevronDown, CircleCheck, Pencil, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { GroceryListDetail } from "#/components/grocery-list-detail";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
@@ -11,7 +11,14 @@ import { cn } from "#/lib/utils";
 // chip stays scannable.
 const RECIPE_TITLES_INLINE_LIMIT = 3;
 
-export function GroceryListRow({
+// Memoized so an unrelated grocery list's item check doesn't re-render every
+// other row on the page — this only helps when the callback props below are
+// themselves referentially stable (see the useCallback wrapping in
+// routes/index.tsx). Note this row still re-renders whenever `recipes`
+// changes, since checking a recipe-linked item updates that shared array —
+// only a custom-item check or an edit/delete on an unrelated list fully
+// skips re-rendering other rows.
+export const GroceryListRow = memo(function GroceryListRow({
 	list,
 	recipes,
 	onDelete,
@@ -201,4 +208,4 @@ export function GroceryListRow({
 			</div>
 		</div>
 	);
-}
+});

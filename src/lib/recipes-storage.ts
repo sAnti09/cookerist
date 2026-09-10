@@ -36,42 +36,60 @@ function persist(recipes: Recipe[]): void {
 	window.localStorage.setItem(STORAGE_KEY, JSON.stringify(recipes));
 }
 
-export function saveRecipe(recipe: Recipe): Recipe[] {
-	const next = [recipe, ...loadRecipes()];
+// All mutation helpers below take the caller's current in-memory list rather
+// than re-reading and re-normalizing it from localStorage on every call —
+// that reload used to run on every single checkbox toggle, parsing and
+// reallocating the *entire* stored recipe list for a one-recipe change. The
+// in-memory list (already normalized once via loadRecipes() at mount) is the
+// same data, so this drops the redundant work without changing behavior.
+// Untouched recipes keep their exact object reference so React can skip
+// re-rendering rows that didn't change.
+
+export function saveRecipe(recipes: Recipe[], recipe: Recipe): Recipe[] {
+	const next = [recipe, ...recipes];
 	persist(next);
 	return next;
 }
 
-export function deleteRecipe(id: string): Recipe[] {
-	const next = loadRecipes().filter((recipe) => recipe.id !== id);
+export function deleteRecipe(recipes: Recipe[], id: string): Recipe[] {
+	const next = recipes.filter((recipe) => recipe.id !== id);
 	persist(next);
 	return next;
 }
 
-export function updateRecipe(recipe: Recipe): Recipe[] {
-	const next = loadRecipes().map((r) => (r.id === recipe.id ? recipe : r));
+export function updateRecipe(recipes: Recipe[], recipe: Recipe): Recipe[] {
+	const next = recipes.map((r) => (r.id === recipe.id ? recipe : r));
 	persist(next);
 	return next;
 }
 
-// Like updateRecipe, but replaces several recipes in one load/persist cycle —
+// Like updateRecipe, but replaces several recipes in one persist cycle —
 // used when a single action (e.g. checking a merged grocery item, TEST-242)
 // touches ingredients across more than one recipe at once.
-export function updateRecipes(recipes: Recipe[]): Recipe[] {
-	const byId = new Map(recipes.map((recipe) => [recipe.id, recipe]));
-	const next = loadRecipes().map((r) => byId.get(r.id) ?? r);
+export function updateRecipes(
+	recipes: Recipe[],
+	recipesToUpdate: Recipe[],
+): Recipe[] {
+	const byId = new Map(recipesToUpdate.map((recipe) => [recipe.id, recipe]));
+	const next = recipes.map((r) => byId.get(r.id) ?? r);
 	persist(next);
 	return next;
 }
 
-export function setExpandedRecipe(id: string | null): Recipe[] {
-	const next = loadRecipes().map((r) => ({ ...r, expanded: r.id === id }));
+export function setExpandedRecipe(
+	recipes: Recipe[],
+	id: string | null,
+): Recipe[] {
+	const next = recipes.map((r) => {
+		const expanded = r.id === id;
+		return r.expanded === expanded ? r : { ...r, expanded };
+	});
 	persist(next);
 	return next;
 }
 
-export function toggleFavoriteRecipe(id: string): Recipe[] {
-	const next = loadRecipes().map((r) =>
+export function toggleFavoriteRecipe(recipes: Recipe[], id: string): Recipe[] {
+	const next = recipes.map((r) =>
 		r.id === id ? { ...r, favorite: !r.favorite } : r,
 	);
 	persist(next);
