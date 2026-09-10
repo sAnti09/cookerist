@@ -423,7 +423,7 @@ describe("Home", () => {
 		const user = userEvent.setup();
 
 		await user.click(screen.getByRole("button", { name: /^Recipe 0/ }));
-		await user.click(screen.getByText(/300 g shrimp/));
+		await user.click(screen.getByText("shrimp"));
 		await user.click(screen.getByRole("button", { name: "Increase servings" }));
 
 		const [stored] = JSON.parse(
@@ -431,7 +431,7 @@ describe("Home", () => {
 		);
 		expect(stored.ingredients[0].checked).toBe(true);
 		expect(stored.currentServings).toBe(3);
-		expect(screen.getByText(/450 g shrimp/)).toBeInTheDocument();
+		expect(screen.getByText("450 g")).toBeInTheDocument();
 	});
 
 	describe("search and filters", () => {

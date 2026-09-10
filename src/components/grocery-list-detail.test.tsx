@@ -85,8 +85,10 @@ describe("GroceryListDetail", () => {
 
 		expect(screen.getByText("From recipes")).toBeInTheDocument();
 		expect(screen.getByText("Custom")).toBeInTheDocument();
-		expect(screen.getByText(/1 lb shrimp/)).toBeInTheDocument();
-		expect(screen.getByText(/2 rolls paper towels/)).toBeInTheDocument();
+		expect(screen.getByText("1 lb")).toBeInTheDocument();
+		expect(screen.getByText("shrimp")).toBeInTheDocument();
+		expect(screen.getByText("2 rolls")).toBeInTheDocument();
+		expect(screen.getByText("paper towels")).toBeInTheDocument();
 	});
 
 	it("omits a section when it has no items", () => {
@@ -111,7 +113,7 @@ describe("GroceryListDetail", () => {
 		const user = userEvent.setup();
 		const { onUpdate } = renderDetail();
 
-		await user.click(screen.getByText(/1 lb shrimp/));
+		await user.click(screen.getByText("shrimp"));
 
 		expect(onUpdate).toHaveBeenCalledWith({
 			...list,
@@ -123,7 +125,7 @@ describe("GroceryListDetail", () => {
 		const user = userEvent.setup();
 		const { onUpdateRecipes } = renderDetail();
 
-		await user.click(screen.getByText(/1 lb shrimp/));
+		await user.click(screen.getByText("shrimp"));
 
 		expect(onUpdateRecipes).toHaveBeenCalledWith([
 			{
@@ -147,7 +149,7 @@ describe("GroceryListDetail", () => {
 			],
 		);
 
-		await user.click(screen.getByText(/1 lb shrimp/));
+		await user.click(screen.getByText("shrimp"));
 
 		expect(onUpdateRecipes).toHaveBeenCalledWith([
 			{
@@ -161,7 +163,7 @@ describe("GroceryListDetail", () => {
 		const user = userEvent.setup();
 		const { onUpdateRecipes } = renderDetail();
 
-		await user.click(screen.getByText(/2 rolls paper towels/));
+		await user.click(screen.getByText("paper towels"));
 
 		expect(onUpdateRecipes).not.toHaveBeenCalled();
 	});
@@ -206,7 +208,8 @@ describe("GroceryListDetail", () => {
 			],
 		});
 
-		expect(screen.getByText("1 egg")).toBeInTheDocument();
+		expect(screen.getByText("1")).toBeInTheDocument();
+		expect(screen.getByText("egg")).toBeInTheDocument();
 		expect(screen.queryByText(/1 egg egg/)).not.toBeInTheDocument();
 	});
 
@@ -241,7 +244,8 @@ describe("GroceryListDetail", () => {
 			],
 		});
 
-		expect(screen.getByText(/≈212.5 g sugar/)).toBeInTheDocument();
+		expect(screen.getByText("≈212.5 g")).toBeInTheDocument();
+		expect(screen.getByText("sugar")).toBeInTheDocument();
 		expect(screen.getByText(/estimated by converting/)).toBeInTheDocument();
 	});
 });

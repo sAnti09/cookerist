@@ -187,7 +187,8 @@ describe("GroceryListCreateForm", () => {
 
 		await addRecipe(user, "Shrimp Pasta");
 
-		expect(screen.getByText(/1 lb shrimp/)).toBeInTheDocument();
+		expect(screen.getByText("1 lb")).toBeInTheDocument();
+		expect(screen.getByText("shrimp")).toBeInTheDocument();
 	});
 
 	it("combines differently-described ingredients under a shared base name in the preview (TEST-255 AC2)", async () => {
@@ -236,7 +237,8 @@ describe("GroceryListCreateForm", () => {
 		// flagged approximate ("≈") since it required that estimate. Prep
 		// detail ("chopped"/"minced") doesn't appear — it's not shown on the
 		// grocery list at all.
-		expect(screen.getByText("≈1 bulb garlic")).toBeInTheDocument();
+		expect(screen.getByText("≈1 bulb")).toBeInTheDocument();
+		expect(screen.getByText("garlic")).toBeInTheDocument();
 		expect(
 			screen.getByText(/estimated by converting between measurements/i),
 		).toBeInTheDocument();
@@ -258,13 +260,15 @@ describe("GroceryListCreateForm", () => {
 		renderForm({ recipes: [makeRecipe()] });
 
 		await addRecipe(user, "Shrimp Pasta");
-		expect(screen.getByText(/1 lb shrimp/)).toBeInTheDocument();
+		expect(screen.getByText("1 lb")).toBeInTheDocument();
+		expect(screen.getByText("shrimp")).toBeInTheDocument();
 
 		await user.click(
 			screen.getByRole("button", { name: "Remove Shrimp Pasta" }),
 		);
 
-		expect(screen.queryByText(/1 lb shrimp/)).not.toBeInTheDocument();
+		expect(screen.queryByText("1 lb")).not.toBeInTheDocument();
+		expect(screen.queryByText("shrimp")).not.toBeInTheDocument();
 	});
 
 	it("changing a recipe's servings calls onUpdateRecipe and rescales the preview", async () => {
@@ -293,7 +297,8 @@ describe("GroceryListCreateForm", () => {
 			/>,
 		);
 
-		expect(screen.getByText(/1.5 lb shrimp/)).toBeInTheDocument();
+		expect(screen.getByText("1.5 lb")).toBeInTheDocument();
+		expect(screen.getByText("shrimp")).toBeInTheDocument();
 	});
 
 	it("renders the ingredient preview as a bulleted list", async () => {
@@ -302,7 +307,7 @@ describe("GroceryListCreateForm", () => {
 
 		await addRecipe(user, "Shrimp Pasta");
 
-		const preview = screen.getByText(/1 lb shrimp/).closest("ul");
+		const preview = screen.getByText("shrimp").closest("ul");
 		expect(preview).toHaveClass("list-disc");
 	});
 
@@ -369,7 +374,8 @@ describe("GroceryListCreateForm", () => {
 		await user.click(screen.getByRole("button", { name: "Add" }));
 
 		// Appears once in the "Custom ingredients" list and once in the preview.
-		expect(screen.getAllByText("2 roll Paper towels")).toHaveLength(2);
+		expect(screen.getAllByText("2 roll")).toHaveLength(2);
+		expect(screen.getAllByText("Paper towels")).toHaveLength(2);
 		expect(screen.getByLabelText("Custom ingredient name")).toHaveValue("");
 	});
 
@@ -382,7 +388,8 @@ describe("GroceryListCreateForm", () => {
 		await user.type(screen.getByLabelText("Custom ingredient unit"), "egg");
 		await user.click(screen.getByRole("button", { name: "Add" }));
 
-		expect(screen.getAllByText("1 Egg")).toHaveLength(2);
+		expect(screen.getAllByText("1")).toHaveLength(2);
+		expect(screen.getAllByText("Egg")).toHaveLength(2);
 		expect(screen.queryByText(/1 egg Egg/i)).not.toBeInTheDocument();
 		expect(screen.queryByText(/1 Egg egg/)).not.toBeInTheDocument();
 	});
@@ -395,11 +402,13 @@ describe("GroceryListCreateForm", () => {
 		await user.type(screen.getByLabelText("Custom ingredient quantity"), "1");
 		await user.type(screen.getByLabelText("Custom ingredient unit"), "pack");
 		await user.click(screen.getByRole("button", { name: "Add" }));
-		expect(screen.getAllByText("1 pack Napkins")).toHaveLength(2);
+		expect(screen.getAllByText("1 pack")).toHaveLength(2);
+		expect(screen.getAllByText("Napkins")).toHaveLength(2);
 
 		await user.click(screen.getByRole("button", { name: "Remove Napkins" }));
 
-		expect(screen.queryByText("1 pack Napkins")).not.toBeInTheDocument();
+		expect(screen.queryByText("1 pack")).not.toBeInTheDocument();
+		expect(screen.queryByText("Napkins")).not.toBeInTheDocument();
 	});
 
 	describe("smart-parsing the item field on Enter", () => {
@@ -412,7 +421,8 @@ describe("GroceryListCreateForm", () => {
 				"1 pc chicken{Enter}",
 			);
 
-			expect(screen.getAllByText("1 pc chicken")).toHaveLength(2);
+			expect(screen.getAllByText("1 pc")).toHaveLength(2);
+			expect(screen.getAllByText("chicken")).toHaveLength(2);
 			expect(screen.getByLabelText("Custom ingredient name")).toHaveValue("");
 			expect(screen.getByLabelText("Custom ingredient quantity")).toHaveValue(
 				null,
@@ -429,7 +439,8 @@ describe("GroceryListCreateForm", () => {
 				"5 tuna sardines{Enter}",
 			);
 
-			expect(screen.getAllByText("5 piece tuna sardines")).toHaveLength(2);
+			expect(screen.getAllByText("5 piece")).toHaveLength(2);
+			expect(screen.getAllByText("tuna sardines")).toHaveLength(2);
 		});
 
 		it("defaults quantity 1 and unit piece for a bare item name, and adds it", async () => {
@@ -441,7 +452,8 @@ describe("GroceryListCreateForm", () => {
 				"table{Enter}",
 			);
 
-			expect(screen.getAllByText("1 piece table")).toHaveLength(2);
+			expect(screen.getAllByText("1 piece")).toHaveLength(2);
+			expect(screen.getAllByText("table")).toHaveLength(2);
 		});
 
 		it("does nothing when Enter is pressed in an empty item field", async () => {
@@ -469,7 +481,8 @@ describe("GroceryListCreateForm", () => {
 				"box{Enter}",
 			);
 
-			expect(screen.getAllByText("1 box Salt")).toHaveLength(2);
+			expect(screen.getAllByText("1 box")).toHaveLength(2);
+			expect(screen.getAllByText("Salt")).toHaveLength(2);
 		});
 	});
 
@@ -681,7 +694,8 @@ describe("GroceryListCreateForm", () => {
 			).toBeInTheDocument();
 			expect(screen.getByText("Shrimp Pasta")).toBeInTheDocument();
 			expect(screen.queryByText("Garlic Bread")).not.toBeInTheDocument();
-			expect(screen.getAllByText("2 pack napkins")).toHaveLength(2);
+			expect(screen.getAllByText("2 pack")).toHaveLength(2);
+			expect(screen.getAllByText("napkins")).toHaveLength(2);
 			expect(screen.getByLabelText("List name")).toHaveValue("My Custom Name");
 		});
 
@@ -708,13 +722,15 @@ describe("GroceryListCreateForm", () => {
 				editingList: makeEditingList(),
 			});
 
-			expect(screen.getByText(/1 lb shrimp/)).toBeInTheDocument();
+			expect(screen.getByText("1 lb")).toBeInTheDocument();
+			expect(screen.getByText("shrimp")).toBeInTheDocument();
 
 			await addRecipe(user, "Garlic Bread");
 
 			// 2 cloves -> 2/10 bulb (garlic's known piece ratio, see
 			// ingredient-piece-ratio.ts), rounded up to 1 bulb.
-			expect(screen.getByText(/≈1 bulb garlic/)).toBeInTheDocument();
+			expect(screen.getByText("≈1 bulb")).toBeInTheDocument();
+			expect(screen.getByText("garlic")).toBeInTheDocument();
 		});
 
 		it("shows a confirmation dialog before saving that mentions replacing the prior recipe relationship", async () => {

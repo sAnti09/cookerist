@@ -57,8 +57,10 @@ describe("RecipeDetail", () => {
 
 		expect(screen.getByText(baseRecipe.prompt)).toBeInTheDocument();
 		expect(screen.getByText(baseRecipe.overview)).toBeInTheDocument();
-		expect(screen.getByText(/300 g shrimp/)).toBeInTheDocument();
-		expect(screen.getByText(/4 cloves garlic/)).toBeInTheDocument();
+		expect(screen.getByText("300 g")).toBeInTheDocument();
+		expect(screen.getByText("shrimp")).toBeInTheDocument();
+		expect(screen.getByText("4 cloves")).toBeInTheDocument();
+		expect(screen.getByText("garlic")).toBeInTheDocument();
 	});
 
 	it("does not repeat the difficulty badge or estimated time (already shown on the collapsed row)", () => {
@@ -97,8 +99,8 @@ describe("RecipeDetail", () => {
 			</QueryClientProvider>,
 		);
 
-		expect(screen.getByText(/450 g shrimp/)).toBeInTheDocument();
-		expect(screen.getByText(/6 cloves garlic/)).toBeInTheDocument();
+		expect(screen.getByText("450 g")).toBeInTheDocument();
+		expect(screen.getByText("6 cloves")).toBeInTheDocument();
 	});
 
 	it("does not decrease servings below 1", async () => {
@@ -116,7 +118,7 @@ describe("RecipeDetail", () => {
 		const user = userEvent.setup();
 		renderDetail(baseRecipe, onUpdate);
 
-		await user.click(screen.getByText(/300 g shrimp/));
+		await user.click(screen.getByText("shrimp"));
 
 		expect(onUpdate).toHaveBeenCalledWith({
 			...baseRecipe,
@@ -199,7 +201,8 @@ describe("RecipeDetail", () => {
 		};
 		renderDetail(recipeWithDuplicateUnit, vi.fn());
 
-		expect(screen.getByText("1 egg")).toBeInTheDocument();
+		expect(screen.getByText("1")).toBeInTheDocument();
+		expect(screen.getByText("egg")).toBeInTheDocument();
 		expect(screen.queryByText(/1 egg egg/)).not.toBeInTheDocument();
 	});
 

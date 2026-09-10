@@ -43,14 +43,14 @@ function isDuplicateUnit(unit: string, text: string): boolean {
 }
 
 /**
- * Composes the full display line for an ingredient/grocery item: quantity,
- * unit, and name. As defense-in-depth against an LLM restating the
- * ingredient's own name as its "unit" (e.g. `{ text: "egg", unit: "egg" }`),
- * the unit is omitted when it's a duplicate of the ingredient text. Also
- * omits the unit when it's empty, joining only the non-empty parts with a
- * single space so the result never has a double space.
+ * Composes just the "quantity [unit]" portion of an ingredient/grocery item
+ * display line — the part meant to render visually separate from the
+ * ingredient name (see `IngredientLine`). As defense-in-depth against an LLM
+ * restating the ingredient's own name as its "unit" (e.g.
+ * `{ text: "egg", unit: "egg" }`), the unit is omitted when it's a duplicate
+ * of the ingredient text. Also omits the unit when it's empty.
  */
-export function formatIngredientLine(
+export function formatIngredientQuantity(
 	quantity: number,
 	unit: string,
 	text: string,
@@ -61,6 +61,21 @@ export function formatIngredientLine(
 	if (trimmedUnit && !isDuplicateUnit(trimmedUnit, trimmedText)) {
 		parts.push(trimmedUnit);
 	}
-	parts.push(trimmedText);
-	return parts.filter(Boolean).join(" ");
+	return parts.join(" ");
+}
+
+/**
+ * Composes the full display line for an ingredient/grocery item: quantity,
+ * unit, and name, joining only the non-empty parts with a single space so
+ * the result never has a double space.
+ */
+export function formatIngredientLine(
+	quantity: number,
+	unit: string,
+	text: string,
+): string {
+	const trimmedText = text.trim();
+	return [formatIngredientQuantity(quantity, unit, text), trimmedText]
+		.filter(Boolean)
+		.join(" ");
 }

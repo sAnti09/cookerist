@@ -3,7 +3,11 @@ import { lookupIngredientDensity } from "./ingredient-density";
 import { lookupLengthDensity } from "./ingredient-length-density";
 import { lookupPieceRatio } from "./ingredient-piece-ratio";
 import type { Recipe } from "./recipe";
-import { formatIngredientLine, scaleQuantity } from "./scale-servings";
+import {
+	formatIngredientLine,
+	formatIngredientQuantity,
+	scaleQuantity,
+} from "./scale-servings";
 import { isSizeWordUnit, stripSizeDescriptor } from "./size-descriptor";
 import {
 	convertFromBase,
@@ -426,6 +430,16 @@ export function carryOverCheckedState(
 		...item,
 		checked: previouslyChecked.get(checkedStateKey(item)) ?? false,
 	}));
+}
+
+// Renders just the "quantity [unit]" portion of a grocery item's display
+// line — the part meant to render visually separate from the item name (see
+// `IngredientLine`). For a quantity estimated by converting between mass and
+// volume via an approximate ingredient density (see ingredient-density.ts),
+// prefixes it with "≈" so it doesn't read as an exact total, e.g. "≈425 g".
+export function formatGroceryItemQuantity(item: GroceryListItem): string {
+	const base = formatIngredientQuantity(item.quantity, item.unit, item.text);
+	return item.approximate ? `≈${base}` : base;
 }
 
 // Renders a grocery item's display line — deliberately never includes

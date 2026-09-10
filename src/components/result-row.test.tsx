@@ -225,14 +225,15 @@ describe("RecipeResultRow", () => {
 		renderRow({ recipe: { ...recipe, expanded: true } });
 
 		expect(screen.getByText(recipe.overview)).toBeInTheDocument();
-		expect(screen.getByText(/300 g shrimp/)).toBeInTheDocument();
+		expect(screen.getByText("300 g")).toBeInTheDocument();
+		expect(screen.getByText("shrimp")).toBeInTheDocument();
 	});
 
 	it("forwards ingredient toggles from the detail view to onUpdate", async () => {
 		const user = userEvent.setup();
 		const { props } = renderRow({ recipe: { ...recipe, expanded: true } });
 
-		await user.click(screen.getByText(/300 g shrimp/));
+		await user.click(screen.getByText("shrimp"));
 
 		expect(props.onUpdate).toHaveBeenCalledWith({
 			...recipe,

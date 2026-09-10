@@ -8,13 +8,14 @@ import {
 } from "react";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { IngredientLine } from "#/components/ui/ingredient-line";
 import { ServingsStepper } from "#/components/ui/servings-stepper";
 import {
 	APPROXIMATE_ITEMS_NOTE,
 	aggregateGroceryItems,
 	type CustomGroceryIngredient,
 	carryOverCheckedState,
-	formatGroceryItemLine,
+	formatGroceryItemQuantity,
 } from "#/lib/aggregate-grocery-items";
 import { filterRecipes } from "#/lib/filter-recipes";
 import {
@@ -24,7 +25,7 @@ import {
 } from "#/lib/grocery-list";
 import { parseCustomIngredientInput } from "#/lib/parse-custom-ingredient";
 import type { Recipe } from "#/lib/recipe";
-import { formatIngredientLine } from "#/lib/scale-servings";
+import { formatIngredientQuantity } from "#/lib/scale-servings";
 
 // How many search matches to surface at once — enough to scan, not enough to
 // turn the dropdown back into "just show every recipe".
@@ -330,13 +331,14 @@ export function GroceryListCreateForm({
 										key={item.localId}
 										className="flex items-center justify-between gap-2 rounded-[10px] bg-bg2 px-3 py-1.5 text-sm"
 									>
-										<span className="tabular-nums">
-											{formatIngredientLine(
+										<IngredientLine
+											quantity={formatIngredientQuantity(
 												item.quantity,
 												item.unit,
 												item.text,
 											)}
-										</span>
+											name={item.text}
+										/>
 										<Button
 											variant="secondary"
 											className="size-7 shrink-0 rounded-[10px] border-0 bg-transparent p-0"
@@ -415,8 +417,11 @@ export function GroceryListCreateForm({
 							<>
 								<ul className="mt-2 grid grid-cols-1 list-disc gap-1.5 pl-5 text-sm min-[420px]:grid-cols-2">
 									{previewItems.map((item) => (
-										<li key={item.id} className="tabular-nums">
-											{formatGroceryItemLine(item)}
+										<li key={item.id}>
+											<IngredientLine
+												quantity={formatGroceryItemQuantity(item)}
+												name={item.text}
+											/>
 										</li>
 									))}
 								</ul>

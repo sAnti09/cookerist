@@ -4,9 +4,10 @@ import { useState } from "react";
 import { CookMode } from "#/components/cook-mode";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
+import { IngredientLine } from "#/components/ui/ingredient-line";
 import { ServingsStepper } from "#/components/ui/servings-stepper";
 import { combineIngredientName, groupSteps, type Recipe } from "#/lib/recipe";
-import { formatIngredientLine, scaleQuantity } from "#/lib/scale-servings";
+import { formatIngredientQuantity, scaleQuantity } from "#/lib/scale-servings";
 import { continueRecipe } from "#/server/generate-recipe";
 
 type RecipeDetailProps = {
@@ -183,14 +184,9 @@ export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
 									checked={ingredient.checked}
 									onChange={() => handleToggleIngredient(ingredient.id)}
 									label={
-										<span
-											className={
-												ingredient.checked
-													? "tabular-nums text-ink-dim line-through"
-													: "tabular-nums"
-											}
-										>
-											{formatIngredientLine(
+										<IngredientLine
+											checked={ingredient.checked}
+											quantity={formatIngredientQuantity(
 												scaleQuantity(
 													ingredient.quantity,
 													recipe.baseServings,
@@ -199,7 +195,8 @@ export function RecipeDetail({ recipe, onUpdate }: RecipeDetailProps) {
 												ingredient.unit,
 												ingredient.text,
 											)}
-										</span>
+											name={ingredient.text}
+										/>
 									}
 								/>
 							</li>
