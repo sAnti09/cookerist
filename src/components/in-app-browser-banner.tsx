@@ -20,7 +20,7 @@ function defaultNavigate(url: string) {
 export function InAppBrowserBanner({
 	navigate = defaultNavigate,
 }: InAppBrowserBannerProps) {
-	const { inAppBrowserName, isAndroid, isIOS, escapeUrl } = useInstallPrompt();
+	const { inAppBrowserName, isAndroid, escapeUrl } = useInstallPrompt();
 	const attemptedRef = useRef(false);
 
 	useEffect(() => {
@@ -49,11 +49,8 @@ export function InAppBrowserBanner({
 					</a>
 				) : (
 					<>
-						Tap the{" "}
-						<span className="font-medium">
-							{isIOS ? "Share" : "••• (or ⋮)"}
-						</span>{" "}
-						menu, choose <span className="font-medium">"Open in Browser"</span>
+						Tap the <span className="font-medium">••• (or ⋮) menu</span>, choose{" "}
+						<span className="font-medium">"Open in Browser"</span>
 					</>
 				)}{" "}
 				— Cookerist will reopen there, where you can install it as an app for

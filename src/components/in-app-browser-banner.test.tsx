@@ -42,7 +42,7 @@ describe("InAppBrowserBanner", () => {
 
 		expect(navigate).not.toHaveBeenCalled();
 		expect(screen.getByText(/instagram's in-app browser/i)).toBeInTheDocument();
-		expect(screen.getByText("Share")).toBeInTheDocument();
+		expect(screen.getByText("••• (or ⋮) menu")).toBeInTheDocument();
 		expect(
 			screen.queryByRole("link", { name: /open in chrome/i }),
 		).not.toBeInTheDocument();
