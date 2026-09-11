@@ -28,6 +28,23 @@ function isIOSDevice(): boolean {
 	return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
+export function isAndroidDevice(): boolean {
+	if (typeof navigator === "undefined") return false;
+	return /android/i.test(navigator.userAgent);
+}
+
+// Android can hand a page off to a real browser via an `intent://` URL even
+// from inside a WebView (e.g. Messenger's) that blocks a normal https link
+// from escaping. Nothing tells us whether the handoff actually worked, so
+// callers must always pair this with a visible manual fallback too.
+// `S.browser_fallback_url` sends the user back to the same https URL if
+// Chrome isn't installed, so the redirect at least still lands somewhere.
+export function buildAndroidBrowserEscapeUrl(url: string): string {
+	const parsed = new URL(url);
+	const target = `${parsed.host}${parsed.pathname}${parsed.search}${parsed.hash}`;
+	return `intent://${target}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url)};end`;
+}
+
 // In-app webviews (opened from a chat/social app's own link preview) block
 // beforeinstallprompt and can't be escaped via a menu the user already
 // knows to look for, so we name the culprit and tell them to hop out to a
@@ -80,11 +97,20 @@ export function useInstallPrompt() {
 		setDeferredPrompt(null);
 	}
 
+	const inAppBrowserName = detectInAppBrowser();
+	const isAndroid = isAndroidDevice();
+	const escapeUrl =
+		inAppBrowserName && isAndroid && typeof window !== "undefined"
+			? buildAndroidBrowserEscapeUrl(window.location.href)
+			: null;
+
 	return {
 		installed,
 		canPromptNatively: deferredPrompt !== null,
 		isIOS: isIOSDevice(),
-		inAppBrowserName: detectInAppBrowser(),
+		isAndroid,
+		inAppBrowserName,
+		escapeUrl,
 		promptInstall,
 	};
 }

@@ -42,11 +42,27 @@ class MockIntersectionObserver {
 
 const generateRecipeMock = vi.fn();
 const modifyRecipeMock = vi.fn();
+const identifyDishMock = vi.fn();
 
 vi.mock("#/server/generate-recipe", () => ({
 	generateRecipe: (...args: unknown[]) => generateRecipeMock(...args),
 	continueRecipe: vi.fn(),
 	modifyRecipe: (...args: unknown[]) => modifyRecipeMock(...args),
+}));
+
+vi.mock("#/server/identify-dish", () => ({
+	identifyDish: (...args: unknown[]) => identifyDishMock(...args),
+}));
+
+// The real compressor uses createImageBitmap/canvas, neither meaningfully
+// available in jsdom — these tests care about the routing/state logic around
+// a selected photo, not image processing, so it's replaced with an instant
+// stand-in.
+vi.mock("#/lib/image-capture", () => ({
+	compressImageToDataUrl: vi.fn(() =>
+		Promise.resolve("data:image/jpeg;base64,compressed"),
+	),
+	isImageFile: (file: File) => file.type.startsWith("image/"),
 }));
 
 const validRecipe = {
@@ -77,9 +93,20 @@ async function submitPrompt(prompt: string) {
 	await user.click(screen.getByRole("button", { name: "Get recipe" }));
 }
 
+// Goes straight to the (hidden) gallery file input rather than through the
+// camera/gallery menu — the menu's own wiring is covered by
+// photo-picker-button.test.tsx; these tests care about what happens once a
+// photo has been picked, regardless of which entry point produced it.
+async function selectPhoto(file: File) {
+	const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+	if (!input) throw new Error("photo input not found");
+	await userEvent.upload(input, file);
+}
+
 beforeEach(() => {
 	generateRecipeMock.mockReset();
 	modifyRecipeMock.mockReset();
+	identifyDishMock.mockReset();
 	window.localStorage.clear();
 	MockIntersectionObserver.instances = [];
 	vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
@@ -294,6 +321,34 @@ describe("Home", () => {
 			screen.getByText(/doesn't look like a cooking request/i),
 		).toBeInTheDocument();
 		expect(screen.getByText("Second Dish")).toBeInTheDocument();
+	});
+
+	it("clears an unrelated leftover error notification once a new submission starts simmering", async () => {
+		generateRecipeMock.mockResolvedValueOnce({
+			type: "error",
+			message: "Malformed recipe response from Groq",
+		});
+		renderHome();
+		await submitPrompt("first dish");
+		expect(
+			await screen.findByText("Malformed recipe response from Groq"),
+		).toBeInTheDocument();
+
+		let resolveSecond!: (value: unknown) => void;
+		generateRecipeMock.mockReturnValueOnce(
+			new Promise((r) => {
+				resolveSecond = r;
+			}),
+		);
+		await submitPrompt("second dish");
+
+		expect(
+			screen.queryByText("Malformed recipe response from Groq"),
+		).not.toBeInTheDocument();
+		expect(screen.getByRole("status")).toHaveTextContent(/second dish/i);
+
+		resolveSecond({ type: "success", recipe: validRecipe });
+		expect(await screen.findByText(validRecipe.title)).toBeInTheDocument();
 	});
 
 	it("shows an empty-state placeholder when there are no results", () => {
@@ -1021,6 +1076,144 @@ describe("Home", () => {
 				text: "shrimp",
 				checked: true,
 			});
+		});
+	});
+
+	describe("photo identification", () => {
+		it("shows an identifying loading row with a thumbnail, then hands off to normal generation", async () => {
+			let resolveIdentify!: (value: unknown) => void;
+			let resolveGenerate!: (value: unknown) => void;
+			identifyDishMock.mockReturnValueOnce(
+				new Promise((r) => {
+					resolveIdentify = r;
+				}),
+			);
+			// Held open (rather than resolved immediately) so the intermediate
+			// "generating" state — description known, still no recipe yet — is
+			// actually observable instead of being batched straight through to
+			// the final result.
+			generateRecipeMock.mockReturnValueOnce(
+				new Promise((r) => {
+					resolveGenerate = r;
+				}),
+			);
+			renderHome();
+			const file = new File(["data"], "dish.jpg", { type: "image/jpeg" });
+
+			await selectPhoto(file);
+
+			expect(screen.getByText(/identifying your photo/i)).toBeInTheDocument();
+			expect(document.querySelector("img")).toHaveAttribute("src");
+
+			await act(async () => {
+				resolveIdentify({
+					type: "success",
+					description: "creamy garlic butter shrimp pasta",
+				});
+				await Promise.resolve();
+			});
+
+			expect(screen.getByText(/simmering your/i)).toHaveTextContent(
+				"creamy garlic butter shrimp pasta",
+			);
+			// The thumbnail carries through into the generation stage instead of
+			// flashing back to the plain flame icon.
+			expect(document.querySelector("img")).toHaveAttribute("src");
+			expect(generateRecipeMock).toHaveBeenCalledWith({
+				data: expect.objectContaining({
+					prompt: "creamy garlic butter shrimp pasta",
+				}),
+			});
+
+			resolveGenerate({ type: "success", recipe: validRecipe });
+
+			expect(await screen.findByText(validRecipe.title)).toBeInTheDocument();
+			expect(screen.queryByRole("status")).not.toBeInTheDocument();
+		});
+
+		it("shows a photo-specific rejection when the photo isn't food, without calling generateRecipe", async () => {
+			identifyDishMock.mockResolvedValueOnce({ type: "not_food" });
+			renderHome();
+
+			await selectPhoto(new File(["data"], "dish.jpg", { type: "image/jpeg" }));
+
+			expect(
+				await screen.findByText(/doesn't look like a dish/i),
+			).toBeInTheDocument();
+			expect(generateRecipeMock).not.toHaveBeenCalled();
+		});
+
+		it("offers 'Choose another photo' instead of Retry for a not-a-dish rejection, and picking one starts a fresh identification", async () => {
+			identifyDishMock.mockResolvedValueOnce({ type: "not_food" });
+			renderHome();
+			await selectPhoto(new File(["data"], "dish.jpg", { type: "image/jpeg" }));
+			await screen.findByText(/doesn't look like a dish/i);
+			expect(
+				screen.queryByRole("button", { name: "Retry" }),
+			).not.toBeInTheDocument();
+
+			identifyDishMock.mockResolvedValueOnce({
+				type: "success",
+				description: "pancakes with syrup",
+			});
+			generateRecipeMock.mockResolvedValueOnce({
+				type: "success",
+				recipe: { ...validRecipe, title: "Pancakes" },
+			});
+			const chooseControl = screen.getByText("Choose another photo");
+			const input = chooseControl
+				.closest("label")
+				?.querySelector<HTMLInputElement>('input[type="file"]');
+			if (!input) throw new Error("choose-another-photo input not found");
+			await userEvent.upload(
+				input,
+				new File(["data"], "pancakes.jpg", { type: "image/jpeg" }),
+			);
+
+			expect(
+				screen.queryByText(/doesn't look like a dish/i),
+			).not.toBeInTheDocument();
+			expect(await screen.findByText("Pancakes")).toBeInTheDocument();
+			expect(identifyDishMock).toHaveBeenCalledTimes(2);
+		});
+
+		it("retrying an identification error re-runs identification with the same photo", async () => {
+			identifyDishMock.mockResolvedValueOnce({
+				type: "error",
+				message: "Malformed dish identification response from Groq",
+			});
+			renderHome();
+			await selectPhoto(new File(["data"], "dish.jpg", { type: "image/jpeg" }));
+			const retryButton = await screen.findByRole("button", { name: "Retry" });
+			expect(
+				screen.getByText("Malformed dish identification response from Groq"),
+			).toBeInTheDocument();
+
+			identifyDishMock.mockResolvedValueOnce({
+				type: "success",
+				description: "pancakes with syrup",
+			});
+			generateRecipeMock.mockResolvedValueOnce({
+				type: "success",
+				recipe: { ...validRecipe, title: "Pancakes" },
+			});
+			const user = userEvent.setup();
+			await user.click(retryButton);
+
+			expect(await screen.findByText("Pancakes")).toBeInTheDocument();
+			expect(identifyDishMock).toHaveBeenCalledTimes(2);
+		});
+
+		it("shows a generic error and retry when the identify call throws", async () => {
+			identifyDishMock.mockRejectedValueOnce(new Error("network down"));
+			renderHome();
+
+			await selectPhoto(new File(["data"], "dish.jpg", { type: "image/jpeg" }));
+
+			expect(
+				await screen.findByText(/something went wrong identifying/i),
+			).toBeInTheDocument();
+			expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
 		});
 	});
 });

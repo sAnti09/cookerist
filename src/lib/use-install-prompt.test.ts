@@ -1,6 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useInstallPrompt } from "./use-install-prompt";
+import {
+	buildAndroidBrowserEscapeUrl,
+	useInstallPrompt,
+} from "./use-install-prompt";
 
 function dispatchBeforeInstallPrompt() {
 	const event = new Event("beforeinstallprompt", { cancelable: true });
@@ -69,6 +72,29 @@ describe("useInstallPrompt", () => {
 		const { result } = renderHook(() => useInstallPrompt());
 
 		expect(result.current.inAppBrowserName).toBeNull();
+		expect(result.current.escapeUrl).toBeNull();
+	});
+
+	it("exposes an Android escape URL when in Facebook's in-app browser on Android", () => {
+		stubUserAgent(
+			"Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 [FB_IAB/FB4A;FBAV/440.0]",
+		);
+		const { result } = renderHook(() => useInstallPrompt());
+
+		expect(result.current.isAndroid).toBe(true);
+		expect(result.current.escapeUrl).toBe(
+			buildAndroidBrowserEscapeUrl(window.location.href),
+		);
+	});
+
+	it("does not expose an escape URL for an in-app browser on iOS", () => {
+		stubUserAgent(
+			"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Instagram 300.0.0.0.0",
+		);
+		const { result } = renderHook(() => useInstallPrompt());
+
+		expect(result.current.isAndroid).toBe(false);
+		expect(result.current.escapeUrl).toBeNull();
 	});
 
 	it("captures beforeinstallprompt and exposes a working promptInstall", async () => {
@@ -114,5 +140,17 @@ describe("useInstallPrompt", () => {
 		});
 
 		expect(result.current.canPromptNatively).toBe(false);
+	});
+});
+
+describe("buildAndroidBrowserEscapeUrl", () => {
+	it("builds an intent URL targeting Chrome with the original URL as a fallback", () => {
+		const url = buildAndroidBrowserEscapeUrl(
+			"https://cookerist.example.com/some/path?q=1",
+		);
+
+		expect(url).toBe(
+			"intent://cookerist.example.com/some/path?q=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fcookerist.example.com%2Fsome%2Fpath%3Fq%3D1;end",
+		);
 	});
 });

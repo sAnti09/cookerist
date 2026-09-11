@@ -4,6 +4,15 @@ export const onTopicResponseSchema = z.object({
 	on_topic: z.boolean(),
 });
 
+export const dishIdentificationResponseSchema = z.object({
+	is_food: z.boolean(),
+	description: z.string(),
+});
+
+export type DishIdentificationResponse = z.infer<
+	typeof dishIdentificationResponseSchema
+>;
+
 export const difficultySchema = z.enum([
 	"quick_and_easy",
 	"intermediate",

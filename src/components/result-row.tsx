@@ -1,10 +1,19 @@
-import { ChevronDown, Clock, Flame, Star, Trash2, Wand2 } from "lucide-react";
+import {
+	ChevronDown,
+	Clock,
+	Flame,
+	Image as ImageIcon,
+	Star,
+	Trash2,
+	Wand2,
+} from "lucide-react";
 import { memo, useState } from "react";
 import { RecipeDetail } from "#/components/recipe-detail";
 import { RecipeModificationDialog } from "#/components/recipe-modification-dialog";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DifficultyBadge } from "#/components/ui/difficulty-badge";
+import { isImageFile } from "#/lib/image-capture";
 import {
 	formatCaloriesPerServing,
 	formatEstimatedTime,
@@ -22,25 +31,76 @@ export type PendingRow = {
 	// the same way again, so this row's Retry behaves differently (see
 	// PendingResultRow below).
 	offTopic?: boolean;
+	// Present only for a photo-originated request — carries the compressed
+	// image (so Retry can re-identify without asking the user to reselect a
+	// photo) and a thumbnail to show in place of the flame icon while
+	// loading. `stage` distinguishes the initial vision call from the normal
+	// recipe generation that follows it, since there's no user-typed prompt
+	// yet during "identifying".
+	photo?: {
+		previewUrl: string;
+		dataUrl: string;
+		stage: "identifying" | "generating";
+	};
 };
 
 export function PendingResultRow({
 	row,
 	onRetry,
+	onChoosePhoto,
 }: {
 	row: PendingRow;
 	onRetry: (row: PendingRow) => void;
+	// Only called for a photo that Groq identified as not being a dish —
+	// there's no prompt text to hand back for editing there (unlike a typed
+	// off-topic prompt), so instead of a "Retry" that would just repeat the
+	// same rejection, this row goes straight into picking a different photo.
+	onChoosePhoto: (row: PendingRow, file: File) => void;
 }) {
 	if (row.status === "loading") {
 		return (
 			<output className="card flex items-center gap-3 bg-card p-4">
-				<Flame
-					className="flame-flicker size-5 shrink-0 text-accent"
-					fill="currentColor"
-					aria-hidden="true"
-				/>
-				<p className="text-sm text-ink-dim">Simmering your “{row.prompt}”…</p>
+				{row.photo ? (
+					<img
+						src={row.photo.previewUrl}
+						alt=""
+						className="size-10 shrink-0 rounded-[10px] object-cover"
+					/>
+				) : (
+					<Flame
+						className="flame-flicker size-5 shrink-0 text-accent"
+						fill="currentColor"
+						aria-hidden="true"
+					/>
+				)}
+				<p className="text-sm text-ink-dim">
+					{row.photo?.stage === "identifying"
+						? "Identifying your photo…"
+						: `Simmering your “${row.prompt}”…`}
+				</p>
 			</output>
+		);
+	}
+
+	if (row.photo && row.offTopic) {
+		return (
+			<div className="card border-warn bg-warn-wash p-4">
+				<p className="text-sm text-warn">{row.message}</p>
+				<label className="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-input bg-transparent px-4 py-2 text-sm font-medium transition-colors hover:bg-secondary">
+					<ImageIcon className="size-4" aria-hidden="true" />
+					Choose another photo
+					<input
+						type="file"
+						accept="image/*"
+						className="hidden"
+						onChange={(event) => {
+							const file = event.target.files?.[0];
+							event.target.value = "";
+							if (file && isImageFile(file)) onChoosePhoto(row, file);
+						}}
+					/>
+				</label>
+			</div>
 		);
 	}
 

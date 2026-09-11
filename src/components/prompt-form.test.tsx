@@ -9,10 +9,12 @@ import { PromptForm } from "./prompt-form";
 // real caller, without needing to render the whole route.
 function ControlledPromptForm({
 	onSubmit,
+	onPhotoSelected = vi.fn(),
 	disabled,
 	initialValue = "",
 }: {
 	onSubmit: (prompt: string) => void;
+	onPhotoSelected?: (file: File) => void;
 	disabled?: boolean;
 	initialValue?: string;
 }) {
@@ -22,6 +24,7 @@ function ControlledPromptForm({
 			value={value}
 			onChange={setValue}
 			onSubmit={onSubmit}
+			onPhotoSelected={onPhotoSelected}
 			disabled={disabled}
 		/>
 	);
@@ -109,5 +112,33 @@ describe("PromptForm", () => {
 		);
 
 		expect(screen.getByLabelText("Describe a dish")).toHaveValue("reheat this");
+	});
+
+	it("forwards a selected photo to onPhotoSelected", async () => {
+		const onPhotoSelected = vi.fn();
+		const { container } = render(
+			<ControlledPromptForm
+				onSubmit={vi.fn()}
+				onPhotoSelected={onPhotoSelected}
+			/>,
+		);
+		const galleryInput =
+			container.querySelector<HTMLInputElement>('input[type="file"]');
+		if (!galleryInput) throw new Error("gallery input not found");
+		const file = new File(["data"], "dish.jpg", { type: "image/jpeg" });
+
+		await userEvent.upload(galleryInput, file);
+
+		expect(onPhotoSelected).toHaveBeenCalledWith(file);
+	});
+
+	it("disables the photo picker buttons too when disabled", () => {
+		render(<ControlledPromptForm onSubmit={vi.fn()} disabled />);
+
+		for (const button of screen.getAllByRole("button", {
+			name: "Add a photo",
+		})) {
+			expect(button).toBeDisabled();
+		}
 	});
 });

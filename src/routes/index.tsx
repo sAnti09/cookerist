@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FeatureSection } from "#/components/feature-section";
 import { GroceryListCreateForm } from "#/components/grocery-list-create-form";
 import { GroceryListRow } from "#/components/grocery-list-row";
+import { InAppBrowserBanner } from "#/components/in-app-browser-banner";
 import { OfflineBanner } from "#/components/offline-banner";
 import { PromptForm } from "#/components/prompt-form";
 import {
@@ -25,6 +26,7 @@ import {
 	setExpandedGroceryList,
 	updateGroceryList,
 } from "#/lib/grocery-storage";
+import { compressImageToDataUrl } from "#/lib/image-capture";
 import { DIFFICULTY_LABELS, type Difficulty, type Recipe } from "#/lib/recipe";
 import {
 	deleteRecipe,
@@ -38,15 +40,21 @@ import {
 } from "#/lib/recipes-storage";
 import { resetAllData } from "#/lib/reset-all-data";
 import { useOnlineStatus } from "#/lib/use-online-status";
+import { getUserTimezone } from "#/lib/user-region";
 import { cn } from "#/lib/utils";
 import { generateRecipe } from "#/server/generate-recipe";
+import { identifyDish } from "#/server/identify-dish";
 
 export const Route = createFileRoute("/")({ component: Home });
 
 const OFF_TOPIC_MESSAGE =
 	"That doesn't look like a cooking request — try describing a specific dish, or listing ingredients you have on hand.";
+const PHOTO_NOT_FOOD_MESSAGE =
+	"That doesn't look like a dish — try a clearer photo of food.";
 const GENERIC_ERROR_MESSAGE =
 	"Something went wrong generating that recipe. Please try again.";
+const PHOTO_ERROR_MESSAGE =
+	"Something went wrong identifying that photo. Please try again.";
 const PAGE_SIZE = 10;
 
 export function Home() {
@@ -86,7 +94,12 @@ export function Home() {
 	const groceryListsRef = useRef<GroceryList[]>(groceryLists);
 	groceryListsRef.current = groceryLists;
 	const mutation = useMutation({
-		mutationFn: (prompt: string) => generateRecipe({ data: prompt }),
+		mutationFn: (input: { prompt: string; timezone?: string }) =>
+			generateRecipe({ data: input }),
+	});
+	const identifyMutation = useMutation({
+		mutationFn: (input: { imageDataUrl: string; timezone?: string }) =>
+			identifyDish({ data: input }),
 	});
 
 	useEffect(() => {
@@ -279,13 +292,33 @@ export function Home() {
 		if (view === "grocery") setView("recipes");
 
 		const localId = replaceId ?? crypto.randomUUID();
-		setPending((rows) => [
-			{ localId, prompt, status: "loading" },
-			...rows.filter((row) => row.localId !== localId),
-		]);
+		setPending((rows) => {
+			// Reusing the same localId as an in-flight photo identification
+			// means this call is that flow handing off into generation — carry
+			// its thumbnail through so the loading card stays visually
+			// continuous instead of flashing back to the plain flame icon.
+			const existingPhoto = rows.find((row) => row.localId === localId)?.photo;
+			return [
+				{
+					localId,
+					prompt,
+					status: "loading",
+					photo: existingPhoto
+						? { ...existingPhoto, stage: "generating" }
+						: undefined,
+				},
+				// A new request starting is also a good moment to clear away any
+				// unrelated error notifications left over from an earlier one —
+				// they'd otherwise sit there indefinitely next to a row that's
+				// now happily simmering.
+				...rows.filter(
+					(row) => row.localId !== localId && row.status !== "error",
+				),
+			];
+		});
 
 		mutation
-			.mutateAsync(prompt)
+			.mutateAsync({ prompt, timezone: getUserTimezone() })
 			.then((result) => {
 				if (result.type === "success") {
 					const recipe = toStoredRecipe(
@@ -294,7 +327,11 @@ export function Home() {
 						result.truncated,
 					);
 					setRecipes((current) => saveRecipe(current, recipe));
-					setPending((rows) => rows.filter((row) => row.localId !== localId));
+					setPending((rows) => {
+						const row = rows.find((r) => r.localId === localId);
+						if (row?.photo) URL.revokeObjectURL(row.photo.previewUrl);
+						return rows.filter((r) => r.localId !== localId);
+					});
 					return;
 				}
 
@@ -319,12 +356,107 @@ export function Home() {
 			});
 	}
 
+	// Identifies a photo, then (on success) hands the identified description
+	// straight into the normal text-prompt flow — reusing submit()'s on-topic
+	// check and recipe generation unchanged, so a photo-originated recipe is
+	// indistinguishable from a typed one from that point on.
+	async function runIdentify(localId: string, dataUrl: string) {
+		try {
+			const result = await identifyMutation.mutateAsync({
+				imageDataUrl: dataUrl,
+				timezone: getUserTimezone(),
+			});
+			if (result.type !== "success") {
+				const offTopic = result.type === "not_food";
+				const message = offTopic ? PHOTO_NOT_FOOD_MESSAGE : result.message;
+				setPending((rows) =>
+					rows.map((row) =>
+						row.localId === localId
+							? { ...row, status: "error", message, offTopic }
+							: row,
+					),
+				);
+				return;
+			}
+			submit(result.description, localId);
+		} catch {
+			setPending((rows) =>
+				rows.map((row) =>
+					row.localId === localId
+						? { ...row, status: "error", message: PHOTO_ERROR_MESSAGE }
+						: row,
+				),
+			);
+		}
+	}
+
+	function submitPhoto(file: File) {
+		if (view === "grocery") setView("recipes");
+
+		const localId = crypto.randomUUID();
+		const previewUrl = URL.createObjectURL(file);
+		setPending((rows) => [
+			{
+				localId,
+				prompt: "",
+				status: "loading",
+				photo: { previewUrl, dataUrl: "", stage: "identifying" },
+			},
+			// See the equivalent filter in submit() — a fresh request clears
+			// away unrelated error notifications left over from an earlier one.
+			...rows.filter((row) => row.status !== "error"),
+		]);
+
+		compressImageToDataUrl(file)
+			.then((dataUrl) => {
+				setPending((rows) =>
+					rows.map((row) =>
+						row.localId === localId && row.photo
+							? { ...row, photo: { ...row.photo, dataUrl } }
+							: row,
+					),
+				);
+				return runIdentify(localId, dataUrl);
+			})
+			.catch(() => {
+				setPending((rows) =>
+					rows.map((row) =>
+						row.localId === localId
+							? { ...row, status: "error", message: PHOTO_ERROR_MESSAGE }
+							: row,
+					),
+				);
+			});
+	}
+
 	// An off-topic rejection means the prompt itself was the problem, so
-	// retrying it verbatim would just fail the same way again — instead,
-	// drop the notification and hand the prompt back to the search field so
-	// the user can rephrase it. Any other error is a generation failure, not
-	// a prompt problem, so it retries the same prompt as before.
+	// retrying verbatim would just fail the same way again — drop the
+	// notification and hand the prompt back to the search field so the user
+	// can rephrase it. A photo that isn't a dish is handled separately (see
+	// handleChoosePhoto below), never through this path — there's no prompt
+	// text to hand back for a photo. Any other error is a
+	// generation/identification failure, not a prompt/photo problem, so it
+	// retries the same input (re-identifying from the same photo, for a
+	// photo-originated row).
 	function handleRetry(row: PendingRow) {
+		if (row.photo) {
+			const { localId, photo } = row;
+			setPending((rows) =>
+				rows.map((r) =>
+					r.localId === localId
+						? {
+								...r,
+								status: "loading",
+								message: undefined,
+								offTopic: undefined,
+								photo: { ...photo, stage: "identifying" },
+							}
+						: r,
+				),
+			);
+			void runIdentify(localId, photo.dataUrl);
+			return;
+		}
 		if (row.offTopic) {
 			setPending((rows) => rows.filter((r) => r.localId !== row.localId));
 			setPromptValue(row.prompt);
@@ -333,12 +465,23 @@ export function Home() {
 		submit(row.prompt, row.localId);
 	}
 
+	// The photo Groq identified as not being a dish — rather than a "Retry"
+	// that would just repeat the same rejection, this drops the row and
+	// immediately starts a fresh photo submission with whatever the user
+	// picks next.
+	function handleChoosePhoto(row: PendingRow, file: File) {
+		if (row.photo) URL.revokeObjectURL(row.photo.previewUrl);
+		setPending((rows) => rows.filter((r) => r.localId !== row.localId));
+		submitPhoto(file);
+	}
+
 	return (
 		<>
 			<div className="flex justify-end p-4 sm:sticky sm:top-0 sm:z-20">
 				<ThemeToggle />
 			</div>
 			<div className="mx-auto max-w-2xl p-8 pt-0">
+				<InAppBrowserBanner />
 				<div className="flex flex-col items-center text-center">
 					<h1
 						className="display-title inline-flex items-center text-4xl font-semibold text-ink"
@@ -363,6 +506,7 @@ export function Home() {
 						value={promptValue}
 						onChange={setPromptValue}
 						onSubmit={submit}
+						onPhotoSelected={submitPhoto}
 						disabled={!isOnline}
 					/>
 					<OfflineBanner isOnline={isOnline} />
@@ -450,6 +594,7 @@ export function Home() {
 									key={row.localId}
 									row={row}
 									onRetry={handleRetry}
+									onChoosePhoto={handleChoosePhoto}
 								/>
 							))}
 							{recipes.length === 0 && pending.length === 0 ? (

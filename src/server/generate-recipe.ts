@@ -7,8 +7,8 @@ import {
 import type { RecipeResponse } from "#/lib/groq/schema";
 
 export const generateRecipe = createServerFn({ method: "POST" })
-	.validator((prompt: string) => prompt)
-	.handler(async ({ data }) => generateRecipeCore(data));
+	.validator((data: { prompt: string; timezone?: string }) => data)
+	.handler(async ({ data }) => generateRecipeCore(data.prompt, data.timezone));
 
 export const continueRecipe = createServerFn({ method: "POST" })
 	.validator(

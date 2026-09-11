@@ -1,5 +1,6 @@
 import { Send } from "lucide-react";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
+import { PhotoPickerButton } from "#/components/photo-picker-button";
 import { Button } from "#/components/ui/button";
 import { Textarea } from "#/components/ui/textarea";
 
@@ -7,6 +8,7 @@ type PromptFormProps = {
 	value: string;
 	onChange: (value: string) => void;
 	onSubmit: (prompt: string) => void;
+	onPhotoSelected: (file: File) => void;
 	disabled?: boolean;
 };
 
@@ -14,6 +16,7 @@ export function PromptForm({
 	value,
 	onChange,
 	onSubmit,
+	onPhotoSelected,
 	disabled,
 }: PromptFormProps) {
 	function trySubmit() {
@@ -39,8 +42,12 @@ export function PromptForm({
 	return (
 		<form
 			onSubmit={handleSubmit}
-			className="card flex items-center gap-2 rounded-[28px] bg-surface py-[0.4rem] pr-[0.4rem] pl-[1.3rem] focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
+			className="card flex items-center gap-2 rounded-[28px] bg-surface py-[0.4rem] pr-[0.4rem] pl-[0.4rem] focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
 		>
+			<PhotoPickerButton
+				onPhotoSelected={onPhotoSelected}
+				disabled={disabled}
+			/>
 			<Textarea
 				value={value}
 				onChange={(event) => onChange(event.target.value)}
