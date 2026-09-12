@@ -96,6 +96,64 @@ describe("generateRecipe", () => {
 		expect(createMock).toHaveBeenCalledTimes(2);
 	});
 
+	it("sends the on-topic prompt as the classifier's system message for a craving-style request", async () => {
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(jsonResponse(validRecipe));
+
+		await generateRecipe("delicious and nutritious vegetable dinner");
+
+		const classifierSystemPrompt =
+			createMock.mock.calls[0]?.[0].messages[0].content;
+		expect(classifierSystemPrompt).toContain("craving");
+		expect(classifierSystemPrompt).toContain("meal type");
+	});
+
+	it("returns a parsed recipe for a craving/mood prompt with no named dish or ingredients", async () => {
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(jsonResponse(validRecipe));
+
+		const result = await generateRecipe(
+			"delicious and nutritious vegetable dinner",
+		);
+
+		expect(result).toEqual({
+			type: "success",
+			recipe: validRecipe,
+			truncated: false,
+		});
+		expect(createMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("returns a parsed recipe for a fully open-ended prompt with no anchor at all", async () => {
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(jsonResponse(validRecipe));
+
+		const result = await generateRecipe("what should I eat");
+
+		expect(result).toEqual({
+			type: "success",
+			recipe: validRecipe,
+			truncated: false,
+		});
+		expect(createMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("sends a classifier system prompt that accepts fully open-ended food requests", async () => {
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(jsonResponse(validRecipe));
+
+		await generateRecipe("what should I eat");
+
+		const classifierSystemPrompt =
+			createMock.mock.calls[0]?.[0].messages[0].content;
+		expect(classifierSystemPrompt).toContain("ANY level of specificity");
+		expect(classifierSystemPrompt).toContain("what should I eat");
+	});
+
 	it("does not append a region hint to the on-topic check or the recipe call when no timezone is given", async () => {
 		createMock
 			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
