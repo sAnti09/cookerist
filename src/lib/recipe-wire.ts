@@ -17,6 +17,7 @@ export function toWireIngredient(
 		quantity: ingredient.quantity,
 		unit: ingredient.unit,
 		category: ingredient.category ?? DEFAULT_GROCERY_CATEGORY,
+		approxGramsPerUnit: ingredient.approxGramsPerUnit ?? null,
 	};
 }
 

@@ -25,6 +25,7 @@ const recipeInput: RecipeResponse = {
 			quantity: 300,
 			unit: "g",
 			category: "Meat & Seafood",
+			approxGramsPerUnit: null,
 		},
 	],
 	steps: [{ section: null, text: "Cook the pasta." }],
@@ -95,6 +96,7 @@ describe("toStoredRecipe", () => {
 					quantity: 2,
 					unit: "cloves",
 					category: "Produce",
+					approxGramsPerUnit: null,
 				},
 			],
 		});

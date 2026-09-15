@@ -90,6 +90,7 @@ const validRecipe = {
 			quantity: 300,
 			unit: "g",
 			category: "Meat & Seafood" as const,
+			approxGramsPerUnit: null,
 		},
 	],
 	steps: [{ section: null, text: "Cook the pasta." }],

@@ -1,6 +1,7 @@
 import { roundGroceryQuantity } from "#/lib/aggregate-grocery-items";
 import type { GroceryListItem } from "#/lib/grocery-list";
 import { loadGroceryLists, replaceGroceryLists } from "#/lib/grocery-storage";
+import { isLiquidIngredient } from "#/lib/liquid-ingredients";
 import {
 	convertFromBase,
 	convertToBase,
@@ -24,6 +25,13 @@ export const METRIC_GROCERY_UNITS_MIGRATION_ID = "grocery-units-to-metric";
 function migrateItem(item: GroceryListItem): GroceryListItem {
 	const dimension = getUnitDimension(item.unit);
 	if (dimension !== "mass" && dimension !== "volume") return item;
+	// A volume-measured item that isn't a genuine liquid (see
+	// liquid-ingredients.ts) has no better native shopping unit than
+	// whatever the recipe/user already used (e.g. "1 cup chopped carrots")
+	// — forcing it into ml/l here would be actively misleading, so it's left
+	// exactly as-is, same as aggregate-grocery-items.ts's own fresh
+	// aggregation now does.
+	if (dimension === "volume" && !isLiquidIngredient(item.text)) return item;
 
 	const baseQuantity = convertToBase(item.quantity, item.unit);
 	if (baseQuantity === null) return item;

@@ -31,12 +31,23 @@ export const groceryCategorySchema = z
 	.enum(GROCERY_CATEGORIES)
 	.catch(DEFAULT_GROCERY_CATEGORY);
 
+// `.catch(null)` falls back to "no estimate" for a missing/invalid value —
+// same reasoning as category above, this is a nicety (lets a unitless count
+// ingredient bridge to an approximate weight, see aggregate-grocery-items.ts)
+// never worth rejecting an otherwise-good recipe over.
+export const approxGramsPerUnitSchema = z
+	.number()
+	.positive()
+	.nullable()
+	.catch(null);
+
 const ingredientItemSchema = z.object({
 	baseName: z.string().min(1),
 	description: z.string(),
 	quantity: z.number().nonnegative(),
 	unit: z.string(),
 	category: groceryCategorySchema,
+	approxGramsPerUnit: approxGramsPerUnitSchema,
 });
 
 const stepItemSchema = z.object({
@@ -86,6 +97,7 @@ export const categorizeIngredientsResponseSchema = z.object({
 			baseName: z.string().min(1),
 			description: z.string(),
 			category: groceryCategorySchema,
+			approxGramsPerUnit: approxGramsPerUnitSchema,
 		}),
 	),
 });

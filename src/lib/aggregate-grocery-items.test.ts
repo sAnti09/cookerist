@@ -152,12 +152,231 @@ describe("aggregateGroceryItems", () => {
 
 		const result = aggregateGroceryItems([recipeA, recipeB]);
 
-		// Stay in separate buckets (mass vs. volume, no density to bridge them),
-		// but each still displays in metric — "g" for the mass one, "ml" (not
-		// "cups") for the volume one.
+		// Stay in separate buckets (mass vs. volume, no density to bridge
+		// them). The mass one still displays in metric ("g"); the volume one
+		// stays in its native unit ("cups") since quinoa isn't a recognized
+		// liquid (see liquid-ingredients.ts) — forcing it to ml would be
+		// misleading for something bought by weight, not the milliliter.
 		expect(result).toHaveLength(2);
-		expect(result.map((item) => item.unit).sort()).toEqual(["g", "ml"]);
+		expect(result.map((item) => item.unit).sort()).toEqual(["cups", "g"]);
 		expect(result.every((item) => item.approximate === undefined)).toBe(true);
+	});
+
+	it("still forces a genuine liquid to metric volume even with no density entry (wine)", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [makeIngredient({ id: "ing-a", text: "wine", unit: "cup" })],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					text: "wine",
+					quantity: 2,
+					unit: "tbsp",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		// 1 cup (236.588 ml) + 2 tbsp (29.5736 ml) = 266.1616 ml, rounded up to
+		// the nearest 100 -> 300 ml — wine is a recognized liquid, so it's
+		// still forced to metric despite having no density entry.
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({ unit: "ml", quantity: 300 });
+	});
+
+	it("keeps a recognized liquid in metric volume when it's the only unit family used, despite having a density entry (milk)", () => {
+		const recipe = makeRecipe({
+			ingredients: [makeIngredient({ text: "milk", quantity: 2, unit: "cup" })],
+		});
+
+		const result = aggregateGroceryItems([recipe]);
+
+		// Nothing to bridge with — density is never even consulted, so this
+		// stays exact volume — 2 cups = 473.176 ml, rounded up to the
+		// nearest 100.
+		expect(result[0]).toMatchObject({
+			unit: "ml",
+			quantity: 500,
+			approximate: undefined,
+		});
+	});
+
+	it("keeps a recognized liquid with a modifier in metric volume when it's the only unit family used (chicken broth)", () => {
+		const recipe = makeRecipe({
+			ingredients: [
+				makeIngredient({
+					text: "chicken broth",
+					quantity: 1,
+					unit: "cup",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipe]);
+
+		expect(result[0]).toMatchObject({
+			unit: "ml",
+			approximate: undefined,
+		});
+	});
+
+	it("merges spaghetti sauce given in grams by two recipes straight into mass, untouched by its liquid classification", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					text: "spaghetti sauce",
+					quantity: 100,
+					unit: "g",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					text: "spaghetti sauce",
+					quantity: 200,
+					unit: "g",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "spaghetti sauce",
+			unit: "g",
+			quantity: 300,
+			approximate: undefined,
+		});
+	});
+
+	it("merges a mass and a volume occurrence of the same liquid into mass, bridging via density and flagging approximate (milk)", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({ id: "ing-a", text: "milk", quantity: 50, unit: "g" }),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					text: "milk",
+					quantity: 100,
+					unit: "ml",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		// 50 g (native, exact) + 100 ml * 1.031 g/mL = 103.1 g (estimated) =
+		// 153.1 g, rounded up to the nearest 0.25 -> 153.25 g.
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "milk",
+			unit: "g",
+			quantity: 153.25,
+			approximate: true,
+		});
+	});
+
+	it("merges two volume occurrences of the same liquid without ever consulting density (milk)", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({ id: "ing-a", text: "milk", quantity: 1, unit: "cup" }),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					text: "milk",
+					quantity: 100,
+					unit: "ml",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		// 1 cup (236.588 ml) + 100 ml = 336.588 ml, rounded up to the
+		// nearest 100 -> 400 ml. Exact: both are volume, no bridging needed.
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "milk",
+			unit: "ml",
+			quantity: 400,
+			approximate: undefined,
+		});
+	});
+
+	it("merges two mass occurrences of the same liquid without ever consulting density (milk)", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({ id: "ing-a", text: "milk", quantity: 50, unit: "g" }),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({ id: "ing-b", text: "milk", quantity: 100, unit: "g" }),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "milk",
+			unit: "g",
+			quantity: 150,
+			approximate: undefined,
+		});
+	});
+
+	it("merges a non-liquid volume ingredient with no density in its native unit, largest actually-used", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					text: "chopped carrots",
+					quantity: 2,
+					unit: "tbsp",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					text: "chopped carrots",
+					quantity: 1,
+					unit: "cup",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0].unit).toBe("cup");
+		expect(result[0].approximate).toBeUndefined();
 	});
 
 	it("merges a known-density ingredient's volume-only units straight into an approximate weight, since it's normally bought by weight", () => {
@@ -842,9 +1061,10 @@ describe("aggregateGroceryItems", () => {
 
 		expect(byText.salt).toBe(200);
 		expect(byText.broth).toBe(300);
-		// 1.1 cups = 260.2468 ml, displayed in "ml" (always metric now, never
-		// "cups"), rounded up to the nearest 100 -> 300.
-		expect(byText.quinoa).toBe(300);
+		// Quinoa isn't a recognized liquid (see liquid-ingredients.ts) and has
+		// no density entry, so it stays in its native "cups" unit — 1.1
+		// rounded up to the nearest 0.25 -> 1.25.
+		expect(byText.quinoa).toBe(1.25);
 		expect(byText.eggs).toBe(4);
 	});
 
@@ -897,12 +1117,12 @@ describe("aggregateGroceryItems", () => {
 
 		const result = aggregateGroceryItems([recipe]);
 
-		// 1 cup scaled to 2 cups (473.176 ml), displayed in "ml" (always metric
-		// now), rounded up to the nearest 100 -> 500.
+		// 1 cup scaled to 2 cups — quinoa isn't a recognized liquid, so it
+		// stays in its native "cup" unit rather than being forced to ml.
 		expect(result[0]).toMatchObject({
 			text: "quinoa",
-			unit: "ml",
-			quantity: 500,
+			unit: "cup",
+			quantity: 2,
 		});
 	});
 
@@ -1397,6 +1617,108 @@ describe("aggregateGroceryItems", () => {
 		);
 
 		expect(result[0].category).toBeUndefined();
+	});
+
+	it("bridges a unitless count ingredient into the mass bucket via approxGramsPerUnit", () => {
+		const recipe = makeRecipe({
+			ingredients: [
+				makeIngredient({
+					text: "onion",
+					quantity: 1,
+					unit: "",
+					approxGramsPerUnit: 150,
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipe]);
+
+		expect(result[0]).toMatchObject({
+			text: "onion",
+			unit: "g",
+			quantity: 150,
+			approximate: true,
+		});
+	});
+
+	it("merges a unitless count occurrence with a real-weight occurrence of the same ingredient", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					text: "onion",
+					quantity: 1,
+					unit: "",
+					approxGramsPerUnit: 150,
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					text: "onion",
+					quantity: 200,
+					unit: "g",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		// 1 onion (~150 g, estimated) + 200 g (native) = 350 g, already a
+		// multiple of 0.25 -> stays 350.
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "onion",
+			unit: "g",
+			quantity: 350,
+			approximate: true,
+		});
+	});
+
+	it("keeps a unitless count ingredient as a plain count when no approxGramsPerUnit is given (e.g. eggs)", () => {
+		const recipe = makeRecipe({
+			ingredients: [
+				makeIngredient({
+					text: "eggs",
+					quantity: 3,
+					unit: "",
+					approxGramsPerUnit: null,
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipe]);
+
+		expect(result[0]).toMatchObject({
+			text: "eggs",
+			unit: "",
+			quantity: 3,
+			approximate: undefined,
+		});
+	});
+
+	it("scales the approxGramsPerUnit-bridged contribution by servings", () => {
+		const recipe = makeRecipe({
+			baseServings: 2,
+			currentServings: 4,
+			ingredients: [
+				makeIngredient({
+					text: "onion",
+					quantity: 1,
+					unit: "",
+					approxGramsPerUnit: 150,
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipe]);
+
+		// 1 onion scaled to 2 onions * 150 g = 300 g.
+		expect(result[0]).toMatchObject({ unit: "g", quantity: 300 });
 	});
 });
 

@@ -6,6 +6,7 @@ import type { GroceryListItem, GroceryListItemOrigin } from "./grocery-list";
 import { lookupIngredientDensity } from "./ingredient-density";
 import { lookupLengthDensity } from "./ingredient-length-density";
 import { lookupPieceRatio } from "./ingredient-piece-ratio";
+import { isLiquidIngredient } from "./liquid-ingredients";
 import type { Recipe } from "./recipe";
 import {
 	formatIngredientLine,
@@ -109,25 +110,31 @@ export function roundGroceryQuantity(quantity: number, unit: string): number {
 // scaled units of that dimension (e.g. "tbsp" + "cup" -> both volume, or
 // "in" + "cm" -> both length); "count" merges discrete units (e.g. "dozen" +
 // "egg", or "clove" + "whole" for an ingredient with a known piece ratio —
-// see ingredient-piece-ratio.ts); null is the fallback for anything the unit
-// table doesn't recognize, where merging still requires an exact unit-string
-// match.
-type GroupBucket = "mass" | "volume" | "length" | "count" | null;
+// see ingredient-piece-ratio.ts); "liquid" is a recognized liquid
+// (liquid-ingredients.ts) with a known density — unlike every other bucket,
+// it merges a mass occurrence and a volume occurrence of the same ingredient
+// into ONE shared group (see IngredientGroup.nativeMassGrams/
+// nativeVolumeMl below), deferring the mass-vs-volume display decision to
+// the finalization step once every occurrence has been seen; null is the
+// fallback for anything the unit table doesn't recognize, where merging
+// still requires an exact unit-string match.
+type GroupBucket = "mass" | "volume" | "length" | "count" | "liquid" | null;
 
 type IngredientGroup = {
 	text: string;
 	bucket: GroupBucket;
 	// Every distinct original unit string contributed to this group — used to
 	// pick a display unit for a "length"/null-bucket group once merging is
-	// done (see pickDisplayUnit); unused for "mass" and "volume" (both always
-	// display in metric, picked by magnitude — see the finalization step
-	// below) and for "count" (display is re-derived from an
-	// ingredient-piece-ratio lookup or a filter over this list — see the
+	// done (see pickDisplayUnit); unused for "mass", "volume", and "liquid"
+	// (all always display in metric, picked by magnitude — see the
+	// finalization step below) and for "count" (display is re-derived from
+	// an ingredient-piece-ratio lookup or a filter over this list — see the
 	// finalization step below).
 	unitsUsed: string[];
 	// Running total in the bucket's base unit (grams/ml/cm/one-discrete-item,
 	// or container-equivalents for a "count" group with a known piece ratio),
-	// or a direct sum in `unitsUsed[0]` when bucket is null.
+	// or a direct sum in `unitsUsed[0]` when bucket is null. Unused for
+	// "liquid" — see nativeMassGrams/nativeVolumeMl instead.
 	quantity: number;
 	// True once any contribution to this group came from an approximate
 	// conversion rather than an exact one — converting a volume or length
@@ -137,7 +144,9 @@ type IngredientGroup = {
 	// sub-piece count to its container via a piece ratio
 	// (ingredient-piece-ratio.ts), e.g. combining "7 cloves garlic" with "1
 	// whole garlic". Surfaced on the resulting GroceryListItem so the UI can
-	// flag the total as an estimate.
+	// flag the total as an estimate. Unused (always false) for "liquid" —
+	// that bucket decides its own approximate flag at finalization instead,
+	// based on whether bridging across dimensions was actually needed.
 	approximate: boolean;
 	origins: GroceryListItemOrigin[];
 	// From whichever occurrence first created this group — later occurrences
@@ -145,6 +154,15 @@ type IngredientGroup = {
 	// the same grocery-store section), so this doesn't attempt to reconcile a
 	// disagreement, just keeps the first answer.
 	category: GroceryCategory;
+	// Only used when bucket === "liquid": two running totals kept separate
+	// (never combined during merging) so the finalization step can tell
+	// whether a genuine mass occurrence exists for this ingredient — if so,
+	// mass wins and nativeVolumeMl bridges into it via density (approximate);
+	// if not, nativeVolumeMl displays directly in metric volume (exact, no
+	// density ever consulted). See liquid-ingredients.ts for the full
+	// reasoning.
+	nativeMassGrams?: number;
+	nativeVolumeMl?: number;
 };
 
 export function aggregateGroceryItems(
@@ -216,6 +234,10 @@ export function aggregateGroceryItems(
 			let bucket: GroupBucket = null;
 			let contribution = scaledQuantity;
 			let approximate = false;
+			// Only meaningful when bucket ends up "liquid" — see its own type
+			// comment above. Exactly one of these is non-zero per occurrence.
+			let liquidMassContribution = 0;
+			let liquidVolumeContribution = 0;
 			if (pieceRatio?.pieceUnits.includes(normalizedUnit)) {
 				bucket = "count";
 				contribution = scaledQuantity / pieceRatio.piecesPerContainer;
@@ -224,17 +246,55 @@ export function aggregateGroceryItems(
 				bucket = "count";
 				contribution = scaledQuantity;
 			} else if (unitDef?.dimension === "mass") {
-				bucket = "mass";
-				contribution = scaledQuantity * unitDef.toBase;
-			} else if (unitDef?.dimension === "volume") {
-				const density = lookupIngredientDensity(baseName);
-				if (density !== null) {
-					bucket = "mass";
-					contribution = scaledQuantity * unitDef.toBase * density;
-					approximate = true;
+				const massInGrams = scaledQuantity * unitDef.toBase;
+				// A recognized liquid with a known density joins the shared
+				// "liquid" bucket instead of plain mass, so it can still merge
+				// with a volume occurrence of the same liquid elsewhere (see
+				// the finalization step's mass-wins-when-present rule) — e.g.
+				// "50 g milk" + "100 ml milk" combine into one approximate
+				// total instead of showing as two separate lines.
+				if (
+					isLiquidIngredient(baseName) &&
+					lookupIngredientDensity(baseName) !== null
+				) {
+					bucket = "liquid";
+					liquidMassContribution = massInGrams;
 				} else {
-					bucket = "volume";
-					contribution = scaledQuantity * unitDef.toBase;
+					bucket = "mass";
+					contribution = massInGrams;
+				}
+			} else if (unitDef?.dimension === "volume") {
+				// A recognized liquid (see liquid-ingredients.ts) defaults to
+				// the volume bucket, exact — unless it also has a known
+				// density, in which case it joins the shared "liquid" bucket
+				// instead, deferring to the finalization step whether this
+				// ends up displayed in volume (the common case: nothing else
+				// to bridge with) or mass (only when a real mass occurrence of
+				// the same liquid shows up too). A liquid with no density
+				// entry at all can't bridge either way, so it stays in plain
+				// volume regardless. Density bridging straight to mass below
+				// is reserved for a non-liquid ingredient a recipe measures
+				// interchangeably by cup or by weight (flour, sugar, honey,
+				// ...) — those still always prefer mass, unconditionally.
+				if (isLiquidIngredient(baseName)) {
+					const density = lookupIngredientDensity(baseName);
+					if (density !== null) {
+						bucket = "liquid";
+						liquidVolumeContribution = scaledQuantity * unitDef.toBase;
+					} else {
+						bucket = "volume";
+						contribution = scaledQuantity * unitDef.toBase;
+					}
+				} else {
+					const density = lookupIngredientDensity(baseName);
+					if (density !== null) {
+						bucket = "mass";
+						contribution = scaledQuantity * unitDef.toBase * density;
+						approximate = true;
+					} else {
+						bucket = "volume";
+						contribution = scaledQuantity * unitDef.toBase;
+					}
 				}
 			} else if (unitDef?.dimension === "length") {
 				const lengthDensity = lookupLengthDensity(baseName);
@@ -247,8 +307,22 @@ export function aggregateGroceryItems(
 					contribution = scaledQuantity * unitDef.toBase;
 				}
 			} else if (unitDef?.dimension === "count") {
-				bucket = "count";
-				contribution = scaledQuantity * unitDef.toBase;
+				// A per-piece weight estimate (see Ingredient.approxGramsPerUnit,
+				// populated by Groq only for a unitless produce-style item a
+				// shopper could plausibly buy by weight, e.g. one onion — never
+				// for a genuinely count-native item like eggs) bridges a bare
+				// count into the mass bucket, the same way ingredient-density.ts
+				// bridges volume — so "1 onion" and "200 g onion" merge into one
+				// grocery-list line instead of staying separate.
+				if (ingredient.approxGramsPerUnit != null) {
+					bucket = "mass";
+					contribution =
+						scaledQuantity * unitDef.toBase * ingredient.approxGramsPerUnit;
+					approximate = true;
+				} else {
+					bucket = "count";
+					contribution = scaledQuantity * unitDef.toBase;
+				}
 			}
 
 			const key = bucket
@@ -257,7 +331,14 @@ export function aggregateGroceryItems(
 
 			const existing = groups.get(key);
 			if (existing) {
-				existing.quantity += contribution;
+				if (bucket === "liquid") {
+					existing.nativeMassGrams =
+						(existing.nativeMassGrams ?? 0) + liquidMassContribution;
+					existing.nativeVolumeMl =
+						(existing.nativeVolumeMl ?? 0) + liquidVolumeContribution;
+				} else {
+					existing.quantity += contribution;
+				}
 				existing.approximate = existing.approximate || approximate;
 				existing.origins.push(origin);
 				if (!existing.unitsUsed.includes(trimmedUnit)) {
@@ -268,7 +349,11 @@ export function aggregateGroceryItems(
 					text: baseName,
 					bucket,
 					unitsUsed: [trimmedUnit],
-					quantity: contribution,
+					quantity: bucket === "liquid" ? 0 : contribution,
+					nativeMassGrams:
+						bucket === "liquid" ? liquidMassContribution : undefined,
+					nativeVolumeMl:
+						bucket === "liquid" ? liquidVolumeContribution : undefined,
 					approximate,
 					origins: [origin],
 					category: ingredient.category ?? DEFAULT_GROCERY_CATEGORY,
@@ -287,18 +372,62 @@ export function aggregateGroceryItems(
 			// every other branch rounds the usual way, via roundGroceryQuantity
 			// on the final displayUnit/displayQuantity once both are known.
 			let alreadyRoundedQuantity: number | null = null;
-			if (group.bucket === "mass" || group.bucket === "volume") {
+			// Overridden only by the "liquid" bucket below, where it's decided
+			// here (based on whether cross-dimension bridging was actually
+			// needed) rather than accumulated during merging like every other
+			// bucket.
+			let finalApproximate = group.approximate;
+			if (
+				group.bucket === "mass" ||
+				(group.bucket === "volume" && isLiquidIngredient(group.text))
+			) {
 				// Always metric, picked by magnitude (mg/g/kg for mass, ml/l for
-				// volume) — never a native unit like "lb"/"cup", even when
-				// that's the only unit any contributing recipe used. A grocery
-				// list merges ingredients from many recipes at once, so one
-				// consistent unit system reads better than echoing back
-				// whichever unit happened to be used first. Shared with the
-				// metric-grocery-units migration (see
+				// a genuine liquid's volume) — never a native unit like
+				// "lb"/"cup", even when that's the only unit any contributing
+				// recipe used. A grocery list merges ingredients from many
+				// recipes at once, so one consistent unit system reads better
+				// than echoing back whichever unit happened to be used first.
+				// Shared with the metric-grocery-units migration (see
 				// src/lib/migrations/metric-grocery-units.ts) so an existing
 				// stored list converts to the exact same units a fresh
 				// aggregation would produce.
-				displayUnit = pickMetricDisplayUnit(group.bucket, group.quantity);
+				displayUnit = pickMetricDisplayUnit(
+					group.bucket === "mass" ? "mass" : "volume",
+					group.quantity,
+				);
+				displayQuantity = convertFromBase(group.quantity, displayUnit);
+			} else if (group.bucket === "liquid") {
+				const nativeMass = group.nativeMassGrams ?? 0;
+				const nativeVolume = group.nativeVolumeMl ?? 0;
+				if (nativeMass > 0) {
+					// A genuine mass occurrence of this liquid exists somewhere in
+					// the aggregation — mass wins (same precedent as any other
+					// ingredient with a known density), bridging the volume total
+					// into it via density. Only flagged approximate when that
+					// bridging was actually needed — e.g. "50 g milk" alone (no
+					// volume contribution at all) stays exact.
+					const density = lookupIngredientDensity(group.text) ?? 0;
+					const totalGrams = nativeMass + nativeVolume * density;
+					displayUnit = pickMetricDisplayUnit("mass", totalGrams);
+					displayQuantity = convertFromBase(totalGrams, displayUnit);
+					finalApproximate = nativeVolume > 0;
+				} else {
+					// No mass occurrence anywhere for this liquid — nothing to
+					// bridge into, so it stays in metric volume, exact (density
+					// is never even consulted when there's no reason to).
+					displayUnit = pickMetricDisplayUnit("volume", nativeVolume);
+					displayQuantity = convertFromBase(nativeVolume, displayUnit);
+					finalApproximate = false;
+				}
+			} else if (group.bucket === "volume") {
+				// A volume-measured ingredient with no density entry to bridge
+				// it to mass (that case is already "mass" above) and not a
+				// recognized liquid either (see liquid-ingredients.ts) — e.g.
+				// "1 cup chopped carrots". Forcing this into ml/l would be
+				// actively misleading (nobody buys carrots by the milliliter),
+				// so it falls back to whichever native unit was actually used,
+				// same as the length/unrecognized case below.
+				displayUnit = pickDisplayUnit(group.unitsUsed);
 				displayQuantity = convertFromBase(group.quantity, displayUnit);
 			} else if (group.bucket === "count") {
 				const pieceRatio = lookupPieceRatio(group.text);
@@ -365,7 +494,7 @@ export function aggregateGroceryItems(
 				checked: false,
 				source: "recipe",
 				origins: group.origins,
-				approximate: group.approximate || undefined,
+				approximate: finalApproximate || undefined,
 				category: group.category,
 			};
 		},

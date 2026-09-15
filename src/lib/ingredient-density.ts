@@ -12,8 +12,21 @@
 // 4.92892 mL) to compute density = gram_weight / (amount * mL_per_unit).
 // A handful of values are hand-corrected instead (search "manual:" below)
 // where the raw SR Legacy portion doesn't represent what a recipe means by
-// the ingredient — e.g. its only "heavy cream" cup portion is the aerated,
-// already-whipped volume, not the pourable liquid a recipe measures out.
+// the ingredient — e.g. its only "cottage cheese" cup portion is a
+// widely-cited nutrition-label figure, not SR Legacy's own (missing) one.
+//
+// Includes genuine liquids too (milk, oil, broth/stock, cream, vinegar,
+// sauces, ...) — but a density entry existing here does NOT mean that
+// ingredient always displays in mass. See liquid-ingredients.ts and
+// aggregate-grocery-items.ts's "liquid" bucket: a recognized liquid stays in
+// metric volume (ml/l) by default, and this density value is only consulted
+// to bridge a volume occurrence into mass when a *genuine* mass-unit
+// occurrence of the same liquid also exists somewhere in the same
+// aggregation (e.g. "50 g milk" + "100 ml milk" -> mass wins, the ml
+// bridges in and gets flagged approximate; "1 cup milk" alone never touches
+// this table at all, since there's nothing to bridge into). A plain solid
+// with no liquid classification bridges unconditionally instead, same as
+// always (most dry staples really are bought by weight, not the cup).
 //
 // Multi-word keys are checked before their single-word "generic" fallback
 // (see lookupIngredientDensity), so a specific product (e.g. "brown sugar")

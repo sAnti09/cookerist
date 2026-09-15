@@ -45,6 +45,7 @@ const validRecipe: RecipeResponse = {
 			quantity: 300,
 			unit: "g",
 			category: "Meat & Seafood",
+			approxGramsPerUnit: null,
 		},
 	],
 	steps: [{ section: null, text: "Cook the pasta." }],
@@ -133,6 +134,7 @@ describe("generateRecipe", () => {
 						quantity: 1,
 						unit: "",
 						category: "Other",
+						approxGramsPerUnit: null,
 					},
 				],
 			},
@@ -277,6 +279,7 @@ describe("generateRecipe", () => {
 					quantity: 300,
 					unit: "g",
 					category: "Meat & Seafood",
+					approxGramsPerUnit: null,
 				},
 				{
 					baseName: "garlic",
@@ -284,6 +287,7 @@ describe("generateRecipe", () => {
 					quantity: 4,
 					unit: "cloves",
 					category: "Produce",
+					approxGramsPerUnit: null,
 				},
 			],
 			steps: [
@@ -499,6 +503,7 @@ describe("continueRecipe", () => {
 					quantity: 50,
 					unit: "g",
 					category: "Dairy & Eggs",
+					approxGramsPerUnit: null,
 				},
 			],
 			steps: [{ section: null, text: "Plate and serve." }],
@@ -562,6 +567,7 @@ describe("continueRecipe", () => {
 					quantity: 50,
 					unit: "g",
 					category: "Dairy & Eggs",
+					approxGramsPerUnit: null,
 				},
 			],
 			steps: [{ section: null, text: "Plate and serve." }],
@@ -612,6 +618,7 @@ describe("modifyRecipe", () => {
 					quantity: 300,
 					unit: "g",
 					category: "Meat & Seafood",
+					approxGramsPerUnit: null,
 				},
 			],
 		};
@@ -656,6 +663,7 @@ describe("modifyRecipe", () => {
 					quantity: 300,
 					unit: "g",
 					category: "Meat & Seafood",
+					approxGramsPerUnit: null,
 				},
 				{
 					baseName: "garlic",
@@ -663,6 +671,7 @@ describe("modifyRecipe", () => {
 					quantity: 4,
 					unit: "cloves",
 					category: "Produce",
+					approxGramsPerUnit: null,
 				},
 			],
 			steps: [

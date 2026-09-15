@@ -16,3 +16,5 @@ export const GROCERY_CATEGORY_ENUM_LIST = GROCERY_CATEGORIES.map(
 ).join(" | ");
 
 export const CATEGORY_RULE = `category rule: pick whichever of the listed categories the ingredient would actually be shelved under at a grocery store (e.g. chicken breast -> "Meat & Seafood", milk -> "Dairy & Eggs", flour -> "Pantry", frozen peas -> "Frozen"). Use "Other" only when none of the rest genuinely fit.`;
+
+export const APPROX_WEIGHT_RULE = `approxGramsPerUnit rule: for a produce item or other ingredient a shopper could plausibly buy either by count or by weight (e.g. onion, potato, tomato, apple, lemon, bell pepper, avocado, zucchini), give the approximate weight in grams of ONE typical piece (e.g. one onion ≈ 150). Use null when the ingredient is conventionally bought/asked for strictly by count or by the dozen/pack, never meaningfully by weight (e.g. eggs, whole loaves of bread, bread rolls/buns, a dozen of something) — those should keep displaying as a plain piece count, not an invented weight.`;

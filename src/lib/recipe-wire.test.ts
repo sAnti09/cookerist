@@ -20,6 +20,7 @@ describe("toWireIngredient", () => {
 			quantity: 4,
 			unit: "cloves",
 			category: "Other",
+			approxGramsPerUnit: null,
 		});
 	});
 
@@ -53,7 +54,23 @@ describe("toWireIngredient", () => {
 			quantity: 300,
 			unit: "g",
 			category: "Other",
+			approxGramsPerUnit: null,
 		});
+	});
+
+	it("carries an explicit approxGramsPerUnit through unchanged", () => {
+		const ingredient: Ingredient = {
+			id: "ing-1",
+			text: "onion",
+			baseName: "onion",
+			description: "",
+			quantity: 1,
+			unit: "",
+			checked: false,
+			approxGramsPerUnit: 150,
+		};
+
+		expect(toWireIngredient(ingredient).approxGramsPerUnit).toBe(150);
 	});
 });
 

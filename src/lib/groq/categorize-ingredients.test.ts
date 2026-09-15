@@ -44,6 +44,40 @@ describe("categorizeIngredients", () => {
 					baseName: "chicken breast",
 					description: "",
 					category: "Meat & Seafood",
+					approxGramsPerUnit: null,
+				},
+			],
+		});
+	});
+
+	it("passes an approxGramsPerUnit value through unchanged", async () => {
+		createMock.mockResolvedValueOnce(
+			jsonResponse({
+				items: [
+					{
+						id: 0,
+						baseName: "onion",
+						description: "",
+						category: "Produce",
+						approxGramsPerUnit: 150,
+					},
+				],
+			}),
+		);
+
+		const result = await categorizeIngredients([
+			{ id: 0, baseName: "onion", description: "" },
+		]);
+
+		expect(result).toEqual({
+			type: "success",
+			items: [
+				{
+					id: 0,
+					baseName: "onion",
+					description: "",
+					category: "Produce",
+					approxGramsPerUnit: 150,
 				},
 			],
 		});
@@ -70,6 +104,7 @@ describe("categorizeIngredients", () => {
 		const systemContent = createMock.mock.calls[0]?.[0].messages[0].content;
 		expect(systemContent).toContain("baseName rule");
 		expect(systemContent).toContain("category rule");
+		expect(systemContent).toContain("approxGramsPerUnit rule");
 		expect(systemContent).toContain("Meat & Seafood");
 	});
 
@@ -99,6 +134,7 @@ describe("categorizeIngredients", () => {
 					baseName: "mystery item",
 					description: "",
 					category: "Other",
+					approxGramsPerUnit: null,
 				},
 			],
 		});

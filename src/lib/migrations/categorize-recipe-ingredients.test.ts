@@ -85,6 +85,7 @@ describe("categorizeRecipeIngredients", () => {
 					baseName: "chicken breast",
 					description: "raw",
 					category: "Meat & Seafood",
+					approxGramsPerUnit: null,
 				},
 			],
 		});
@@ -98,6 +99,34 @@ describe("categorizeRecipeIngredients", () => {
 			text: "chicken breast, raw",
 			category: "Meat & Seafood",
 		});
+	});
+
+	it("backfills approxGramsPerUnit onto every matching occurrence", async () => {
+		saveRecipe(
+			[],
+			makeRecipe({
+				ingredients: [
+					makeIngredient({ baseName: "onion", description: "", unit: "" }),
+				],
+			}),
+		);
+		categorizeIngredientsMock.mockResolvedValueOnce({
+			type: "success",
+			items: [
+				{
+					id: 0,
+					baseName: "onion",
+					description: "",
+					category: "Produce",
+					approxGramsPerUnit: 150,
+				},
+			],
+		});
+
+		await categorizeRecipeIngredients();
+
+		const [recipe] = loadRecipes();
+		expect(recipe.ingredients[0].approxGramsPerUnit).toBe(150);
 	});
 
 	it("dedupes identical (baseName, description) pairs across recipes into one request item", async () => {
@@ -119,7 +148,13 @@ describe("categorizeRecipeIngredients", () => {
 		categorizeIngredientsMock.mockResolvedValueOnce({
 			type: "success",
 			items: [
-				{ id: 0, baseName: "garlic", description: "", category: "Produce" },
+				{
+					id: 0,
+					baseName: "garlic",
+					description: "",
+					category: "Produce",
+					approxGramsPerUnit: null,
+				},
 			],
 		});
 
@@ -158,6 +193,7 @@ describe("categorizeRecipeIngredients", () => {
 					baseName: "shrimp",
 					description: "",
 					category: "Meat & Seafood",
+					approxGramsPerUnit: null,
 				},
 			],
 		});
@@ -265,7 +301,11 @@ describe("categorizeRecipeIngredients", () => {
 			type: "success",
 			items: data.items
 				.filter((item) => item.baseName === "garlic")
-				.map((item) => ({ ...item, category: "Produce" as const })),
+				.map((item) => ({
+					...item,
+					category: "Produce" as const,
+					approxGramsPerUnit: null,
+				})),
 		}));
 
 		await categorizeRecipeIngredients();

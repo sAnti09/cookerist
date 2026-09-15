@@ -276,6 +276,7 @@ describe("RecipeDetail", () => {
 				quantity: 300,
 				unit: "g",
 				category: "Other",
+				approxGramsPerUnit: null,
 			},
 			{
 				baseName: "garlic",
@@ -283,6 +284,7 @@ describe("RecipeDetail", () => {
 				quantity: 4,
 				unit: "cloves",
 				category: "Other",
+				approxGramsPerUnit: null,
 			},
 		]);
 	});

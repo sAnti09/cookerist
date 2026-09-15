@@ -58,6 +58,16 @@ describe("migrateGroceryListsToMetricUnits", () => {
 		expect(migrated.items[0]).toMatchObject({ unit: "ml", quantity: 300 });
 	});
 
+	it("leaves a non-liquid volume item untouched (e.g. carrots measured by the cup)", () => {
+		const item = makeItem({ text: "carrot", unit: "cup", quantity: 2 });
+		saveGroceryList([], makeList({ items: [item] }));
+
+		migrateGroceryListsToMetricUnits();
+
+		const [migrated] = loadGroceryLists();
+		expect(migrated.items[0]).toEqual(item);
+	});
+
 	it("leaves an already-metric item untouched (same object reference)", () => {
 		const item = makeItem({ text: "salt", unit: "g", quantity: 300 });
 		saveGroceryList([], makeList({ items: [item] }));

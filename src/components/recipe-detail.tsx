@@ -66,6 +66,7 @@ export const RecipeDetail = memo(function RecipeDetail({
 							quantity: ingredient.quantity,
 							unit: ingredient.unit,
 							category: ingredient.category,
+							approxGramsPerUnit: ingredient.approxGramsPerUnit,
 							checked: false,
 						})),
 					],

@@ -18,6 +18,18 @@ export type Ingredient = {
 	// Optional: absent on ingredients saved before this field existed —
 	// callers should fall back to DEFAULT_GROCERY_CATEGORY ("Other").
 	category?: GroceryCategory;
+	// Approximate weight in grams of ONE unit of this ingredient — only ever
+	// meaningful when `unit` is "" (unitless/one whole piece) and the
+	// ingredient is the kind a shopper could plausibly buy either by count
+	// or by weight (e.g. one onion ≈ 150g); null for anything else,
+	// including a genuinely count-native item like eggs (see
+	// prompt-rules.ts's APPROX_WEIGHT_RULE). Lets aggregate-grocery-items.ts
+	// bridge a bare count into the mass bucket, the same way
+	// ingredient-density.ts bridges volume, so e.g. "1 onion" and "200 g
+	// onion" merge into one grocery-list line instead of staying separate.
+	// Optional: absent on ingredients saved before this field existed —
+	// callers should treat that the same as null (no estimate).
+	approxGramsPerUnit?: number | null;
 };
 
 // Composes the full display name from a base name + optional description

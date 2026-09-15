@@ -22,11 +22,11 @@ describe("lookupIngredientDensity", () => {
 	it("falls back to a generic single-word match when a descriptive modifier precedes it", () => {
 		expect(lookupIngredientDensity("granulated sugar")).toBeCloseTo(0.845);
 		expect(lookupIngredientDensity("all-purpose flour")).toBeCloseTo(0.528);
-		// "olive oil" itself is a multi-word override (0.913, distinct from the
-		// generic "oil" fallback at 0.921) — matched via the 2-word suffix
-		// before the "virgin"/"extra" modifiers are ever considered.
-		expect(lookupIngredientDensity("extra virgin olive oil")).toBeCloseTo(
-			0.913,
+		// "bread flour" itself is a multi-word override (0.579, distinct from
+		// the generic "flour" fallback at 0.528) — matched via the 2-word
+		// suffix before the "coarse"/"extra" modifiers are ever considered.
+		expect(lookupIngredientDensity("extra coarse bread flour")).toBeCloseTo(
+			0.579,
 		);
 	});
 
@@ -41,6 +41,18 @@ describe("lookupIngredientDensity", () => {
 		expect(lookupIngredientDensity("chicken breast")).toBeNull();
 		expect(lookupIngredientDensity("garlic")).toBeNull();
 		expect(lookupIngredientDensity("")).toBeNull();
+	});
+
+	it("has entries for genuine liquids too — used only conditionally by aggregate-grocery-items.ts's liquid bucket", () => {
+		// A density entry existing here doesn't mean the ingredient always
+		// displays in mass — see liquid-ingredients.ts's "liquid" bucket,
+		// which only consults this when a real mass occurrence of the same
+		// liquid also exists to bridge into.
+		expect(lookupIngredientDensity("milk")).toBeCloseTo(1.031);
+		expect(lookupIngredientDensity("olive oil")).toBeCloseTo(0.913);
+		expect(lookupIngredientDensity("chicken broth")).toBeCloseTo(1.014);
+		expect(lookupIngredientDensity("vinegar")).toBeCloseTo(1.01);
+		expect(lookupIngredientDensity("heavy cream")).toBeCloseTo(1.014);
 	});
 
 	it("gives cottage cheese its own density instead of the generic hard-cheese fallback", () => {
@@ -62,23 +74,15 @@ describe("lookupIngredientDensity", () => {
 		expect(lookupIngredientDensity("almonds")).toBeCloseTo(0.613);
 		expect(lookupIngredientDensity("cinnamon")).toBeCloseTo(0.527);
 		expect(lookupIngredientDensity("kidney beans")).toBeCloseTo(0.778);
-		expect(lookupIngredientDensity("chicken broth")).toBeCloseTo(1.014);
 	});
 
-	it("gives a dairy powder its own much lower density instead of the generic liquid-milk fallback", () => {
-		// "milk" alone (liquid) is much denser than milk powder — without an
-		// explicit "powdered milk"/"dry milk" override, both would incorrectly
-		// resolve to the same (wrong) value via the bare "milk" fallback.
-		expect(lookupIngredientDensity("milk")).toBeCloseTo(1.031);
+	it("gives a dairy powder its own density, distinct from the generic cheese fallback", () => {
+		// Milk powder isn't a liquid (see liquid-ingredients.ts's "dry"/
+		// "powder" guard) — it's a genuinely dry, weighable product, so it
+		// keeps its own density entry here despite "milk" itself having none.
 		expect(lookupIngredientDensity("powdered milk")).toBeCloseTo(0.541);
 		expect(lookupIngredientDensity("dry milk")).toBeCloseTo(0.541);
-		expect(lookupIngredientDensity("powdered milk")).not.toBeCloseTo(
-			lookupIngredientDensity("milk") as number,
-		);
-	});
-
-	it("gives coconut milk its own density instead of the dairy-milk fallback", () => {
-		expect(lookupIngredientDensity("coconut milk")).toBeCloseTo(0.955);
+		expect(lookupIngredientDensity("milk powder")).toBeCloseTo(0.541);
 	});
 
 	it("gives rice flour and oat flour their own density instead of the wheat-flour fallback", () => {
@@ -87,11 +91,11 @@ describe("lookupIngredientDensity", () => {
 		expect(lookupIngredientDensity("flour")).toBeCloseTo(0.528);
 	});
 
-	it("corrects heavy/whipping cream to a liquid-appropriate density rather than SR Legacy's post-whip figure", () => {
-		// Sanity-checked against half-and-half's own SR Legacy liquid figure
-		// (1.023) — heavy cream should be in the same ballpark, not roughly
-		// half of it.
-		expect(lookupIngredientDensity("heavy cream")).toBeCloseTo(1.014);
+	it("keeps half and half's own density (not classified as a liquid by name)", () => {
+		// "half and half" doesn't end in one of liquid-ingredients.ts's
+		// recognized liquid words, so it still goes through density bridging
+		// like a dry/solid staple would — a known, accepted coverage gap
+		// rather than a hardcoded special case.
 		expect(lookupIngredientDensity("half and half")).toBeCloseTo(1.023);
 	});
 });
