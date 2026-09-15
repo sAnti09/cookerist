@@ -56,26 +56,49 @@ function renderDetail(
 ) {
 	const onUpdate = vi.fn();
 	const onUpdateRecipes = vi.fn();
+	// Dismissed suggestions are owned by the caller in production
+	// (GroceryListRow, so a dismissal survives the detail view
+	// unmounting/remounting on collapse/expand) — mirror that ownership here
+	// instead of letting GroceryListDetail track it itself.
+	let dismissedSuggestionKeys = new Set<string>();
+	let currentList = { ...list, ...overrides };
+
+	function renderWithCurrentState() {
+		rerender(
+			<GroceryListDetail
+				list={currentList}
+				recipes={recipesOverride}
+				onUpdate={onUpdate}
+				onUpdateRecipes={onUpdateRecipes}
+				dismissedSuggestionKeys={dismissedSuggestionKeys}
+				onDismissSuggestion={(key) => {
+					dismissedSuggestionKeys = new Set(dismissedSuggestionKeys).add(key);
+					renderWithCurrentState();
+				}}
+			/>,
+		);
+	}
+
 	const { rerender } = render(
 		<GroceryListDetail
-			list={{ ...list, ...overrides }}
+			list={currentList}
 			recipes={recipesOverride}
 			onUpdate={onUpdate}
 			onUpdateRecipes={onUpdateRecipes}
+			dismissedSuggestionKeys={dismissedSuggestionKeys}
+			onDismissSuggestion={(key) => {
+				dismissedSuggestionKeys = new Set(dismissedSuggestionKeys).add(key);
+				renderWithCurrentState();
+			}}
 		/>,
 	);
 	return {
 		onUpdate,
 		onUpdateRecipes,
-		rerenderWithList: (nextList: GroceryList) =>
-			rerender(
-				<GroceryListDetail
-					list={nextList}
-					recipes={recipesOverride}
-					onUpdate={onUpdate}
-					onUpdateRecipes={onUpdateRecipes}
-				/>,
-			),
+		rerenderWithList: (nextList: GroceryList) => {
+			currentList = nextList;
+			renderWithCurrentState();
+		},
 	};
 }
 

@@ -322,4 +322,53 @@ describe("GroceryListRow", () => {
 			},
 		]);
 	});
+
+	it("keeps a dismissed merge suggestion dismissed across a collapse/expand cycle", async () => {
+		const user = userEvent.setup();
+		const nameAlikeList: GroceryList = {
+			...list,
+			expanded: true,
+			items: [
+				{
+					id: "item-1",
+					text: "yellow onion",
+					quantity: 1,
+					unit: "",
+					checked: false,
+					source: "recipe",
+				},
+				{
+					id: "item-2",
+					text: "onion",
+					quantity: 1,
+					unit: "",
+					checked: false,
+					source: "recipe",
+				},
+			],
+		};
+		const { rerender, props } = renderRow({ list: nameAlikeList });
+
+		expect(screen.getByText(/might be the same item/)).toBeInTheDocument();
+		await user.click(screen.getByRole("button", { name: "Not the same" }));
+		expect(
+			screen.queryByText(/might be the same item/),
+		).not.toBeInTheDocument();
+
+		// Collapse, then re-expand the same mounted row — the real sequence a
+		// user triggers by clicking the row twice.
+		rerender(
+			<GroceryListRow
+				{...props}
+				list={{ ...nameAlikeList, expanded: false }}
+			/>,
+		);
+		rerender(
+			<GroceryListRow {...props} list={{ ...nameAlikeList, expanded: true }} />,
+		);
+
+		expect(
+			screen.queryByText(/might be the same item/),
+		).not.toBeInTheDocument();
+	});
 });

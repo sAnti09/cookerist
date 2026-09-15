@@ -36,6 +36,15 @@ export const GroceryListRow = memo(function GroceryListRow({
 	onUpdateRecipes: (recipes: Recipe[]) => void;
 }) {
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
+	// Owned here rather than in GroceryListDetail, which unmounts every time
+	// the row collapses (only rendered while `list.expanded`) — a dismissal
+	// stored there reset on every collapse/expand cycle, letting a merge
+	// suggestion the user already said "not the same" to resurface just from
+	// closing and reopening the row. This row stays mounted for the list's
+	// whole lifetime, so the dismissal now survives that.
+	const [dismissedSuggestionKeys, setDismissedSuggestionKeys] = useState<
+		Set<string>
+	>(new Set());
 	const { checked, total, percent, completed } = getGroceryListProgress(list);
 	const date = new Date(list.createdAt).toLocaleDateString(undefined, {
 		year: "numeric",
@@ -189,6 +198,10 @@ export const GroceryListRow = memo(function GroceryListRow({
 						recipes={recipes}
 						onUpdate={onUpdate}
 						onUpdateRecipes={onUpdateRecipes}
+						dismissedSuggestionKeys={dismissedSuggestionKeys}
+						onDismissSuggestion={(key) =>
+							setDismissedSuggestionKeys((keys) => new Set(keys).add(key))
+						}
 					/>
 				</div>
 			) : null}

@@ -1,9 +1,10 @@
-import { Search, ShoppingCart } from "lucide-react";
+import { ShoppingCart } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 import { GroceryMode } from "#/components/grocery-mode";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { IngredientLine } from "#/components/ui/ingredient-line";
+import { SearchInput } from "#/components/ui/search-input";
 import {
 	APPROXIMATE_ITEMS_NOTE,
 	formatGroceryItemQuantity,
@@ -29,6 +30,11 @@ type GroceryListDetailProps = {
 	recipes: Recipe[];
 	onUpdate: (list: GroceryList) => void;
 	onUpdateRecipes: (recipes: Recipe[]) => void;
+	// Owned by GroceryListRow, not this component — see the comment there for
+	// why (this component unmounts on every collapse, which used to reset a
+	// locally-owned Set and let a dismissed suggestion resurface).
+	dismissedSuggestionKeys: Set<string>;
+	onDismissSuggestion: (key: string) => void;
 };
 
 // Checked items sink to the bottom of their section (still alphabetical
@@ -79,18 +85,10 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 	recipes,
 	onUpdate,
 	onUpdateRecipes,
+	dismissedSuggestionKeys,
+	onDismissSuggestion,
 }: GroceryListDetailProps) {
 	const [search, setSearch] = useState("");
-	// Dismissed suggestions are remembered only for as long as this detail
-	// view stays mounted (i.e. the list stays expanded) — not persisted, so
-	// they can resurface after the list is collapsed and reopened. A
-	// deliberate simplification: the alternative (persisting a dismissal
-	// forever) needs its own storage and doesn't clearly win, since the
-	// underlying name mismatch is still there to fix at the source (see
-	// categorize-recipe-ingredients.ts) if it keeps coming up.
-	const [dismissedSuggestionKeys, setDismissedSuggestionKeys] = useState<
-		Set<string>
-	>(new Set());
 	const [groceryModeOpen, setGroceryModeOpen] = useState(false);
 
 	function handleToggleItem(id: string) {
@@ -112,10 +110,6 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 			checked,
 		);
 		if (affectedRecipes.length > 0) onUpdateRecipes(affectedRecipes);
-	}
-
-	function handleDismissSuggestion(key: string) {
-		setDismissedSuggestionKeys((keys) => new Set(keys).add(key));
 	}
 
 	function handleMergeSuggestion(suggestion: GroceryMergeSuggestion) {
@@ -224,7 +218,7 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 							<Button
 								variant="secondary"
 								onClick={() =>
-									handleDismissSuggestion(suggestionKey(visibleSuggestion))
+									onDismissSuggestion(suggestionKey(visibleSuggestion))
 								}
 							>
 								Not the same
@@ -237,20 +231,15 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 				) : null}
 
 				{list.items.length > 0 ? (
-					<div className="card mt-2 flex items-center gap-2 rounded-full bg-surface px-4 py-2">
-						<Search
-							className="size-4 shrink-0 text-ink-dim"
-							aria-hidden="true"
-						/>
-						<input
-							type="search"
-							value={search}
-							onChange={(event) => setSearch(event.target.value)}
-							placeholder="Search items…"
-							aria-label="Search grocery items"
-							className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-dim sm:text-sm"
-						/>
-					</div>
+					<SearchInput
+						value={search}
+						onChange={setSearch}
+						placeholder="Search items…"
+						aria-label="Search grocery items"
+						clearLabel="Clear grocery item search"
+						className="mt-2"
+						inputClassName="sm:text-sm"
+					/>
 				) : null}
 
 				{recipeItems.length > 0 ? (
