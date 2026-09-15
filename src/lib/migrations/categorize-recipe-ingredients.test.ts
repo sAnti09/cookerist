@@ -227,7 +227,7 @@ describe("categorizeRecipeIngredients", () => {
 		expect(secondBatch).toHaveLength(5);
 	});
 
-	it("leaves ingredients unmigrated (no throw) when a batch fails", async () => {
+	it("leaves ingredients unmigrated and asks to be retried when every batch fails", async () => {
 		saveRecipe(
 			[],
 			makeRecipe({
@@ -239,13 +239,15 @@ describe("categorizeRecipeIngredients", () => {
 			message: "Malformed categorize-ingredients response from Groq",
 		});
 
-		await expect(categorizeRecipeIngredients()).resolves.toBeUndefined();
+		await expect(categorizeRecipeIngredients()).resolves.toEqual({
+			retry: true,
+		});
 
 		const [recipe] = loadRecipes();
 		expect(recipe.ingredients[0].category).toBeUndefined();
 	});
 
-	it("leaves ingredients unmigrated (no throw) when the server call rejects", async () => {
+	it("leaves ingredients unmigrated and asks to be retried when the server call rejects", async () => {
 		saveRecipe(
 			[],
 			makeRecipe({
@@ -254,10 +256,48 @@ describe("categorizeRecipeIngredients", () => {
 		);
 		categorizeIngredientsMock.mockRejectedValueOnce(new Error("network down"));
 
-		await expect(categorizeRecipeIngredients()).resolves.toBeUndefined();
+		await expect(categorizeRecipeIngredients()).resolves.toEqual({
+			retry: true,
+		});
 
 		const [recipe] = loadRecipes();
 		expect(recipe.ingredients[0].category).toBeUndefined();
+	});
+
+	it("does not ask to be retried when there was nothing to categorize in the first place", async () => {
+		saveRecipe([], makeRecipe({ ingredients: [] }));
+
+		await expect(categorizeRecipeIngredients()).resolves.toBeUndefined();
+	});
+
+	it("does not ask to be retried when at least one batch succeeded, even if another failed", async () => {
+		const ingredients = Array.from({ length: BATCH_SIZE + 1 }, (_, i) =>
+			makeIngredient({
+				id: `ing-${i}`,
+				baseName: `ingredient-${i}`,
+				description: "",
+			}),
+		);
+		saveRecipe([], makeRecipe({ ingredients }));
+		categorizeIngredientsMock
+			.mockResolvedValueOnce({
+				type: "success",
+				items: [
+					{
+						id: 0,
+						baseName: "ingredient-0",
+						description: "",
+						category: "Other",
+						approxGramsPerUnit: null,
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				type: "error",
+				message: "Malformed categorize-ingredients response from Groq",
+			});
+
+		await expect(categorizeRecipeIngredients()).resolves.toBeUndefined();
 	});
 
 	it("does not persist anything when no batch produced a usable correction", async () => {

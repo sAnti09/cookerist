@@ -15,6 +15,30 @@
 
 const COMPLETED_MIGRATIONS_STORAGE_KEY = "cookerist:completed-migrations";
 
+// A migration normally just returns void/undefined, which marks it
+// completed unconditionally (see runMigrations) — the right default for a
+// local, synchronous data rewrite that can't meaningfully "fail" outside a
+// code bug. A migration that calls out to a network (Groq, currently only
+// categorize-recipe-ingredients.ts) can genuinely fail for reasons that have
+// nothing to do with its own logic — e.g. a mobile browser suspending a
+// background fetch when the tab is backgrounded/screen-locked mid-request,
+// which is exactly what happened in production: the migration "completed"
+// having categorized zero ingredients, and — since completed is forever —
+// never got another chance. Returning `{ retry: true }` instead tells
+// runMigrations not to mark this attempt as done, so it tries again on the
+// next page load rather than silently giving up forever on a transient
+// failure. Reserve this for "made no progress at all" — a migration that
+// got *some* real work done should still mark itself completed even if a
+// few stragglers didn't make it, same "no entry beats a wrong guess"
+// trade-off as everywhere else — otherwise a persistently-failing subset
+// would retry every single load forever.
+// Every existing migration's `run()` is typed `: void` (the natural type
+// for "no return statement"), and that's still the common/default case
+// here; only categorize-recipe-ingredients.ts's run() opts into the
+// `{ retry }` arm.
+// biome-ignore lint/suspicious/noConfusingVoidType: intentional, see above.
+export type MigrationRunResult = void | { retry?: boolean };
+
 export type Migration = {
 	// Permanent, unique id — never reuse or rename once shipped, since this
 	// is what marks the migration as already run for a given browser. A
@@ -24,7 +48,7 @@ export type Migration = {
 	// to Groq — in which case runMigrations awaits it before moving on to the
 	// next migration, but never blocks the caller itself (see index.tsx,
 	// which fires runMigrations without awaiting it).
-	run: () => void | Promise<void>;
+	run: () => MigrationRunResult | Promise<MigrationRunResult>;
 };
 
 function loadCompletedMigrationIds(): Set<string> {
@@ -51,10 +75,14 @@ function persistCompletedMigrationIds(ids: Set<string>): void {
 // `await`, i.e. before it yields control back to an unawaited caller (see
 // index.tsx), so it behaves exactly as it did when this runner was
 // synchronous; only a genuinely async migration (network calls) actually
-// defers. Each migration is marked completed — including when it throws or
-// rejects, since a broken migration retrying (and potentially
+// defers. Each migration is marked completed once it returns or throws —
+// including on a throw, since a broken migration retrying (and potentially
 // re-corrupting data) on every single page load is worse than a one-time
-// data gap — and persisted immediately after, not batched until the end, so
+// data gap — with one exception: a migration that explicitly returns
+// `{ retry: true }` (see MigrationRunResult) is left off the completed list
+// so it gets another attempt next time, for a failure that's plausibly
+// transient (a network call) rather than a code bug. Completed ids are
+// persisted immediately after each migration, not batched until the end, so
 // a page closed mid-run doesn't lose credit for migrations that did finish.
 // Errors are logged, never thrown, so one bad migration can't block the rest
 // or the app itself.
@@ -65,11 +93,14 @@ export async function runMigrations(
 
 	for (const migration of migrations) {
 		if (completed.has(migration.id)) continue;
+		let shouldRetry = false;
 		try {
-			await migration.run();
+			const result = await migration.run();
+			shouldRetry = result?.retry === true;
 		} catch (error) {
 			console.error(`Migration "${migration.id}" failed:`, error);
 		}
+		if (shouldRetry) continue;
 		completed.add(migration.id);
 		persistCompletedMigrationIds(completed);
 	}

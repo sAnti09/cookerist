@@ -156,4 +156,49 @@ describe("runMigrations", () => {
 
 		expect(run).toHaveBeenCalledTimes(1);
 	});
+
+	it("does not mark a migration completed when it returns { retry: true }", async () => {
+		const run = vi.fn(() => ({ retry: true }));
+
+		await runMigrations([{ id: "m1", run }]);
+
+		const stored = JSON.parse(
+			window.localStorage.getItem(COMPLETED_KEY) ?? "[]",
+		);
+		expect(stored).toEqual([]);
+	});
+
+	it("runs a { retry: true } migration again on the next call", async () => {
+		const run = vi.fn(() => ({ retry: true }));
+
+		await runMigrations([{ id: "m1", run }]);
+		await runMigrations([{ id: "m1", run }]);
+
+		expect(run).toHaveBeenCalledTimes(2);
+	});
+
+	it("marks a migration completed once it stops asking to be retried", async () => {
+		const run = vi
+			.fn()
+			.mockReturnValueOnce({ retry: true })
+			.mockReturnValueOnce(undefined);
+
+		await runMigrations([{ id: "m1", run }]);
+		await runMigrations([{ id: "m1", run }]);
+		await runMigrations([{ id: "m1", run }]);
+
+		expect(run).toHaveBeenCalledTimes(2);
+	});
+
+	it("still runs a later migration after an earlier one asks to be retried", async () => {
+		const run1 = vi.fn(() => ({ retry: true }));
+		const run2 = vi.fn();
+
+		await runMigrations([
+			{ id: "m1", run: run1 },
+			{ id: "m2", run: run2 },
+		]);
+
+		expect(run2).toHaveBeenCalledTimes(1);
+	});
 });
