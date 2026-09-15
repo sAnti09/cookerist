@@ -80,18 +80,6 @@ function renderDetail(
 }
 
 describe("GroceryListDetail", () => {
-	it("shows the titles of the recipes involved", () => {
-		renderDetail();
-
-		expect(screen.getByText("Shrimp Pasta")).toBeInTheDocument();
-	});
-
-	it("does not render a recipes section when the list has no recipes", () => {
-		renderDetail({ recipeIds: [] });
-
-		expect(screen.queryByText("Recipes in this list")).not.toBeInTheDocument();
-	});
-
 	it("sections recipe-sourced and custom items separately", () => {
 		renderDetail();
 
@@ -580,6 +568,23 @@ describe("GroceryListDetail", () => {
 				{ recipeId: "recipe-1", ingredientId: "ing-b" },
 			],
 		});
+	});
+
+	it("opens Grocery Mode from the Shop action and can exit back to the list", async () => {
+		const user = userEvent.setup();
+		renderDetail();
+
+		await user.click(screen.getByRole("button", { name: "Shop" }));
+		expect(screen.getByText("Grocery Mode")).toBeInTheDocument();
+
+		await user.click(screen.getByRole("button", { name: "Exit grocery mode" }));
+		expect(screen.queryByText("Grocery Mode")).not.toBeInTheDocument();
+	});
+
+	it("disables the Shop action when the list has no items", () => {
+		renderDetail({ items: [] });
+
+		expect(screen.getByRole("button", { name: "Shop" })).toBeDisabled();
 	});
 
 	it("dismisses a merge suggestion and does not re-show it for the same pair", async () => {

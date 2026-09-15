@@ -1,4 +1,4 @@
-import type { GroceryListItem } from "./grocery-list";
+import type { GroceryList, GroceryListItem } from "./grocery-list";
 import type { Recipe } from "./recipe";
 
 // One-directional (grocery -> recipe, see TEST-242): applies a checked value
@@ -35,4 +35,34 @@ export function applyGroceryItemsCheckedToRecipes(
 		});
 	}
 	return updated;
+}
+
+export type GroceryItemToggleResult = {
+	list: GroceryList;
+	affectedRecipes: Recipe[];
+};
+
+// Toggles a single item's checked state and propagates it to any recipe
+// ingredients it was aggregated from — the update GroceryListDetail and
+// GroceryMode both need when a shopper taps one item's checkbox. Returns null
+// when the id isn't found (nothing to toggle).
+export function toggleGroceryListItem(
+	list: GroceryList,
+	recipes: Recipe[],
+	itemId: string,
+): GroceryItemToggleResult | null {
+	const item = list.items.find((i) => i.id === itemId);
+	if (!item) return null;
+	const checked = !item.checked;
+	return {
+		list: {
+			...list,
+			items: list.items.map((i) => (i.id === itemId ? { ...i, checked } : i)),
+		},
+		affectedRecipes: applyGroceryItemsCheckedToRecipes(
+			recipes,
+			[item],
+			checked,
+		),
+	};
 }

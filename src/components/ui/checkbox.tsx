@@ -7,9 +7,12 @@ type CheckboxProps = {
 	onChange: (checked: boolean) => void;
 	label: ReactNode;
 	className?: string;
+	// "lg" is for Grocery Mode's large, one-handed touch targets — everywhere
+	// else uses the default size.
+	size?: "default" | "lg";
 } & Omit<
 	InputHTMLAttributes<HTMLInputElement>,
-	"type" | "checked" | "onChange"
+	"type" | "checked" | "onChange" | "size"
 >;
 
 export function Checkbox({
@@ -17,6 +20,7 @@ export function Checkbox({
 	onChange,
 	label,
 	className,
+	size = "default",
 	...inputProps
 }: CheckboxProps) {
 	return (
@@ -36,12 +40,18 @@ export function Checkbox({
 			<span
 				aria-hidden="true"
 				className={cn(
-					"mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2",
+					"flex shrink-0 items-center justify-center rounded-full border-2 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2",
+					size === "lg" ? "size-8" : "mt-0.5 size-5",
 					checked ? "border-sage bg-sage" : "border-line bg-surface",
 				)}
 			>
 				{checked ? (
-					<Check className="size-3 text-white" strokeWidth={3} />
+					<Check
+						className={
+							size === "lg" ? "size-4 text-white" : "size-3 text-white"
+						}
+						strokeWidth={3}
+					/>
 				) : null}
 			</span>
 			{label}

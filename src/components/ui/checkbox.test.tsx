@@ -45,4 +45,19 @@ describe("Checkbox", () => {
 			screen.getByRole("checkbox", { name: "Flour" }).closest("label"),
 		).toHaveClass("align-top");
 	});
+
+	it("renders a larger box and checkmark for size=lg, used by Grocery Mode's big touch targets", () => {
+		const { rerender } = render(
+			<Checkbox checked={false} onChange={vi.fn()} label="Flour" size="lg" />,
+		);
+		const boxUnchecked = screen.getByRole("checkbox", {
+			name: "Flour",
+		}).nextElementSibling;
+		expect(boxUnchecked).toHaveClass("size-8");
+
+		rerender(
+			<Checkbox checked={true} onChange={vi.fn()} label="Flour" size="lg" />,
+		);
+		expect(document.querySelector("svg")).toHaveClass("size-4");
+	});
 });

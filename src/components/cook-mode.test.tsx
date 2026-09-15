@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Recipe } from "#/lib/recipe";
 import { CookMode } from "./cook-mode";
 
@@ -31,11 +31,6 @@ function renderCookMode(
 		<CookMode recipe={recipe} onUpdate={onUpdate} onClose={onClose} />,
 	);
 }
-
-afterEach(() => {
-	// biome-ignore lint/suspicious/noExplicitAny: cleaning up a test-only navigator patch
-	delete (navigator as any).wakeLock;
-});
 
 describe("CookMode", () => {
 	it("shows no timer for a step without an estimated duration", () => {
@@ -253,65 +248,6 @@ describe("CookMode", () => {
 		});
 	});
 
-	describe("wake lock", () => {
-		it("requests a screen wake lock on open and releases it on close, when supported", async () => {
-			const release = vi.fn().mockResolvedValue(undefined);
-			const request = vi.fn().mockResolvedValue({ release });
-			Object.defineProperty(navigator, "wakeLock", {
-				configurable: true,
-				value: { request },
-			});
-
-			const { unmount } = renderCookMode(baseRecipe, vi.fn(), vi.fn());
-			await waitFor(() => expect(request).toHaveBeenCalledWith("screen"));
-
-			unmount();
-			await waitFor(() => expect(release).toHaveBeenCalledTimes(1));
-		});
-
-		it("re-acquires the wake lock when the page becomes visible again", async () => {
-			const request = vi
-				.fn()
-				.mockResolvedValue({ release: vi.fn().mockResolvedValue(undefined) });
-			Object.defineProperty(navigator, "wakeLock", {
-				configurable: true,
-				value: { request },
-			});
-
-			renderCookMode(baseRecipe, vi.fn(), vi.fn());
-			await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
-
-			document.dispatchEvent(new Event("visibilitychange"));
-
-			await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
-		});
-
-		it("does nothing when the Wake Lock API isn't supported", () => {
-			expect(() => renderCookMode(baseRecipe, vi.fn(), vi.fn())).not.toThrow();
-			expect(screen.getByText("Step 1 of 3")).toBeInTheDocument();
-		});
-
-		it("releases the lock immediately if it resolves after cook mode has already closed", async () => {
-			let resolveRequest!: (sentinel: { release: () => Promise<void> }) => void;
-			const release = vi.fn().mockResolvedValue(undefined);
-			const request = vi.fn(
-				() =>
-					new Promise<{ release: () => Promise<void> }>((resolve) => {
-						resolveRequest = resolve;
-					}),
-			);
-			Object.defineProperty(navigator, "wakeLock", {
-				configurable: true,
-				value: { request },
-			});
-
-			const { unmount } = renderCookMode(baseRecipe, vi.fn(), vi.fn());
-			await waitFor(() => expect(request).toHaveBeenCalledWith("screen"));
-			unmount();
-
-			resolveRequest({ release });
-
-			await waitFor(() => expect(release).toHaveBeenCalledTimes(1));
-		});
-	});
+	// Wake lock acquire/release/visibility behavior now lives in
+	// use-wake-lock.test.ts — CookMode just calls the shared hook.
 });

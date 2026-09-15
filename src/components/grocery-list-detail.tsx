@@ -1,5 +1,6 @@
-import { Search } from "lucide-react";
+import { Search, ShoppingCart } from "lucide-react";
 import { memo, useMemo, useState } from "react";
+import { GroceryMode } from "#/components/grocery-mode";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { IngredientLine } from "#/components/ui/ingredient-line";
@@ -12,7 +13,10 @@ import {
 	GROCERY_CATEGORIES,
 } from "#/lib/grocery-category";
 import type { GroceryList, GroceryListItem } from "#/lib/grocery-list";
-import { applyGroceryItemsCheckedToRecipes } from "#/lib/propagate-grocery-check";
+import {
+	applyGroceryItemsCheckedToRecipes,
+	toggleGroceryListItem,
+} from "#/lib/propagate-grocery-check";
 import type { Recipe } from "#/lib/recipe";
 import {
 	type GroceryMergeSuggestion,
@@ -87,21 +91,14 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 	const [dismissedSuggestionKeys, setDismissedSuggestionKeys] = useState<
 		Set<string>
 	>(new Set());
+	const [groceryModeOpen, setGroceryModeOpen] = useState(false);
 
 	function handleToggleItem(id: string) {
-		const item = list.items.find((i) => i.id === id);
-		if (!item) return;
-		const checked = !item.checked;
-		onUpdate({
-			...list,
-			items: list.items.map((i) => (i.id === id ? { ...i, checked } : i)),
-		});
-		const affectedRecipes = applyGroceryItemsCheckedToRecipes(
-			recipes,
-			[item],
-			checked,
-		);
-		if (affectedRecipes.length > 0) onUpdateRecipes(affectedRecipes);
+		const result = toggleGroceryListItem(list, recipes, id);
+		if (!result) return;
+		onUpdate(result.list);
+		if (result.affectedRecipes.length > 0)
+			onUpdateRecipes(result.affectedRecipes);
 	}
 
 	function handleCheckAll(checked: boolean) {
@@ -147,9 +144,6 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 
 	const allChecked =
 		list.items.length > 0 && list.items.every((item) => item.checked);
-	const recipeTitles = list.recipeIds
-		.map((id) => recipes.find((recipe) => recipe.id === id)?.title)
-		.filter((title): title is string => Boolean(title));
 	// Search only narrows which items are shown — "Check all" still applies to
 	// every item in the list, not just what's currently visible, and the
 	// approximate-quantity note below still reflects the whole list too.
@@ -197,30 +191,24 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 
 	return (
 		<div className="flex flex-col gap-5">
-			{recipeTitles.length > 0 ? (
-				<div>
-					<h4 className="font-medium">Recipes in this list</h4>
-					<ul className="mt-2 flex flex-wrap gap-2">
-						{recipeTitles.map((title) => (
-							<li
-								key={title}
-								className="rounded-[10px] bg-bg2 px-2 py-1 text-sm text-ink-dim"
-							>
-								{title}
-							</li>
-						))}
-					</ul>
-				</div>
-			) : null}
-
 			<section>
-				<div className="flex items-center justify-between">
+				<div className="flex flex-wrap items-center justify-between gap-2">
 					<h4 className="font-medium">Items</h4>
-					<Checkbox
-						checked={allChecked}
-						onChange={handleCheckAll}
-						label="Check all"
-					/>
+					<div className="flex items-center gap-3">
+						<Button
+							className="gap-1.5"
+							disabled={list.items.length === 0}
+							onClick={() => setGroceryModeOpen(true)}
+						>
+							<ShoppingCart className="size-4" aria-hidden="true" />
+							Shop
+						</Button>
+						<Checkbox
+							checked={allChecked}
+							onChange={handleCheckAll}
+							label="Check all"
+						/>
+					</div>
 				</div>
 
 				{visibleSuggestion ? (
@@ -300,6 +288,16 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 					<p className="mt-3 text-ink-dim text-xs">{APPROXIMATE_ITEMS_NOTE}</p>
 				) : null}
 			</section>
+
+			{groceryModeOpen ? (
+				<GroceryMode
+					list={list}
+					recipes={recipes}
+					onUpdate={onUpdate}
+					onUpdateRecipes={onUpdateRecipes}
+					onClose={() => setGroceryModeOpen(false)}
+				/>
+			) : null}
 		</div>
 	);
 });

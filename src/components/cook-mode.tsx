@@ -7,6 +7,7 @@ import { CelebrationBurst } from "#/components/ui/celebration-burst";
 import { highlightIngredientMentions } from "#/lib/highlight-ingredients";
 import type { Recipe } from "#/lib/recipe";
 import { useBodyScrollLock } from "#/lib/use-body-scroll-lock";
+import { useWakeLock } from "#/lib/use-wake-lock";
 
 type CookModeProps = {
 	recipe: Recipe;
@@ -14,58 +15,15 @@ type CookModeProps = {
 	onClose: () => void;
 };
 
-// Wake Lock isn't in every target's DOM lib yet (and jsdom never implements
-// it), so this stays feature-detected via `"wakeLock" in navigator` rather
-// than typed — see AC5 (graceful fallback) on TEST-257.
-type WakeLockSentinelLike = { release: () => Promise<void> };
-type NavigatorWithWakeLock = Navigator & {
-	wakeLock: { request: (type: "screen") => Promise<WakeLockSentinelLike> };
-};
-
 export function CookMode({ recipe, onUpdate, onClose }: CookModeProps) {
 	const { steps } = recipe;
 	const [index, setIndex] = useState(0);
-	const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
 
 	// Cook mode is a full-screen overlay, but a fixed-position element doesn't
 	// stop the page underneath from scrolling on its own (most visibly on iOS,
 	// where a swipe inside the overlay can rubber-band the body behind it).
 	useBodyScrollLock(true);
-
-	useEffect(() => {
-		let cancelled = false;
-
-		async function acquireWakeLock() {
-			if (!("wakeLock" in navigator)) return;
-			try {
-				const sentinel = await (
-					navigator as NavigatorWithWakeLock
-				).wakeLock.request("screen");
-				if (cancelled) {
-					sentinel.release().catch(() => {});
-					return;
-				}
-				wakeLockRef.current = sentinel;
-			} catch {
-				// Wake lock can be refused (e.g. low battery, backgrounded tab) —
-				// cook mode still works, it just won't keep the screen awake.
-			}
-		}
-
-		acquireWakeLock();
-
-		function handleVisibilityChange() {
-			if (document.visibilityState === "visible") acquireWakeLock();
-		}
-		document.addEventListener("visibilitychange", handleVisibilityChange);
-
-		return () => {
-			cancelled = true;
-			document.removeEventListener("visibilitychange", handleVisibilityChange);
-			wakeLockRef.current?.release().catch(() => {});
-			wakeLockRef.current = null;
-		};
-	}, []);
+	useWakeLock();
 
 	const finished = index >= steps.length;
 	const currentStep = finished ? null : steps[index];

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { GroceryListItem } from "#/lib/grocery-list";
+import type { GroceryList, GroceryListItem } from "#/lib/grocery-list";
 import type { Ingredient, Recipe } from "#/lib/recipe";
-import { applyGroceryItemsCheckedToRecipes } from "./propagate-grocery-check";
+import {
+	applyGroceryItemsCheckedToRecipes,
+	toggleGroceryListItem,
+} from "./propagate-grocery-check";
 
 function makeIngredient(overrides: Partial<Ingredient> = {}): Ingredient {
 	return {
@@ -179,5 +182,53 @@ describe("applyGroceryItemsCheckedToRecipes", () => {
 		const recipe = makeRecipe({ id: "recipe-a" });
 
 		expect(applyGroceryItemsCheckedToRecipes([recipe], [], true)).toEqual([]);
+	});
+});
+
+function makeList(overrides: Partial<GroceryList> = {}): GroceryList {
+	return {
+		id: crypto.randomUUID(),
+		createdAt: new Date().toISOString(),
+		name: "Weeknight Shopping",
+		recipeIds: [],
+		items: [],
+		expanded: true,
+		...overrides,
+	};
+}
+
+describe("toggleGroceryListItem", () => {
+	it("flips the item's checked state and propagates it to its source recipe", () => {
+		const recipe = makeRecipe({
+			id: "recipe-a",
+			ingredients: [makeIngredient({ id: "ing-a" })],
+		});
+		const item = makeItem({
+			id: "item-1",
+			checked: false,
+			origins: [{ recipeId: "recipe-a", ingredientId: "ing-a" }],
+		});
+		const list = makeList({ items: [item] });
+
+		const result = toggleGroceryListItem(list, [recipe], "item-1");
+
+		expect(result?.list.items[0].checked).toBe(true);
+		expect(result?.affectedRecipes[0].ingredients[0].checked).toBe(true);
+	});
+
+	it("does not touch other items in the list", () => {
+		const itemA = makeItem({ id: "item-1", checked: false, text: "onion" });
+		const itemB = makeItem({ id: "item-2", checked: false, text: "garlic" });
+		const list = makeList({ items: [itemA, itemB] });
+
+		const result = toggleGroceryListItem(list, [], "item-1");
+
+		expect(result?.list.items[1]).toBe(itemB);
+	});
+
+	it("returns null for an id that isn't in the list", () => {
+		const list = makeList({ items: [makeItem({ id: "item-1" })] });
+
+		expect(toggleGroceryListItem(list, [], "missing")).toBeNull();
 	});
 });
