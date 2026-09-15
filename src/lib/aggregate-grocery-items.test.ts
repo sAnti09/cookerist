@@ -1330,6 +1330,74 @@ describe("aggregateGroceryItems", () => {
 		expect(ids.size).toBe(result.length);
 		expect(result.every((item) => item.checked === false)).toBe(true);
 	});
+
+	it("carries an ingredient's category onto its grocery item", () => {
+		const recipe = makeRecipe({
+			ingredients: [
+				makeIngredient({
+					text: "chicken breast",
+					quantity: 1,
+					unit: "kg",
+					category: "Meat & Seafood",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipe]);
+
+		expect(result[0].category).toBe("Meat & Seafood");
+	});
+
+	it('defaults to "Other" when the ingredient has no category (saved before this field existed)', () => {
+		const recipe = makeRecipe({
+			ingredients: [makeIngredient({ text: "mystery", category: undefined })],
+		});
+
+		const result = aggregateGroceryItems([recipe]);
+
+		expect(result[0].category).toBe("Other");
+	});
+
+	it("keeps the first-seen category when merging occurrences from multiple recipes", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					text: "chicken breast",
+					quantity: 1,
+					unit: "kg",
+					category: "Meat & Seafood",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					text: "chicken breast",
+					quantity: 500,
+					unit: "g",
+					category: "Other",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0].category).toBe("Meat & Seafood");
+	});
+
+	it("does not set a category on a custom ingredient", () => {
+		const result = aggregateGroceryItems(
+			[],
+			[{ text: "napkins", quantity: 1, unit: "pack" }],
+		);
+
+		expect(result[0].category).toBeUndefined();
+	});
 });
 
 describe("carryOverCheckedState", () => {

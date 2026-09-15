@@ -290,6 +290,85 @@ describe("GroceryListDetail", () => {
 		expect(customNames).toEqual(["aluminum foil", "paper towels"]);
 	});
 
+	it("does not show a category heading when every recipe item shares one category (e.g. all saved before this field existed)", () => {
+		renderDetail();
+
+		expect(screen.queryByText("Other")).not.toBeInTheDocument();
+		expect(screen.queryByText("Meat & Seafood")).not.toBeInTheDocument();
+	});
+
+	it("groups the From recipes section by category once more than one is present", () => {
+		renderDetail({
+			items: [
+				{
+					id: "item-1",
+					text: "chicken breast",
+					quantity: 1,
+					unit: "kg",
+					checked: false,
+					source: "recipe",
+					category: "Meat & Seafood",
+				},
+				{
+					id: "item-2",
+					text: "onion",
+					quantity: 2,
+					unit: "",
+					checked: false,
+					source: "recipe",
+					category: "Produce",
+				},
+			],
+		});
+
+		expect(screen.getByText("Meat & Seafood")).toBeInTheDocument();
+		expect(screen.getByText("Produce")).toBeInTheDocument();
+		// Categories render in the fixed store-aisle order (Produce before
+		// Meat & Seafood), not input/alphabetical order.
+		const headings = screen
+			.getAllByText(/^(Produce|Meat & Seafood)$/)
+			.map((el) => el.textContent);
+		expect(headings).toEqual(["Produce", "Meat & Seafood"]);
+	});
+
+	it("never shows a category heading for the Custom section", () => {
+		renderDetail({
+			items: [
+				{
+					id: "item-1",
+					text: "chicken breast",
+					quantity: 1,
+					unit: "kg",
+					checked: false,
+					source: "recipe",
+					category: "Meat & Seafood",
+				},
+				{
+					id: "item-2",
+					text: "onion",
+					quantity: 2,
+					unit: "",
+					checked: false,
+					source: "recipe",
+					category: "Produce",
+				},
+				{
+					id: "item-3",
+					text: "paper towels",
+					quantity: 1,
+					unit: "roll",
+					checked: false,
+					source: "custom",
+				},
+			],
+		});
+
+		// "Custom" section stays flat even though the recipe section above it
+		// is grouped by category.
+		const customSection = screen.getByText("Custom").closest("div");
+		expect(customSection?.textContent).not.toContain("Other");
+	});
+
 	it("sinks checked items to the bottom of their section, alphabetical within each group", () => {
 		renderDetail({
 			items: [

@@ -20,7 +20,11 @@ export type Migration = {
 	// is what marks the migration as already run for a given browser. A
 	// renamed/reused id makes it run again (or never), not migrate in place.
 	id: string;
-	run: () => void;
+	// May return a Promise — e.g. categorize-recipe-ingredients.ts calls out
+	// to Groq — in which case runMigrations awaits it before moving on to the
+	// next migration, but never blocks the caller itself (see index.tsx,
+	// which fires runMigrations without awaiting it).
+	run: () => void | Promise<void>;
 };
 
 function loadCompletedMigrationIds(): Set<string> {
@@ -42,25 +46,31 @@ function persistCompletedMigrationIds(ids: Set<string>): void {
 }
 
 // Runs every migration in `migrations` that hasn't completed in this browser
-// yet, in array order, then records it as completed — including when it
-// throws, since a broken migration retrying (and potentially re-corrupting
-// data) on every single page load is worse than a one-time data gap. Errors
-// are logged, never thrown, so one bad migration can't block the rest or the
-// app itself from loading.
-export function runMigrations(migrations: readonly Migration[]): void {
+// yet, in array order, awaiting each in turn — a synchronous migration's own
+// localStorage side effects still happen before this function's first
+// `await`, i.e. before it yields control back to an unawaited caller (see
+// index.tsx), so it behaves exactly as it did when this runner was
+// synchronous; only a genuinely async migration (network calls) actually
+// defers. Each migration is marked completed — including when it throws or
+// rejects, since a broken migration retrying (and potentially
+// re-corrupting data) on every single page load is worse than a one-time
+// data gap — and persisted immediately after, not batched until the end, so
+// a page closed mid-run doesn't lose credit for migrations that did finish.
+// Errors are logged, never thrown, so one bad migration can't block the rest
+// or the app itself.
+export async function runMigrations(
+	migrations: readonly Migration[],
+): Promise<void> {
 	const completed = loadCompletedMigrationIds();
-	let anyRun = false;
 
 	for (const migration of migrations) {
 		if (completed.has(migration.id)) continue;
 		try {
-			migration.run();
+			await migration.run();
 		} catch (error) {
 			console.error(`Migration "${migration.id}" failed:`, error);
 		}
 		completed.add(migration.id);
-		anyRun = true;
+		persistCompletedMigrationIds(completed);
 	}
-
-	if (anyRun) persistCompletedMigrationIds(completed);
 }

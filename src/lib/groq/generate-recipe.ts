@@ -1,6 +1,11 @@
 import { combineIngredientName } from "#/lib/recipe";
 import { getGroqClient } from "./client";
 import { extractJson } from "./extract-json";
+import {
+	BASENAME_RULE,
+	CATEGORY_RULE,
+	GROCERY_CATEGORY_ENUM_LIST,
+} from "./prompt-rules";
 import { portionSizeHint, regionHint } from "./region-hint";
 import type { RecipeContinuationResponse, RecipeResponse } from "./schema";
 import {
@@ -35,7 +40,7 @@ const RECIPE_SYSTEM_PROMPT = `You are a recipe generator. Given a user's request
   "difficulty": "quick_and_easy" | "intermediate" | "hard" (how difficult the dish is to make),
   "estimatedMinutes": number (total time to go from start to finished dish, in minutes),
   "caloriesPerServing": number (estimated calories in one serving of the finished dish, based on the ingredients and quantities),
-  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name, e.g. "minced", "chopped", "diced small"; use "" when there is no further detail), "quantity": number, "unit": string (the measure or container the quantity is in, e.g. "cloves", "g", "cups" — NEVER restate the ingredient's own name as its unit, e.g. for "egg" use unit "" not "egg"; use "" when there is genuinely no unit) } ],
+  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name, e.g. "minced", "chopped", "diced small"; use "" when there is no further detail), "quantity": number, "unit": string (the measure or container the quantity is in, e.g. "cloves", "g", "cups" — NEVER restate the ingredient's own name as its unit, e.g. for "egg" use unit "" not "egg"; use "" when there is genuinely no unit), "category": ${GROCERY_CATEGORY_ENUM_LIST} (see rule below) } ],
   "steps": [ { "section": string | null (e.g. "Prep", "Cook", "Plate"; null if the recipe doesn't warrant grouping), "text": string, "estimatedMinutes": number | null (ONLY for a step that is inherently time-based, e.g. "simmer for 10 minutes", "bake for 25 minutes", "let rest for 5 minutes" — the number of minutes that step takes; use null for every other step, e.g. "mince the garlic", most steps should be null) } ]
 }
 
@@ -43,18 +48,22 @@ The request can be anywhere from fully specific to completely open-ended: a spec
 
 Every ingredient must have a clean numeric quantity (not baked into the text) so servings can be rescaled by simple multiplication. Sections are optional — use null for every step if the recipe is simple enough to stay flat.
 
-baseName rule: baseName is what a shopper would look for or ask for at a grocery store — never a preparation method. Different prep styles of the same product share ONE baseName, with the prep pushed into description instead (e.g. "garlic, chopped" and "garlic, minced" are both baseName "garlic" — you can't buy "chopped garlic" or "minced garlic" as a distinct grocery item, only garlic prepared differently). But genuinely different products, cuts, or forms get their OWN baseName, even when the everyday ingredient name overlaps: this covers cuts (e.g. "chicken breast" and "chicken legs" are different baseNames, not "chicken" + a description, because they're sold as separate cuts/products at the store) and equally covers buyable form (e.g. "black pepper" (peppercorns) and "black pepper, ground" are different baseNames, not baseName "black pepper" + description "ground" — a jar of peppercorns and a jar of ground pepper are different things to shop for, unlike a same-day kitchen step; same logic for garlic vs. garlic powder, or fresh tomatoes vs. canned tomatoes). baseName should also default to singular for a countable ingredient (e.g. "onion", "egg", "carrot" — not "onions"/"eggs"/"carrots") so the same ingredient keeps one consistent baseName no matter how many a given recipe calls for — the quantity field already carries the count; the one exception is an ingredient only ever referred to in plural form in everyday grocery language (e.g. "oats", "noodles", "grits", "greens") — use whichever form a shopper would actually recognize.`;
+${BASENAME_RULE}
+
+${CATEGORY_RULE}`;
 
 const RECIPE_CONTINUATION_SYSTEM_PROMPT = `You are continuing a recipe generation for a dish that got cut off before it was finished. You'll be given the original request plus the ingredients and steps already generated. Respond with ONLY a JSON object (no other text) matching exactly this shape:
 
 {
-  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name, e.g. "minced"; use "" when there is no further detail), "quantity": number, "unit": string (e.g. "cloves", "g", "cups"; use "" if unitless) } ],
+  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name, e.g. "minced"; use "" when there is no further detail), "quantity": number, "unit": string (e.g. "cloves", "g", "cups"; use "" if unitless), "category": ${GROCERY_CATEGORY_ENUM_LIST} (see rule below) } ],
   "steps": [ { "section": string | null (e.g. "Prep", "Cook", "Plate"; null if the recipe doesn't warrant grouping), "text": string, "estimatedMinutes": number | null (ONLY for a step that is inherently time-based, e.g. "simmer for 10 minutes"; use null for every other step) } ]
 }
 
 Return ONLY the ingredients and steps that are still missing — do not repeat anything already generated. If nothing is missing for one of the two arrays, return an empty array for it.
 
-baseName rule: baseName is what a shopper would look for or ask for at a grocery store — never a preparation method. Different prep styles of the same product share ONE baseName, with the prep pushed into description instead (e.g. "garlic, chopped" and "garlic, minced" are both baseName "garlic"). But genuinely different products, cuts, or forms get their OWN baseName, even when the everyday ingredient name overlaps (e.g. "chicken breast" and "chicken legs" are different baseNames for the same reason "black pepper" and "black pepper, ground" are — different cuts/forms sold as separate grocery items, not "chicken"/"black pepper" plus a description). baseName should also default to singular for a countable ingredient (e.g. "onion", "egg") so it stays consistent regardless of quantity — except an ingredient only ever referred to in plural form in everyday grocery language (e.g. "oats", "noodles").`;
+${BASENAME_RULE}
+
+${CATEGORY_RULE}`;
 
 const RECIPE_MODIFICATION_SYSTEM_PROMPT = `You are modifying an existing recipe based on a user's instruction (e.g. "make it spicier", "swap shrimp for chicken", "make it vegetarian"). You'll be given the recipe's current title, overview, servings, difficulty, estimated time, ingredients, and steps, plus the requested change. Respond with ONLY a JSON object (no other text) matching exactly this shape:
 
@@ -65,13 +74,15 @@ const RECIPE_MODIFICATION_SYSTEM_PROMPT = `You are modifying an existing recipe 
   "difficulty": "quick_and_easy" | "intermediate" | "hard",
   "estimatedMinutes": number (total time to go from start to finished dish, in minutes),
   "caloriesPerServing": number (estimated calories in one serving of the finished dish, based on the ingredients and quantities),
-  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name; use "" when there is no further detail), "quantity": number, "unit": string (e.g. "cloves", "g", "cups"; use "" if unitless) } ],
+  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name; use "" when there is no further detail), "quantity": number, "unit": string (e.g. "cloves", "g", "cups"; use "" if unitless), "category": ${GROCERY_CATEGORY_ENUM_LIST} (see rule below) } ],
   "steps": [ { "section": string | null (e.g. "Prep", "Cook", "Plate"; null if the recipe doesn't warrant grouping), "text": string, "estimatedMinutes": number | null (ONLY for a step that is inherently time-based; use null for every other step) } ]
 }
 
 Return the FULL revised recipe, not a diff — every ingredient and step, including ones unaffected by the requested change, carried over as-is unless the instruction affects them. Apply the requested change thoroughly and consistently (e.g. "swap shrimp for chicken" means removing shrimp everywhere it appears — ingredients and step text — and replacing it with chicken, adjusting cook times/steps if the substitute genuinely cooks differently). Keep baseServings the same as the current recipe unless the instruction explicitly asks to change the serving size.
 
-baseName rule: baseName is what a shopper would look for or ask for at a grocery store — never a preparation method. Different prep styles of the same product share ONE baseName, with the prep pushed into description instead (e.g. "garlic, chopped" and "garlic, minced" are both baseName "garlic"). But genuinely different products, cuts, or forms get their OWN baseName, even when the everyday ingredient name overlaps (e.g. "chicken breast" and "chicken legs" are different baseNames for the same reason "black pepper" and "black pepper, ground" are — different cuts/forms sold as separate grocery items). baseName should default to singular for a countable ingredient (e.g. "onion", "egg") — except an ingredient only ever referred to in plural form in everyday grocery language (e.g. "oats", "noodles").`;
+${BASENAME_RULE}
+
+${CATEGORY_RULE}`;
 
 export type GenerateRecipeResult =
 	| { type: "off_topic" }

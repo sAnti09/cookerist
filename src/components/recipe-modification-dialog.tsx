@@ -138,6 +138,7 @@ export function RecipeModificationDialog({
 								description: ingredient.description,
 								quantity: ingredient.quantity,
 								unit: ingredient.unit,
+								category: ingredient.category,
 								checked: false,
 							})),
 							steps: result.recipe.steps.map((step) => ({

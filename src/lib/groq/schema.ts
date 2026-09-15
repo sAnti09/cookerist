@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+	DEFAULT_GROCERY_CATEGORY,
+	GROCERY_CATEGORIES,
+} from "#/lib/grocery-category";
 
 export const onTopicResponseSchema = z.object({
 	on_topic: z.boolean(),
@@ -19,11 +23,20 @@ export const difficultySchema = z.enum([
 	"hard",
 ]);
 
+// `.catch()` falls back to "Other" for a missing/unrecognized value instead
+// of failing the whole ingredient (and thus the whole recipe) over one bad
+// category tag — this field is a display grouping nicety, not something
+// worth rejecting an otherwise-good recipe for.
+export const groceryCategorySchema = z
+	.enum(GROCERY_CATEGORIES)
+	.catch(DEFAULT_GROCERY_CATEGORY);
+
 const ingredientItemSchema = z.object({
 	baseName: z.string().min(1),
 	description: z.string(),
 	quantity: z.number().nonnegative(),
 	unit: z.string(),
+	category: groceryCategorySchema,
 });
 
 const stepItemSchema = z.object({
@@ -58,4 +71,25 @@ export const recipeContinuationResponseSchema = z.object({
 
 export type RecipeContinuationResponse = z.infer<
 	typeof recipeContinuationResponseSchema
+>;
+
+// Used by the one-time categorize-recipe-ingredients migration (see
+// src/lib/migrations/categorize-recipe-ingredients.ts), which batches
+// already-saved ingredients back to Groq for a category tag plus a
+// baseName/description correctness pass. `id` echoes the input item's id
+// back so the migration can match a response entry to the ingredient(s) it
+// came from without relying on response order.
+export const categorizeIngredientsResponseSchema = z.object({
+	items: z.array(
+		z.object({
+			id: z.number(),
+			baseName: z.string().min(1),
+			description: z.string(),
+			category: groceryCategorySchema,
+		}),
+	),
+});
+
+export type CategorizeIngredientsResponse = z.infer<
+	typeof categorizeIngredientsResponseSchema
 >;

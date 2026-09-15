@@ -1,3 +1,5 @@
+import type { GroceryCategory } from "#/lib/grocery-category";
+
 export type GroceryListItemSource = "recipe" | "custom";
 
 export type GroceryListItemOrigin = {
@@ -20,6 +22,13 @@ export type GroceryListItem = {
 	// approximate ingredient density rather than a precise unit conversion —
 	// flagged so the UI can mark it as an estimate rather than an exact total.
 	approximate?: boolean;
+	// Which grocery-store section this item is shelved in (see
+	// src/lib/grocery-category.ts) — used to group the "From recipes" section
+	// of the grocery list. Present (non-undefined) only for a recipe-sourced
+	// item whose source ingredient(s) had a category; absent for a custom
+	// item (there's no per-item category input for those) or an item
+	// aggregated before this field existed.
+	category?: GroceryCategory;
 };
 
 export type GroceryList = {

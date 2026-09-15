@@ -19,7 +19,13 @@ const recipeInput: RecipeResponse = {
 	estimatedMinutes: 25,
 	caloriesPerServing: 620,
 	ingredients: [
-		{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
+		{
+			baseName: "shrimp",
+			description: "",
+			quantity: 300,
+			unit: "g",
+			category: "Meat & Seafood",
+		},
 	],
 	steps: [{ section: null, text: "Cook the pasta." }],
 };
@@ -48,6 +54,7 @@ describe("toStoredRecipe", () => {
 			description: "",
 			quantity: 300,
 			unit: "g",
+			category: "Meat & Seafood",
 			checked: false,
 		});
 		expect(recipe.steps[0]).toMatchObject({
@@ -87,6 +94,7 @@ describe("toStoredRecipe", () => {
 					description: "chopped",
 					quantity: 2,
 					unit: "cloves",
+					category: "Produce",
 				},
 			],
 		});

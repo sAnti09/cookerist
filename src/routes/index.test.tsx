@@ -43,6 +43,7 @@ class MockIntersectionObserver {
 const generateRecipeMock = vi.fn();
 const modifyRecipeMock = vi.fn();
 const identifyDishMock = vi.fn();
+const categorizeIngredientsMock = vi.fn();
 
 vi.mock("#/server/generate-recipe", () => ({
 	generateRecipe: (...args: unknown[]) => generateRecipeMock(...args),
@@ -52,6 +53,16 @@ vi.mock("#/server/generate-recipe", () => ({
 
 vi.mock("#/server/identify-dish", () => ({
 	identifyDish: (...args: unknown[]) => identifyDishMock(...args),
+}));
+
+// The categorize-recipe-ingredients migration (see src/lib/migrations/) calls
+// this in the background on every mount whenever any recipe is seeded —
+// mocked so it never hits getGroqClient() (which throws without a real
+// GROQ_API_KEY) and resolves harmlessly by default so it doesn't affect
+// these tests, which aren't about that migration.
+vi.mock("#/server/categorize-ingredients", () => ({
+	categorizeIngredients: (...args: unknown[]) =>
+		categorizeIngredientsMock(...args),
 }));
 
 // The real compressor uses createImageBitmap/canvas, neither meaningfully
@@ -73,7 +84,13 @@ const validRecipe = {
 	estimatedMinutes: 25,
 	caloriesPerServing: 620,
 	ingredients: [
-		{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
+		{
+			baseName: "shrimp",
+			description: "",
+			quantity: 300,
+			unit: "g",
+			category: "Meat & Seafood" as const,
+		},
 	],
 	steps: [{ section: null, text: "Cook the pasta." }],
 };
@@ -107,6 +124,8 @@ beforeEach(() => {
 	generateRecipeMock.mockReset();
 	modifyRecipeMock.mockReset();
 	identifyDishMock.mockReset();
+	categorizeIngredientsMock.mockReset();
+	categorizeIngredientsMock.mockResolvedValue({ type: "success", items: [] });
 	window.localStorage.clear();
 	MockIntersectionObserver.instances = [];
 	vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);

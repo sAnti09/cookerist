@@ -105,9 +105,17 @@ export function Home() {
 
 	useEffect(() => {
 		// Runs any not-yet-applied one-time data migrations (see
-		// src/lib/migrations/) directly against localStorage before it's read
-		// below, so loadRecipes()/loadGroceryLists() see already-migrated data.
-		runMigrations(MIGRATIONS);
+		// src/lib/migrations/) — deliberately not awaited, so a slow migration
+		// (e.g. one that calls out to Groq) never blocks the initial render. A
+		// synchronous migration's localStorage writes still land before this,
+		// since its whole body runs before runMigrations' first `await` yields
+		// control back here (see run-migrations.ts) — so loadRecipes()/
+		// loadGroceryLists() right below already see a synchronous migration's
+		// result; only an async migration's effect shows up on the next reload
+		// instead of live in this session.
+		runMigrations(MIGRATIONS).catch((error) => {
+			console.error("Migration run failed:", error);
+		});
 
 		const loadedRecipes = loadRecipes();
 		const loadedGroceryLists = loadGroceryLists();

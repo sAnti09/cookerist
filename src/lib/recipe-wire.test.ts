@@ -19,7 +19,23 @@ describe("toWireIngredient", () => {
 			description: "minced",
 			quantity: 4,
 			unit: "cloves",
+			category: "Other",
 		});
+	});
+
+	it("carries an explicit category through unchanged", () => {
+		const ingredient: Ingredient = {
+			id: "ing-1",
+			text: "garlic",
+			baseName: "garlic",
+			description: "",
+			quantity: 4,
+			unit: "cloves",
+			category: "Produce",
+			checked: false,
+		};
+
+		expect(toWireIngredient(ingredient).category).toBe("Produce");
 	});
 
 	it("falls back to text as baseName and empty description when both are absent (pre-TEST-255)", () => {
@@ -36,6 +52,7 @@ describe("toWireIngredient", () => {
 			description: "",
 			quantity: 300,
 			unit: "g",
+			category: "Other",
 		});
 	});
 });

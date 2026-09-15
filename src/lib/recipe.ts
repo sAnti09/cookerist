@@ -1,3 +1,5 @@
+import type { GroceryCategory } from "#/lib/grocery-category";
+
 export type Ingredient = {
 	id: string;
 	text: string;
@@ -11,6 +13,11 @@ export type Ingredient = {
 	// description.
 	baseName?: string;
 	description?: string;
+	// Which grocery-store section this ingredient is shelved in (see
+	// src/lib/grocery-category.ts), used to group the grocery list.
+	// Optional: absent on ingredients saved before this field existed —
+	// callers should fall back to DEFAULT_GROCERY_CATEGORY ("Other").
+	category?: GroceryCategory;
 };
 
 // Composes the full display name from a base name + optional description

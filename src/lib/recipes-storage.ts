@@ -119,6 +119,7 @@ export function toStoredRecipe(
 			description: ingredient.description,
 			quantity: ingredient.quantity,
 			unit: ingredient.unit,
+			category: ingredient.category,
 			checked: false,
 		})),
 		steps: input.steps.map((step) => ({

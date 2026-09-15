@@ -6,6 +6,10 @@ import {
 	APPROXIMATE_ITEMS_NOTE,
 	formatGroceryItemQuantity,
 } from "#/lib/aggregate-grocery-items";
+import {
+	DEFAULT_GROCERY_CATEGORY,
+	GROCERY_CATEGORIES,
+} from "#/lib/grocery-category";
 import type { GroceryList, GroceryListItem } from "#/lib/grocery-list";
 import { applyGroceryItemsCheckedToRecipes } from "#/lib/propagate-grocery-check";
 import type { Recipe } from "#/lib/recipe";
@@ -119,6 +123,22 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 		recipeItems.length === 0 &&
 		customItems.length === 0;
 	const hasApproximateItems = list.items.some((item) => item.approximate);
+	// Groups the "From recipes" section by grocery-store category (see
+	// grocery-category.ts) — recipeItems is already checked-last+alphabetical
+	// sorted, and filtering preserves that relative order within each
+	// category. Custom items have no per-item category input, so that
+	// section stays flat. Category subheadings are only shown once there's
+	// more than one group — a list with only "Other" (every item saved
+	// before this field existed, or Groq falling back to it for all of them)
+	// renders exactly as it did before this feature, not as a single
+	// redundant "Other" heading.
+	const recipeItemsByCategory = GROCERY_CATEGORIES.map((category) => ({
+		category,
+		items: recipeItems.filter(
+			(item) => (item.category ?? DEFAULT_GROCERY_CATEGORY) === category,
+		),
+	})).filter((group) => group.items.length > 0);
+	const showCategoryHeadings = recipeItemsByCategory.length > 1;
 
 	return (
 		<div className="flex flex-col gap-5">
@@ -168,7 +188,18 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 				{recipeItems.length > 0 ? (
 					<div className="mt-3">
 						<h5 className="text-sm font-semibold">From recipes</h5>
-						<ItemList items={recipeItems} onToggle={handleToggleItem} />
+						{showCategoryHeadings ? (
+							recipeItemsByCategory.map(({ category, items }) => (
+								<div key={category} className="mt-2">
+									<h6 className="text-ink-dim text-xs font-medium uppercase tracking-wide">
+										{category}
+									</h6>
+									<ItemList items={items} onToggle={handleToggleItem} />
+								</div>
+							))
+						) : (
+							<ItemList items={recipeItems} onToggle={handleToggleItem} />
+						)}
 					</div>
 				) : null}
 

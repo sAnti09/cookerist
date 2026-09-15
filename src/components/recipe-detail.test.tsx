@@ -270,8 +270,20 @@ describe("RecipeDetail", () => {
 		const callArgs = continueRecipeMock.mock.calls[0]?.[0];
 		expect(callArgs.data.prompt).toBe(baseRecipe.prompt);
 		expect(callArgs.data.soFar.ingredients).toEqual([
-			{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
-			{ baseName: "garlic", description: "", quantity: 4, unit: "cloves" },
+			{
+				baseName: "shrimp",
+				description: "",
+				quantity: 300,
+				unit: "g",
+				category: "Other",
+			},
+			{
+				baseName: "garlic",
+				description: "",
+				quantity: 4,
+				unit: "cloves",
+				category: "Other",
+			},
 		]);
 	});
 

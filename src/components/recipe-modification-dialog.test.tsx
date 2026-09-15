@@ -176,8 +176,20 @@ describe("RecipeModificationDialog", () => {
 		expect(callArgs.data.instruction).toBe("swap shrimp for chicken");
 		expect(callArgs.data.current.title).toBe(baseRecipe.title);
 		expect(callArgs.data.current.ingredients).toEqual([
-			{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
-			{ baseName: "garlic", description: "", quantity: 4, unit: "cloves" },
+			{
+				baseName: "shrimp",
+				description: "",
+				quantity: 300,
+				unit: "g",
+				category: "Other",
+			},
+			{
+				baseName: "garlic",
+				description: "",
+				quantity: 4,
+				unit: "cloves",
+				category: "Other",
+			},
 		]);
 	});
 
@@ -401,7 +413,13 @@ describe("RecipeModificationDialog", () => {
 		const callArgs = modifyRecipeMock.mock.calls[0]?.[0];
 		expect(callArgs.data.current.title).toBe(pendingModification.draft.title);
 		expect(callArgs.data.current.ingredients).toEqual([
-			{ baseName: "chicken breast", description: "", quantity: 300, unit: "g" },
+			{
+				baseName: "chicken breast",
+				description: "",
+				quantity: 300,
+				unit: "g",
+				category: "Other",
+			},
 		]);
 	});
 

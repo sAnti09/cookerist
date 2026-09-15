@@ -39,7 +39,13 @@ const validRecipe: RecipeResponse = {
 	estimatedMinutes: 25,
 	caloriesPerServing: 620,
 	ingredients: [
-		{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
+		{
+			baseName: "shrimp",
+			description: "",
+			quantity: 300,
+			unit: "g",
+			category: "Meat & Seafood",
+		},
 	],
 	steps: [{ section: null, text: "Cook the pasta." }],
 };
@@ -94,6 +100,44 @@ describe("generateRecipe", () => {
 			truncated: false,
 		});
 		expect(createMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("falls back an ingredient's category to \"Other\" instead of failing the whole recipe, when Groq's value is missing or unrecognized", async () => {
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(
+				jsonResponse({
+					...validRecipe,
+					ingredients: [
+						{
+							baseName: "mystery item",
+							description: "",
+							quantity: 1,
+							unit: "",
+							category: "Not A Real Category",
+						},
+					],
+				}),
+			);
+
+		const result = await generateRecipe("shrimp pasta for 2");
+
+		expect(result).toEqual({
+			type: "success",
+			recipe: {
+				...validRecipe,
+				ingredients: [
+					{
+						baseName: "mystery item",
+						description: "",
+						quantity: 1,
+						unit: "",
+						category: "Other",
+					},
+				],
+			},
+			truncated: false,
+		});
 	});
 
 	it("sends the on-topic prompt as the classifier's system message for a craving-style request", async () => {
@@ -227,12 +271,19 @@ describe("generateRecipe", () => {
 		const elaborateRecipe = {
 			...validRecipe,
 			ingredients: [
-				{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
+				{
+					baseName: "shrimp",
+					description: "",
+					quantity: 300,
+					unit: "g",
+					category: "Meat & Seafood",
+				},
 				{
 					baseName: "garlic",
 					description: "minced",
 					quantity: 4,
 					unit: "cloves",
+					category: "Produce",
 				},
 			],
 			steps: [
@@ -442,7 +493,13 @@ describe("continueRecipe", () => {
 	it("returns the remaining ingredients/steps on success", async () => {
 		const remaining = {
 			ingredients: [
-				{ baseName: "parmesan", description: "", quantity: 50, unit: "g" },
+				{
+					baseName: "parmesan",
+					description: "",
+					quantity: 50,
+					unit: "g",
+					category: "Dairy & Eggs",
+				},
 			],
 			steps: [{ section: null, text: "Plate and serve." }],
 		};
@@ -499,7 +556,13 @@ describe("continueRecipe", () => {
 	it("repairs a truncated continuation response", async () => {
 		const remaining = {
 			ingredients: [
-				{ baseName: "parmesan", description: "", quantity: 50, unit: "g" },
+				{
+					baseName: "parmesan",
+					description: "",
+					quantity: 50,
+					unit: "g",
+					category: "Dairy & Eggs",
+				},
 			],
 			steps: [{ section: null, text: "Plate and serve." }],
 		};
@@ -548,6 +611,7 @@ describe("modifyRecipe", () => {
 					description: "",
 					quantity: 300,
 					unit: "g",
+					category: "Meat & Seafood",
 				},
 			],
 		};
@@ -586,12 +650,19 @@ describe("modifyRecipe", () => {
 		const elaborateRecipe: RecipeResponse = {
 			...validRecipe,
 			ingredients: [
-				{ baseName: "shrimp", description: "", quantity: 300, unit: "g" },
+				{
+					baseName: "shrimp",
+					description: "",
+					quantity: 300,
+					unit: "g",
+					category: "Meat & Seafood",
+				},
 				{
 					baseName: "garlic",
 					description: "minced",
 					quantity: 4,
 					unit: "cloves",
+					category: "Produce",
 				},
 			],
 			steps: [

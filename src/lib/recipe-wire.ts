@@ -1,3 +1,4 @@
+import { DEFAULT_GROCERY_CATEGORY } from "#/lib/grocery-category";
 import type { RecipeResponse } from "#/lib/groq/schema";
 import type { Ingredient, Step } from "#/lib/recipe";
 
@@ -15,6 +16,7 @@ export function toWireIngredient(
 		description: ingredient.description ?? "",
 		quantity: ingredient.quantity,
 		unit: ingredient.unit,
+		category: ingredient.category ?? DEFAULT_GROCERY_CATEGORY,
 	};
 }
 

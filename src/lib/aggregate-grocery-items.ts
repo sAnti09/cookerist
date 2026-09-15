@@ -1,3 +1,7 @@
+import {
+	DEFAULT_GROCERY_CATEGORY,
+	type GroceryCategory,
+} from "./grocery-category";
 import type { GroceryListItem, GroceryListItemOrigin } from "./grocery-list";
 import { lookupIngredientDensity } from "./ingredient-density";
 import { lookupLengthDensity } from "./ingredient-length-density";
@@ -136,6 +140,11 @@ type IngredientGroup = {
 	// flag the total as an estimate.
 	approximate: boolean;
 	origins: GroceryListItemOrigin[];
+	// From whichever occurrence first created this group — later occurrences
+	// of the same ingredient are expected to agree (same baseName should mean
+	// the same grocery-store section), so this doesn't attempt to reconcile a
+	// disagreement, just keeps the first answer.
+	category: GroceryCategory;
 };
 
 export function aggregateGroceryItems(
@@ -262,6 +271,7 @@ export function aggregateGroceryItems(
 					quantity: contribution,
 					approximate,
 					origins: [origin],
+					category: ingredient.category ?? DEFAULT_GROCERY_CATEGORY,
 				});
 			}
 		}
@@ -356,6 +366,7 @@ export function aggregateGroceryItems(
 				source: "recipe",
 				origins: group.origins,
 				approximate: group.approximate || undefined,
+				category: group.category,
 			};
 		},
 	);
