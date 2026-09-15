@@ -537,11 +537,12 @@ export function Home() {
 						{view === "grocery" ? (
 							<Button
 								variant="primary"
+								aria-label="Create grocery list"
 								className="gap-1.5"
 								onClick={handleCreateGroceryList}
 							>
 								<Plus className="size-4" aria-hidden="true" />
-								Create grocery list
+								<span className="hidden sm:inline">Create grocery list</span>
 							</Button>
 						) : null}
 					</div>
