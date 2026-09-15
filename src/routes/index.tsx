@@ -27,6 +27,7 @@ import {
 	updateGroceryList,
 } from "#/lib/grocery-storage";
 import { compressImageToDataUrl } from "#/lib/image-capture";
+import { MIGRATIONS, runMigrations } from "#/lib/migrations";
 import { DIFFICULTY_LABELS, type Difficulty, type Recipe } from "#/lib/recipe";
 import {
 	deleteRecipe,
@@ -103,6 +104,11 @@ export function Home() {
 	});
 
 	useEffect(() => {
+		// Runs any not-yet-applied one-time data migrations (see
+		// src/lib/migrations/) directly against localStorage before it's read
+		// below, so loadRecipes()/loadGroceryLists() see already-migrated data.
+		runMigrations(MIGRATIONS);
+
 		const loadedRecipes = loadRecipes();
 		const loadedGroceryLists = loadGroceryLists();
 		setRecipes(loadedRecipes);

@@ -200,7 +200,9 @@ describe("GroceryListCreateForm", () => {
 
 		await addRecipe(user, "Shrimp Pasta");
 
-		expect(screen.getByText("1 lb")).toBeInTheDocument();
+		// 1 lb shrimp converts to grams and displays in metric (never "lb") —
+		// see the "convert everything to metric" grocery improvement.
+		expect(screen.getByText("453.75 g")).toBeInTheDocument();
 		expect(screen.getByText("shrimp")).toBeInTheDocument();
 	});
 
@@ -273,14 +275,14 @@ describe("GroceryListCreateForm", () => {
 		renderForm({ recipes: [makeRecipe()] });
 
 		await addRecipe(user, "Shrimp Pasta");
-		expect(screen.getByText("1 lb")).toBeInTheDocument();
+		expect(screen.getByText("453.75 g")).toBeInTheDocument();
 		expect(screen.getByText("shrimp")).toBeInTheDocument();
 
 		await user.click(
 			screen.getByRole("button", { name: "Remove Shrimp Pasta" }),
 		);
 
-		expect(screen.queryByText("1 lb")).not.toBeInTheDocument();
+		expect(screen.queryByText("453.75 g")).not.toBeInTheDocument();
 		expect(screen.queryByText("shrimp")).not.toBeInTheDocument();
 	});
 
@@ -321,7 +323,8 @@ describe("GroceryListCreateForm", () => {
 			/>,
 		);
 
-		expect(screen.getByText("1.5 lb")).toBeInTheDocument();
+		// 1 lb scaled to 1.5 lb, converted to grams and displayed in metric.
+		expect(screen.getByText("680.5 g")).toBeInTheDocument();
 		expect(screen.getByText("shrimp")).toBeInTheDocument();
 	});
 
@@ -602,8 +605,8 @@ describe("GroceryListCreateForm", () => {
 		expect(created.items).toHaveLength(1);
 		expect(created.items[0]).toMatchObject({
 			text: "shrimp",
-			quantity: 1,
-			unit: "lb",
+			quantity: 453.75,
+			unit: "g",
 		});
 	});
 
@@ -746,7 +749,7 @@ describe("GroceryListCreateForm", () => {
 				editingList: makeEditingList(),
 			});
 
-			expect(screen.getByText("1 lb")).toBeInTheDocument();
+			expect(screen.getByText("453.75 g")).toBeInTheDocument();
 			expect(screen.getByText("shrimp")).toBeInTheDocument();
 
 			await addRecipe(user, "Garlic Bread");

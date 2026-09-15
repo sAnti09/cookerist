@@ -62,6 +62,16 @@ export function updateGroceryList(
 	return next;
 }
 
+// Bulk-overwrites every stored list at once, bypassing the per-list mutation
+// helpers above — used by one-time data migrations (see
+// src/lib/migrations/) that need to rewrite many lists' items together
+// without a separate persist() call (and full array re-serialization) per
+// list.
+export function replaceGroceryLists(lists: GroceryList[]): GroceryList[] {
+	persist(lists);
+	return lists;
+}
+
 export function setExpandedGroceryList(
 	lists: GroceryList[],
 	id: string | null,

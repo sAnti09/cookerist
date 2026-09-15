@@ -152,8 +152,11 @@ describe("aggregateGroceryItems", () => {
 
 		const result = aggregateGroceryItems([recipeA, recipeB]);
 
+		// Stay in separate buckets (mass vs. volume, no density to bridge them),
+		// but each still displays in metric — "g" for the mass one, "ml" (not
+		// "cups") for the volume one.
 		expect(result).toHaveLength(2);
-		expect(result.map((item) => item.unit).sort()).toEqual(["cups", "g"]);
+		expect(result.map((item) => item.unit).sort()).toEqual(["g", "ml"]);
 		expect(result.every((item) => item.approximate === undefined)).toBe(true);
 	});
 
@@ -424,14 +427,14 @@ describe("aggregateGroceryItems", () => {
 
 		const result = aggregateGroceryItems([recipeA, recipeB]);
 
-		// 1 tsp (4.92892 ml) + 1 tbsp (14.7868 ml) = 19.71572 ml = 1.333 tbsp,
-		// rounded up to the nearest 0.25 -> displayed in "tbsp" since it's the
-		// larger of the two units used; no density needed, so not approximate.
+		// 1 tsp (4.92892 ml) + 1 tbsp (14.7868 ml) = 19.71572 ml, displayed in
+		// "ml" (always metric now, never "tsp"/"tbsp"), rounded up to the
+		// nearest 100 ml -> 100 ml; no density needed, so not approximate.
 		expect(result).toHaveLength(1);
 		expect(result[0]).toMatchObject({
 			text: "vanilla extract",
-			unit: "tbsp",
-			quantity: 1.5,
+			unit: "ml",
+			quantity: 100,
 			approximate: undefined,
 		});
 	});
@@ -839,7 +842,9 @@ describe("aggregateGroceryItems", () => {
 
 		expect(byText.salt).toBe(200);
 		expect(byText.broth).toBe(300);
-		expect(byText.quinoa).toBe(1.25);
+		// 1.1 cups = 260.2468 ml, displayed in "ml" (always metric now, never
+		// "cups"), rounded up to the nearest 100 -> 300.
+		expect(byText.quinoa).toBe(300);
 		expect(byText.eggs).toBe(4);
 	});
 
@@ -892,7 +897,13 @@ describe("aggregateGroceryItems", () => {
 
 		const result = aggregateGroceryItems([recipe]);
 
-		expect(result[0]).toMatchObject({ text: "quinoa", quantity: 2 });
+		// 1 cup scaled to 2 cups (473.176 ml), displayed in "ml" (always metric
+		// now), rounded up to the nearest 100 -> 500.
+		expect(result[0]).toMatchObject({
+			text: "quinoa",
+			unit: "ml",
+			quantity: 500,
+		});
 	});
 
 	it("scales each recipe independently before merging matching ingredients", () => {

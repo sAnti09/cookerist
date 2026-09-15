@@ -1,7 +1,7 @@
 import { combineIngredientName } from "#/lib/recipe";
 import { getGroqClient } from "./client";
 import { extractJson } from "./extract-json";
-import { regionHint } from "./region-hint";
+import { portionSizeHint, regionHint } from "./region-hint";
 import type { RecipeContinuationResponse, RecipeResponse } from "./schema";
 import {
 	onTopicResponseSchema,
@@ -194,7 +194,10 @@ export async function generateRecipe(
 			max_completion_tokens: RECIPE_MAX_COMPLETION_TOKENS,
 			messages: [
 				{ role: "system", content: RECIPE_SYSTEM_PROMPT },
-				{ role: "user", content: `${prompt}${regionHint(timezone)}` },
+				{
+					role: "user",
+					content: `${prompt}${regionHint(timezone)}${portionSizeHint(timezone)}`,
+				},
 			],
 		});
 		const choice = completion.choices[0];

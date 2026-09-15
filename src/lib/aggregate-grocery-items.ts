@@ -13,6 +13,7 @@ import {
 	convertFromBase,
 	getUnitDimension,
 	pickDisplayUnit,
+	pickMetricDisplayUnit,
 	resolveUnit,
 } from "./unit-conversion";
 
@@ -113,11 +114,10 @@ type IngredientGroup = {
 	text: string;
 	bucket: GroupBucket;
 	// Every distinct original unit string contributed to this group — used to
-	// pick a display unit for a "volume"/"length"/null-bucket group once
-	// merging is done (see pickDisplayUnit); unused for "mass" (see
-	// roundGroceryQuantity call below, which picks g/kg by magnitude instead,
-	// since a mass group may include no native mass unit at all — see
-	// `approximate`) and for "count" (display is re-derived from an
+	// pick a display unit for a "length"/null-bucket group once merging is
+	// done (see pickDisplayUnit); unused for "mass" and "volume" (both always
+	// display in metric, picked by magnitude — see the finalization step
+	// below) and for "count" (display is re-derived from an
 	// ingredient-piece-ratio lookup or a filter over this list — see the
 	// finalization step below).
 	unitsUsed: string[];
@@ -269,24 +269,6 @@ export function aggregateGroceryItems(
 
 	const recipeItems: GroceryListItem[] = Array.from(groups.values()).map(
 		(group) => {
-			// A mass group with no density estimate involved prefers the largest
-			// *native* mass unit actually used (e.g. "500 g" + "1 kg" -> "kg", or
-			// a lone "1 lb" stays "lb") — same heuristic as volume/unbucketed
-			// groups. But once any contribution came from a density estimate
-			// (`approximate`), a native unit is no longer trustworthy as the
-			// display anchor: e.g. "1 cup sugar" (~200 g, estimated) + "500 mg
-			// sugar" (native) would otherwise lock onto "mg" for the whole total
-			// just because it's the only native mass unit present, producing an
-			// unreadable "≈200500 mg" instead of "≈200.5 g". So an approximate
-			// group always picks whichever of mg/g/kg fits the total's magnitude
-			// instead, same as a group with no native mass unit at all (e.g. "1
-			// tbsp" + "1 cup" sugar, entirely density-estimated).
-			const massUnitsUsed = group.approximate
-				? []
-				: group.unitsUsed.filter(
-						(unit) => resolveUnit(unit)?.dimension === "mass",
-					);
-
 			let displayUnit: string;
 			let displayQuantity: number;
 			// Set only by the count/piece-ratio branch below, where the quantity
@@ -295,15 +277,18 @@ export function aggregateGroceryItems(
 			// every other branch rounds the usual way, via roundGroceryQuantity
 			// on the final displayUnit/displayQuantity once both are known.
 			let alreadyRoundedQuantity: number | null = null;
-			if (group.bucket === "mass") {
-				displayUnit =
-					massUnitsUsed.length > 0
-						? pickDisplayUnit(massUnitsUsed)
-						: group.quantity >= 1000
-							? "kg"
-							: group.quantity < 1
-								? "mg"
-								: "g";
+			if (group.bucket === "mass" || group.bucket === "volume") {
+				// Always metric, picked by magnitude (mg/g/kg for mass, ml/l for
+				// volume) — never a native unit like "lb"/"cup", even when
+				// that's the only unit any contributing recipe used. A grocery
+				// list merges ingredients from many recipes at once, so one
+				// consistent unit system reads better than echoing back
+				// whichever unit happened to be used first. Shared with the
+				// metric-grocery-units migration (see
+				// src/lib/migrations/metric-grocery-units.ts) so an existing
+				// stored list converts to the exact same units a fresh
+				// aggregation would produce.
+				displayUnit = pickMetricDisplayUnit(group.bucket, group.quantity);
 				displayQuantity = convertFromBase(group.quantity, displayUnit);
 			} else if (group.bucket === "count") {
 				const pieceRatio = lookupPieceRatio(group.text);
@@ -349,11 +334,11 @@ export function aggregateGroceryItems(
 					displayQuantity = group.quantity;
 				}
 			} else {
-				// "volume", "length", and unbucketed (null) groups display in
-				// whichever of their actually-used units is largest (e.g. tbsp +
-				// cup -> cup, or in + cm -> in) -- for an unbucketed group there's
-				// only ever one entry in `unitsUsed` (it's the grouping key), so
-				// this just echoes it back.
+				// "length" and unbucketed (null) groups display in whichever of
+				// their actually-used units is largest (e.g. in + cm -> in) --
+				// for an unbucketed group there's only ever one entry in
+				// `unitsUsed` (it's the grouping key), so this just echoes it
+				// back.
 				displayUnit = pickDisplayUnit(group.unitsUsed);
 				displayQuantity = group.bucket
 					? convertFromBase(group.quantity, displayUnit)

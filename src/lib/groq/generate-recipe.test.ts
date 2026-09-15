@@ -186,6 +186,18 @@ describe("generateRecipe", () => {
 		expect(recipeCallContent).toContain("Asia/Manila");
 	});
 
+	it("appends a portion-sizing hint to the recipe call so quantities match local serving norms, not just cuisine choice", async () => {
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(jsonResponse(validRecipe));
+
+		await generateRecipe("shrimp pasta for 2", "Asia/Manila");
+
+		const recipeCallContent = createMock.mock.calls[1]?.[0].messages[1].content;
+		expect(recipeCallContent).toMatch(/regardless of which dish/i);
+		expect(recipeCallContent).toMatch(/serving/i);
+	});
+
 	it("passes a generous max_completion_tokens for the recipe call", async () => {
 		createMock
 			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))

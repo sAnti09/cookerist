@@ -229,6 +229,94 @@ describe("GroceryListDetail", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("lists items alphabetically within each section regardless of input order", () => {
+		renderDetail({
+			items: [
+				{
+					id: "item-1",
+					text: "shrimp",
+					quantity: 1,
+					unit: "lb",
+					checked: false,
+					source: "recipe",
+				},
+				{
+					id: "item-2",
+					text: "garlic",
+					quantity: 3,
+					unit: "cloves",
+					checked: false,
+					source: "recipe",
+				},
+				{
+					id: "item-3",
+					text: "paper towels",
+					quantity: 2,
+					unit: "rolls",
+					checked: false,
+					source: "custom",
+				},
+				{
+					id: "item-4",
+					text: "aluminum foil",
+					quantity: 1,
+					unit: "",
+					checked: false,
+					source: "custom",
+				},
+			],
+		});
+
+		const recipeNames = screen
+			.getAllByText(/^(garlic|shrimp)$/)
+			.map((el) => el.textContent);
+		expect(recipeNames).toEqual(["garlic", "shrimp"]);
+
+		const customNames = screen
+			.getAllByText(/^(aluminum foil|paper towels)$/)
+			.map((el) => el.textContent);
+		expect(customNames).toEqual(["aluminum foil", "paper towels"]);
+	});
+
+	it("filters items by search text across both sections", async () => {
+		const user = userEvent.setup();
+		renderDetail();
+
+		await user.type(screen.getByLabelText("Search grocery items"), "shrimp");
+
+		expect(screen.getByText("shrimp")).toBeInTheDocument();
+		expect(screen.queryByText("paper towels")).not.toBeInTheDocument();
+	});
+
+	it("shows a no-results message when the search matches nothing", async () => {
+		const user = userEvent.setup();
+		renderDetail();
+
+		await user.type(
+			screen.getByLabelText("Search grocery items"),
+			"nonexistent",
+		);
+
+		expect(
+			screen.getByText('No items match "nonexistent".'),
+		).toBeInTheDocument();
+		expect(screen.queryByText("shrimp")).not.toBeInTheDocument();
+		expect(screen.queryByText("paper towels")).not.toBeInTheDocument();
+	});
+
+	it("check-all still checks every item even while a search filters the view", async () => {
+		const user = userEvent.setup();
+		const { onUpdate } = renderDetail();
+
+		await user.type(screen.getByLabelText("Search grocery items"), "shrimp");
+		await user.click(screen.getByLabelText("Check all"));
+
+		expect(onUpdate).toHaveBeenCalledWith({
+			...list,
+			items: list.items.map((item) => ({ ...item, checked: true })),
+		});
+	});
+
 	it("shows a note explaining the ≈ symbol when a list has an approximate item", () => {
 		renderDetail({
 			items: [

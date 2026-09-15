@@ -1,4 +1,5 @@
-import { memo } from "react";
+import { Search } from "lucide-react";
+import { memo, useState } from "react";
 import { Checkbox } from "#/components/ui/checkbox";
 import { IngredientLine } from "#/components/ui/ingredient-line";
 import {
@@ -54,6 +55,8 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 	onUpdate,
 	onUpdateRecipes,
 }: GroceryListDetailProps) {
+	const [search, setSearch] = useState("");
+
 	function handleToggleItem(id: string) {
 		const item = list.items.find((i) => i.id === id);
 		if (!item) return;
@@ -88,8 +91,22 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 	const recipeTitles = list.recipeIds
 		.map((id) => recipes.find((recipe) => recipe.id === id)?.title)
 		.filter((title): title is string => Boolean(title));
-	const recipeItems = list.items.filter((item) => item.source === "recipe");
-	const customItems = list.items.filter((item) => item.source === "custom");
+	// Search only narrows which items are shown — "Check all" still applies to
+	// every item in the list, not just what's currently visible, and the
+	// approximate-quantity note below still reflects the whole list too.
+	const trimmedSearch = search.trim().toLowerCase();
+	const matchesSearch = (item: GroceryListItem) =>
+		trimmedSearch === "" || item.text.toLowerCase().includes(trimmedSearch);
+	const recipeItems = list.items
+		.filter((item) => item.source === "recipe" && matchesSearch(item))
+		.sort((a, b) => a.text.localeCompare(b.text));
+	const customItems = list.items
+		.filter((item) => item.source === "custom" && matchesSearch(item))
+		.sort((a, b) => a.text.localeCompare(b.text));
+	const hasNoSearchResults =
+		trimmedSearch !== "" &&
+		recipeItems.length === 0 &&
+		customItems.length === 0;
 	const hasApproximateItems = list.items.some((item) => item.approximate);
 
 	return (
@@ -120,6 +137,23 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 					/>
 				</div>
 
+				{list.items.length > 0 ? (
+					<div className="card mt-2 flex items-center gap-2 rounded-full bg-surface px-4 py-2">
+						<Search
+							className="size-4 shrink-0 text-ink-dim"
+							aria-hidden="true"
+						/>
+						<input
+							type="search"
+							value={search}
+							onChange={(event) => setSearch(event.target.value)}
+							placeholder="Search items…"
+							aria-label="Search grocery items"
+							className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-dim sm:text-sm"
+						/>
+					</div>
+				) : null}
+
 				{recipeItems.length > 0 ? (
 					<div className="mt-3">
 						<h5 className="text-sm font-semibold">From recipes</h5>
@@ -132,6 +166,12 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 						<h5 className="text-sm font-semibold">Custom</h5>
 						<ItemList items={customItems} onToggle={handleToggleItem} />
 					</div>
+				) : null}
+
+				{hasNoSearchResults ? (
+					<p className="mt-3 text-sm text-ink-dim">
+						No items match "{search.trim()}".
+					</p>
 				) : null}
 
 				{hasApproximateItems ? (

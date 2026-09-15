@@ -147,10 +147,31 @@ export function convertFromBase(baseQuantity: number, unit: string): number {
 	return def ? baseQuantity / def.toBase : baseQuantity;
 }
 
+// Always-metric display unit for a mass or volume total, picked by
+// magnitude — mg/g/kg for mass, ml/l for volume — never a native unit like
+// "lb"/"cup", even when that's the only unit a source recipe used.
+// `baseQuantity` is in the dimension's base unit (grams for mass,
+// milliliters for volume). Shared by aggregate-grocery-items.ts (a fresh
+// aggregation) and the metric-grocery-units migration (fixing up grocery
+// lists saved before this rule existed — see
+// src/lib/migrations/metric-grocery-units.ts) so both apply the exact same
+// rule and never drift apart.
+export function pickMetricDisplayUnit(
+	dimension: "mass" | "volume",
+	baseQuantity: number,
+): string {
+	if (dimension === "volume") {
+		return baseQuantity >= 1000 ? "l" : "ml";
+	}
+	return baseQuantity >= 1000 ? "kg" : baseQuantity < 1 ? "mg" : "g";
+}
+
 // Picks which of a set of actually-used unit strings to display a merged
 // total in: the one with the largest conversion factor (e.g. tbsp + cup ->
 // cup), so the result is always a unit that was genuinely used in one of the
 // source recipes rather than an arbitrary "best fit" unit nobody asked for.
+// Only used for the "length"/unrecognized buckets now — mass and volume
+// always go through pickMetricDisplayUnit instead (see above).
 export function pickDisplayUnit(units: readonly string[]): string {
 	let best = units[0];
 	let bestFactor = resolveUnit(best)?.toBase ?? 0;
