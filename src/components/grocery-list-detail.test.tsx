@@ -505,4 +505,110 @@ describe("GroceryListDetail", () => {
 		expect(screen.getByText("sugar")).toBeInTheDocument();
 		expect(screen.getByText(/estimated by converting/)).toBeInTheDocument();
 	});
+
+	it("shows a merge suggestion for a name-alike pair of recipe items", () => {
+		renderDetail({
+			items: [
+				{
+					id: "item-1",
+					text: "yellow onion",
+					quantity: 500,
+					unit: "g",
+					checked: false,
+					source: "recipe",
+				},
+				{
+					id: "item-2",
+					text: "onion",
+					quantity: 300,
+					unit: "g",
+					checked: false,
+					source: "recipe",
+				},
+			],
+		});
+
+		expect(
+			screen.getByText(/might be the same item — merge into "onion"\?/),
+		).toBeInTheDocument();
+	});
+
+	it("does not show a merge suggestion when nothing name-alike is present", () => {
+		renderDetail();
+
+		expect(
+			screen.queryByText(/might be the same item/),
+		).not.toBeInTheDocument();
+	});
+
+	it("merges the suggested pair, combining quantities and origins, when Merge is clicked", async () => {
+		const user = userEvent.setup();
+		const { onUpdate } = renderDetail({
+			items: [
+				{
+					id: "item-1",
+					text: "yellow onion",
+					quantity: 500,
+					unit: "g",
+					checked: false,
+					source: "recipe",
+					origins: [{ recipeId: "recipe-1", ingredientId: "ing-a" }],
+				},
+				{
+					id: "item-2",
+					text: "onion",
+					quantity: 300,
+					unit: "g",
+					checked: false,
+					source: "recipe",
+					origins: [{ recipeId: "recipe-1", ingredientId: "ing-b" }],
+				},
+			],
+		});
+
+		await user.click(screen.getByRole("button", { name: "Merge" }));
+
+		expect(onUpdate).toHaveBeenCalledTimes(1);
+		const updated = onUpdate.mock.calls[0][0] as GroceryList;
+		expect(updated.items).toHaveLength(1);
+		expect(updated.items[0]).toMatchObject({
+			text: "onion",
+			quantity: 800,
+			unit: "g",
+			origins: [
+				{ recipeId: "recipe-1", ingredientId: "ing-a" },
+				{ recipeId: "recipe-1", ingredientId: "ing-b" },
+			],
+		});
+	});
+
+	it("dismisses a merge suggestion and does not re-show it for the same pair", async () => {
+		const user = userEvent.setup();
+		renderDetail({
+			items: [
+				{
+					id: "item-1",
+					text: "yellow onion",
+					quantity: 500,
+					unit: "g",
+					checked: false,
+					source: "recipe",
+				},
+				{
+					id: "item-2",
+					text: "onion",
+					quantity: 300,
+					unit: "g",
+					checked: false,
+					source: "recipe",
+				},
+			],
+		});
+
+		await user.click(screen.getByRole("button", { name: "Not the same" }));
+
+		expect(
+			screen.queryByText(/might be the same item/),
+		).not.toBeInTheDocument();
+	});
 });

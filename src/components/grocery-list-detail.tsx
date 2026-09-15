@@ -1,5 +1,6 @@
 import { Search } from "lucide-react";
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
+import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { IngredientLine } from "#/components/ui/ingredient-line";
 import {
@@ -13,6 +14,11 @@ import {
 import type { GroceryList, GroceryListItem } from "#/lib/grocery-list";
 import { applyGroceryItemsCheckedToRecipes } from "#/lib/propagate-grocery-check";
 import type { Recipe } from "#/lib/recipe";
+import {
+	type GroceryMergeSuggestion,
+	suggestGroceryMerges,
+	suggestionKey,
+} from "#/lib/suggest-grocery-merges";
 
 type GroceryListDetailProps = {
 	list: GroceryList;
@@ -71,6 +77,16 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 	onUpdateRecipes,
 }: GroceryListDetailProps) {
 	const [search, setSearch] = useState("");
+	// Dismissed suggestions are remembered only for as long as this detail
+	// view stays mounted (i.e. the list stays expanded) — not persisted, so
+	// they can resurface after the list is collapsed and reopened. A
+	// deliberate simplification: the alternative (persisting a dismissal
+	// forever) needs its own storage and doesn't clearly win, since the
+	// underlying name mismatch is still there to fix at the source (see
+	// categorize-recipe-ingredients.ts) if it keeps coming up.
+	const [dismissedSuggestionKeys, setDismissedSuggestionKeys] = useState<
+		Set<string>
+	>(new Set());
 
 	function handleToggleItem(id: string) {
 		const item = list.items.find((i) => i.id === id);
@@ -101,6 +117,34 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 		if (affectedRecipes.length > 0) onUpdateRecipes(affectedRecipes);
 	}
 
+	function handleDismissSuggestion(key: string) {
+		setDismissedSuggestionKeys((keys) => new Set(keys).add(key));
+	}
+
+	function handleMergeSuggestion(suggestion: GroceryMergeSuggestion) {
+		onUpdate({
+			...list,
+			items: [
+				...list.items.filter(
+					(item) => item.id !== suggestion.a.id && item.id !== suggestion.b.id,
+				),
+				suggestion.merged,
+			],
+		});
+		// Syncs the merged item's checked state (true only when both halves
+		// were already checked — see merge-grocery-items.ts) onto every
+		// combined origin, the same way handleToggleItem/handleCheckAll do —
+		// this can uncheck a recipe ingredient that was checked via one half
+		// but not the other, which is correct: the merged line isn't fully
+		// gathered until both are.
+		const affectedRecipes = applyGroceryItemsCheckedToRecipes(
+			recipes,
+			[suggestion.merged],
+			suggestion.merged.checked,
+		);
+		if (affectedRecipes.length > 0) onUpdateRecipes(affectedRecipes);
+	}
+
 	const allChecked =
 		list.items.length > 0 && list.items.every((item) => item.checked);
 	const recipeTitles = list.recipeIds
@@ -123,6 +167,17 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 		recipeItems.length === 0 &&
 		customItems.length === 0;
 	const hasApproximateItems = list.items.some((item) => item.approximate);
+	// Computed over the full, unfiltered list (search only narrows what's
+	// displayed, not what's eligible to merge) — only one suggestion is
+	// shown at a time so confirming/dismissing it doesn't have to reconcile
+	// against a second suggestion that might reference the same item.
+	const mergeSuggestions = useMemo(
+		() => suggestGroceryMerges(list.items),
+		[list.items],
+	);
+	const visibleSuggestion = mergeSuggestions.find(
+		(suggestion) => !dismissedSuggestionKeys.has(suggestionKey(suggestion)),
+	);
 	// Groups the "From recipes" section by grocery-store category (see
 	// grocery-category.ts) — recipeItems is already checked-last+alphabetical
 	// sorted, and filtering preserves that relative order within each
@@ -167,6 +222,31 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 						label="Check all"
 					/>
 				</div>
+
+				{visibleSuggestion ? (
+					<div className="mt-2 flex flex-col gap-2 rounded-[10px] border border-line bg-bg2 p-3 sm:flex-row sm:items-center sm:justify-between">
+						<p className="text-sm">
+							<span className="font-medium">{visibleSuggestion.a.text}</span>{" "}
+							and{" "}
+							<span className="font-medium">{visibleSuggestion.b.text}</span>{" "}
+							might be the same item — merge into "
+							{visibleSuggestion.canonicalText}"?
+						</p>
+						<div className="flex shrink-0 gap-2">
+							<Button
+								variant="secondary"
+								onClick={() =>
+									handleDismissSuggestion(suggestionKey(visibleSuggestion))
+								}
+							>
+								Not the same
+							</Button>
+							<Button onClick={() => handleMergeSuggestion(visibleSuggestion)}>
+								Merge
+							</Button>
+						</div>
+					</div>
+				) : null}
 
 				{list.items.length > 0 ? (
 					<div className="card mt-2 flex items-center gap-2 rounded-full bg-surface px-4 py-2">

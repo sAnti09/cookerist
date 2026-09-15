@@ -88,7 +88,7 @@ export function isCountableUnit(unit: string): boolean {
 // COUNTABLE_UNITS already treating "can"/"cans" as equivalent for rounding.
 // Not a full pluralization rule (an "-es" plural like "box"/"boxes" won't
 // fold) — good enough for the common case without needing a dictionary.
-function canonicalizeUnitForMerging(unit: string): string {
+export function canonicalizeUnitForMerging(unit: string): string {
 	const lower = unit.toLowerCase();
 	return lower.length > 1 && lower.endsWith("s") ? lower.slice(0, -1) : lower;
 }
