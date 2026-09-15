@@ -17,6 +17,17 @@ type GroceryListDetailProps = {
 	onUpdateRecipes: (recipes: Recipe[]) => void;
 };
 
+// Checked items sink to the bottom of their section (still alphabetical
+// within each of the two groups) so a shopper working down the list doesn't
+// have to keep scanning past things they've already grabbed.
+function compareItemsCheckedLast(
+	a: GroceryListItem,
+	b: GroceryListItem,
+): number {
+	if (a.checked !== b.checked) return a.checked ? 1 : -1;
+	return a.text.localeCompare(b.text);
+}
+
 function ItemLabel({ item }: { item: GroceryListItem }) {
 	return (
 		<IngredientLine
@@ -99,10 +110,10 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 		trimmedSearch === "" || item.text.toLowerCase().includes(trimmedSearch);
 	const recipeItems = list.items
 		.filter((item) => item.source === "recipe" && matchesSearch(item))
-		.sort((a, b) => a.text.localeCompare(b.text));
+		.sort(compareItemsCheckedLast);
 	const customItems = list.items
 		.filter((item) => item.source === "custom" && matchesSearch(item))
-		.sort((a, b) => a.text.localeCompare(b.text));
+		.sort(compareItemsCheckedLast);
 	const hasNoSearchResults =
 		trimmedSearch !== "" &&
 		recipeItems.length === 0 &&

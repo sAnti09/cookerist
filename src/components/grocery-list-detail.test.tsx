@@ -56,7 +56,7 @@ function renderDetail(
 ) {
 	const onUpdate = vi.fn();
 	const onUpdateRecipes = vi.fn();
-	render(
+	const { rerender } = render(
 		<GroceryListDetail
 			list={{ ...list, ...overrides }}
 			recipes={recipesOverride}
@@ -64,7 +64,19 @@ function renderDetail(
 			onUpdateRecipes={onUpdateRecipes}
 		/>,
 	);
-	return { onUpdate, onUpdateRecipes };
+	return {
+		onUpdate,
+		onUpdateRecipes,
+		rerenderWithList: (nextList: GroceryList) =>
+			rerender(
+				<GroceryListDetail
+					list={nextList}
+					recipes={recipesOverride}
+					onUpdate={onUpdate}
+					onUpdateRecipes={onUpdateRecipes}
+				/>,
+			),
+	};
 }
 
 describe("GroceryListDetail", () => {
@@ -276,6 +288,84 @@ describe("GroceryListDetail", () => {
 			.getAllByText(/^(aluminum foil|paper towels)$/)
 			.map((el) => el.textContent);
 		expect(customNames).toEqual(["aluminum foil", "paper towels"]);
+	});
+
+	it("sinks checked items to the bottom of their section, alphabetical within each group", () => {
+		renderDetail({
+			items: [
+				{
+					id: "item-1",
+					text: "shrimp",
+					quantity: 1,
+					unit: "lb",
+					checked: true,
+					source: "recipe",
+				},
+				{
+					id: "item-2",
+					text: "garlic",
+					quantity: 3,
+					unit: "cloves",
+					checked: false,
+					source: "recipe",
+				},
+				{
+					id: "item-3",
+					text: "basil",
+					quantity: 1,
+					unit: "bunch",
+					checked: true,
+					source: "recipe",
+				},
+				{
+					id: "item-4",
+					text: "carrot",
+					quantity: 2,
+					unit: "",
+					checked: false,
+					source: "recipe",
+				},
+			],
+		});
+
+		const recipeNames = screen
+			.getAllByText(/^(basil|carrot|garlic|shrimp)$/)
+			.map((el) => el.textContent);
+		expect(recipeNames).toEqual(["carrot", "garlic", "basil", "shrimp"]);
+	});
+
+	it("moves an item to the bottom of its section once its checked update is applied", async () => {
+		const user = userEvent.setup();
+		const itemsBefore: GroceryList["items"] = [
+			{
+				id: "item-1",
+				text: "apple",
+				quantity: 1,
+				unit: "",
+				checked: false,
+				source: "recipe",
+			},
+			{
+				id: "item-2",
+				text: "banana",
+				quantity: 1,
+				unit: "",
+				checked: false,
+				source: "recipe",
+			},
+		];
+		const { onUpdate, rerenderWithList } = renderDetail({
+			items: itemsBefore,
+		});
+
+		await user.click(screen.getByText("apple"));
+		const updatedList = onUpdate.mock.calls[0][0] as GroceryList;
+		rerenderWithList(updatedList);
+
+		const recipeNames = screen
+			.getAllByText(/^(apple|banana)$/)
+			.map((el) => el.textContent);
+		expect(recipeNames).toEqual(["banana", "apple"]);
 	});
 
 	it("filters items by search text across both sections", async () => {
