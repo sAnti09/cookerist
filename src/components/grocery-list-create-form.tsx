@@ -1,4 +1,4 @@
-import { Plus, Search, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import {
 	type FormEvent,
 	type KeyboardEvent as ReactKeyboardEvent,
@@ -10,6 +10,7 @@ import {
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { IngredientLine } from "#/components/ui/ingredient-line";
+import { SearchInput } from "#/components/ui/search-input";
 import { ServingsScrub } from "#/components/ui/servings-scrub";
 import {
 	APPROXIMATE_ITEMS_NOTE,
@@ -273,21 +274,15 @@ export function GroceryListCreateForm({
 						) : (
 							<>
 								<div className="relative mt-2">
-									<div className="card flex items-center gap-2 rounded-full bg-surface px-4 py-2">
-										<Search
-											className="size-4 shrink-0 text-ink-dim"
-											aria-hidden="true"
-										/>
-										<input
-											ref={recipeSearchInputRef}
-											type="search"
-											value={recipeSearch}
-											onChange={(event) => setRecipeSearch(event.target.value)}
-											placeholder="Search recipes to add…"
-											aria-label="Search recipes to add"
-											className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-dim sm:text-sm"
-										/>
-									</div>
+									<SearchInput
+										ref={recipeSearchInputRef}
+										value={recipeSearch}
+										onChange={setRecipeSearch}
+										placeholder="Search recipes to add…"
+										aria-label="Search recipes to add"
+										clearLabel="Clear recipe search"
+										inputClassName="sm:text-sm"
+									/>
 									{trimmedRecipeSearch ? (
 										<ul className="mt-1 flex flex-col gap-1 rounded-[10px] border border-line bg-surface p-1">
 											{recipeSearchResults.length === 0 ? (

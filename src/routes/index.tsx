@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Flame, Plus, Search, Star } from "lucide-react";
+import { Flame, Plus, Star } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FeatureSection } from "#/components/feature-section";
 import { GroceryListCreateForm } from "#/components/grocery-list-create-form";
@@ -15,6 +15,7 @@ import {
 } from "#/components/result-row";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { SearchInput } from "#/components/ui/search-input";
 import { ThemeToggle } from "#/components/ui/theme-toggle";
 import { type ResultsView, ViewToggle } from "#/components/ui/view-toggle";
 import { filterRecipes, hasActiveFilters } from "#/lib/filter-recipes";
@@ -548,20 +549,15 @@ export function Home() {
 					</div>
 					{view === "recipes" && recipes.length > 0 ? (
 						<div className="mt-3 flex flex-wrap items-center gap-2">
-							<div className="card flex min-w-[180px] flex-1 items-center gap-2 rounded-full bg-surface px-4 py-2">
-								<Search
-									className="size-4 shrink-0 text-ink-dim"
-									aria-hidden="true"
-								/>
-								<input
-									type="search"
-									value={searchQuery}
-									onChange={(event) => setSearchQuery(event.target.value)}
-									placeholder="Search your recipes…"
-									aria-label="Search recipes"
-									className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-dim sm:text-sm"
-								/>
-							</div>
+							<SearchInput
+								value={searchQuery}
+								onChange={setSearchQuery}
+								placeholder="Search your recipes…"
+								aria-label="Search recipes"
+								clearLabel="Clear recipe search"
+								className="min-w-[180px] flex-1"
+								inputClassName="sm:text-sm"
+							/>
 							<select
 								value={difficultyFilter}
 								onChange={(event) =>
