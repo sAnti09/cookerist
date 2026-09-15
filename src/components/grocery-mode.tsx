@@ -2,8 +2,8 @@ import {
 	Check,
 	ChevronDown,
 	ChevronRight,
+	ChevronUp,
 	CircleCheck,
-	Search,
 	X,
 } from "lucide-react";
 import { useRef, useState } from "react";
@@ -11,6 +11,7 @@ import { Button } from "#/components/ui/button";
 import { CelebrationBurst } from "#/components/ui/celebration-burst";
 import { Checkbox } from "#/components/ui/checkbox";
 import { IngredientLine } from "#/components/ui/ingredient-line";
+import { SearchInput } from "#/components/ui/search-input";
 import { formatGroceryItemQuantity } from "#/lib/aggregate-grocery-items";
 import {
 	DEFAULT_GROCERY_CATEGORY,
@@ -59,9 +60,13 @@ export function GroceryMode({
 
 	const [search, setSearch] = useState("");
 	// Categories collapse to a done pill automatically once every item in them
-	// is checked; this only tracks a category the shopper explicitly reopened
-	// despite that, so it stays open until they check something else off (at
-	// which point it's no longer fully checked anyway).
+	// is checked; this tracks a category the shopper explicitly reopened
+	// despite that (via the pill, or the collapse control on an already-open
+	// one). The override is scoped to the current "fully done" streak: as
+	// soon as an item in that category gets unchecked (handleToggleItem,
+	// below), it's cleared — so the category auto-collapses again next time
+	// every item in it ends up checked, rather than an old override
+	// permanently suppressing the auto-collapse.
 	const [manuallyExpanded, setManuallyExpanded] = useState<Set<string>>(
 		new Set(),
 	);
@@ -77,11 +82,27 @@ export function GroceryMode({
 	const allDone = totalCount > 0 && checkedCount === totalCount;
 
 	function handleToggleItem(id: string) {
+		const item = list.items.find((i) => i.id === id);
 		const result = toggleGroceryListItem(list, recipes, id);
 		if (!result) return;
 		onUpdate(result.list);
 		if (result.affectedRecipes.length > 0) {
 			onUpdateRecipes(result.affectedRecipes);
+		}
+
+		// Unchecking an item means its category isn't fully done anymore, so
+		// any earlier "reopen this done category" override no longer applies.
+		if (item?.checked) {
+			const key =
+				item.source === "custom"
+					? CUSTOM_SECTION_KEY
+					: (item.category ?? DEFAULT_GROCERY_CATEGORY);
+			setManuallyExpanded((keys) => {
+				if (!keys.has(key)) return keys;
+				const next = new Set(keys);
+				next.delete(key);
+				return next;
+			});
 		}
 	}
 
@@ -101,8 +122,13 @@ export function GroceryMode({
 		});
 	}
 
-	function handleExpandCategory(key: string) {
-		setManuallyExpanded((keys) => new Set(keys).add(key));
+	function handleToggleCategoryCollapse(key: string) {
+		setManuallyExpanded((keys) => {
+			const next = new Set(keys);
+			if (next.has(key)) next.delete(key);
+			else next.add(key);
+			return next;
+		});
 	}
 
 	const recipeItems = list.items.filter((item) => item.source === "recipe");
@@ -214,17 +240,14 @@ export function GroceryMode({
 			</div>
 
 			<div className="flex-shrink-0 px-5 pb-3.5">
-				<div className="card flex items-center gap-2 rounded-full bg-surface px-4 py-2.5">
-					<Search className="size-4 shrink-0 text-ink-dim" aria-hidden="true" />
-					<input
-						type="search"
-						value={search}
-						onChange={(event) => setSearch(event.target.value)}
-						placeholder="Search items…"
-						aria-label="Search grocery items"
-						className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-dim"
-					/>
-				</div>
+				<SearchInput
+					value={search}
+					onChange={setSearch}
+					placeholder="Search items…"
+					aria-label="Search grocery items"
+					clearLabel="Clear grocery mode search"
+					className="py-2.5"
+				/>
 			</div>
 
 			<div className="flex-1 overflow-y-auto px-5 pb-8">
@@ -256,7 +279,7 @@ export function GroceryMode({
 									>
 										<button
 											type="button"
-											onClick={() => handleExpandCategory(section.key)}
+											onClick={() => handleToggleCategoryCollapse(section.key)}
 											aria-expanded={false}
 											className="flex w-full items-center justify-between gap-3 rounded-[18px] border border-sage/35 bg-sage/8 p-4 text-left"
 										>
@@ -318,11 +341,25 @@ export function GroceryMode({
 										<h4 className="display-title font-semibold text-ink text-lg">
 											{section.label}
 										</h4>
-										<span className="text-ink-dim text-xs tabular-nums">
-											{isSearching
-												? `${section.matchCount} match${section.matchCount === 1 ? "" : "es"}`
-												: `${sectionChecked} of ${sectionTotal}`}
-										</span>
+										<div className="flex items-center gap-2">
+											<span className="text-ink-dim text-xs tabular-nums">
+												{isSearching
+													? `${section.matchCount} match${section.matchCount === 1 ? "" : "es"}`
+													: `${sectionChecked} of ${sectionTotal}`}
+											</span>
+											{fullyDone ? (
+												<button
+													type="button"
+													onClick={() =>
+														handleToggleCategoryCollapse(section.key)
+													}
+													aria-label={`Collapse ${section.label}`}
+													className="text-ink-dim"
+												>
+													<ChevronUp className="size-3.5" aria-hidden="true" />
+												</button>
+											) : null}
+										</div>
 									</div>
 									<div>
 										{uncheckedItems.map((item, index) => (

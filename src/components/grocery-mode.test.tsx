@@ -85,29 +85,44 @@ function renderGroceryMode(overrides: Partial<GroceryList> = {}) {
 	const onUpdateRecipes = vi.fn();
 	const onClose = vi.fn();
 	const recipes: Recipe[] = [];
-	render(
+	const initialList = makeList({
+		items: [
+			zucchini,
+			limes,
+			cilantro,
+			chicken,
+			bacon,
+			shrimp,
+			eggs,
+			cream,
+			paperTowels,
+		],
+		...overrides,
+	});
+	const { rerender } = render(
 		<GroceryMode
-			list={makeList({
-				items: [
-					zucchini,
-					limes,
-					cilantro,
-					chicken,
-					bacon,
-					shrimp,
-					eggs,
-					cream,
-					paperTowels,
-				],
-				...overrides,
-			})}
+			list={initialList}
 			recipes={recipes}
 			onUpdate={onUpdate}
 			onUpdateRecipes={onUpdateRecipes}
 			onClose={onClose}
 		/>,
 	);
-	return { onUpdate, onUpdateRecipes, onClose };
+	return {
+		onUpdate,
+		onUpdateRecipes,
+		onClose,
+		rerenderWithList: (nextList: GroceryList) =>
+			rerender(
+				<GroceryMode
+					list={nextList}
+					recipes={recipes}
+					onUpdate={onUpdate}
+					onUpdateRecipes={onUpdateRecipes}
+					onClose={onClose}
+				/>,
+			),
+	};
 }
 
 beforeEach(() => {
@@ -179,6 +194,52 @@ describe("GroceryMode", () => {
 		).toBeInTheDocument();
 		expect(screen.getByText("eggs")).toBeInTheDocument();
 		expect(screen.getByText("heavy cream")).toBeInTheDocument();
+	});
+
+	it("re-collapses an expanded, still fully-checked category via its collapse control (TEST bug: no way to collapse it back)", async () => {
+		const user = userEvent.setup();
+		renderGroceryMode();
+
+		await user.click(
+			screen.getByRole("button", { name: /Dairy & Eggs.*all checked/s }),
+		);
+		expect(screen.getByText("eggs")).toBeInTheDocument();
+
+		await user.click(
+			screen.getByRole("button", { name: "Collapse Dairy & Eggs" }),
+		);
+
+		expect(screen.queryByText("eggs")).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: /Dairy & Eggs.*all checked/s }),
+		).toBeInTheDocument();
+	});
+
+	it("auto-collapses a category again once it's fully re-checked, without a stale manual-expand override (TEST bug: recheck didn't re-collapse)", async () => {
+		const user = userEvent.setup();
+		const { onUpdate, rerenderWithList } = renderGroceryMode();
+
+		// Expand the done category, then uncheck one item in it — no longer
+		// fully done, so it renders flat rather than as a pill.
+		await user.click(
+			screen.getByRole("button", { name: /Dairy & Eggs.*all checked/s }),
+		);
+		await user.click(screen.getByText("eggs"));
+		rerenderWithList(onUpdate.mock.calls[0][0] as GroceryList);
+		expect(
+			screen.queryByRole("button", { name: /Dairy & Eggs.*all checked/s }),
+		).not.toBeInTheDocument();
+		expect(screen.getByText("heavy cream")).toBeInTheDocument();
+
+		// Re-check it — the category is fully done again. It should collapse
+		// back to the pill on its own, with no further clicks.
+		await user.click(screen.getByText("eggs"));
+		rerenderWithList(onUpdate.mock.calls[1][0] as GroceryList);
+
+		expect(screen.queryByText("eggs")).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: /Dairy & Eggs.*all checked/s }),
+		).toBeInTheDocument();
 	});
 
 	it("toggles an item and calls onUpdate with the flipped checked state", async () => {
