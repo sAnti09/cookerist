@@ -14,11 +14,14 @@ const APP_SHELL = [
 ];
 
 self.addEventListener("install", (event) => {
+	// Deliberately no self.skipWaiting() here — an update installs and then
+	// sits in the "waiting" state behind the still-active old worker until
+	// the page explicitly asks for it (see the message listener below),
+	// which is what lets the app show an update-available prompt instead of
+	// silently swapping the worker (and everything it serves) out from under
+	// an already-open tab.
 	event.waitUntil(
-		caches
-			.open(CACHE_VERSION)
-			.then((cache) => cache.addAll(APP_SHELL))
-			.then(() => self.skipWaiting()),
+		caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL)),
 	);
 });
 
@@ -35,6 +38,12 @@ self.addEventListener("activate", (event) => {
 			)
 			.then(() => self.clients.claim()),
 	);
+});
+
+// The page's update-available prompt posts this once the user confirms —
+// only then does the waiting worker activate (see use-service-worker-update.ts).
+self.addEventListener("message", (event) => {
+	if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("fetch", (event) => {

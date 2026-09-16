@@ -3,7 +3,9 @@ import { BottomTabBar } from "#/components/bottom-tab-bar";
 import { GroceryListCreateForm } from "#/components/grocery-list-create-form";
 import { InAppBrowserBanner } from "#/components/in-app-browser-banner";
 import { SplashScreen } from "#/components/splash-screen";
+import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { AppDataProvider, useAppData } from "#/lib/app-data-context";
+import { useServiceWorkerUpdate } from "#/lib/use-service-worker-update";
 import { cn } from "#/lib/utils";
 
 // The two full-screen detail routes replace the tab bar with their own
@@ -45,6 +47,7 @@ function TabsLayoutContent() {
 	const onDetailRoute = matches.some((match) =>
 		DETAIL_ROUTE_IDS.has(match.routeId),
 	);
+	const { updateAvailable, applyUpdate, dismiss } = useServiceWorkerUpdate();
 
 	return (
 		<>
@@ -68,6 +71,15 @@ function TabsLayoutContent() {
 					onClose={closeGroceryListForm}
 				/>
 			) : null}
+			<ConfirmDialog
+				open={updateAvailable}
+				title="Update available"
+				description="A new version of Cookerist is ready — reload to get it?"
+				confirmLabel="Reload"
+				cancelLabel="Later"
+				onConfirm={applyUpdate}
+				onCancel={dismiss}
+			/>
 		</>
 	);
 }
