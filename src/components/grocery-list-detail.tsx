@@ -1,6 +1,4 @@
-import { ShoppingCart } from "lucide-react";
 import { memo, useMemo, useState } from "react";
-import { GroceryMode } from "#/components/grocery-mode";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { IngredientLine } from "#/components/ui/ingredient-line";
@@ -30,11 +28,6 @@ type GroceryListDetailProps = {
 	recipes: Recipe[];
 	onUpdate: (list: GroceryList) => void;
 	onUpdateRecipes: (recipes: Recipe[]) => void;
-	// Owned by GroceryListRow, not this component — see the comment there for
-	// why (this component unmounts on every collapse, which used to reset a
-	// locally-owned Set and let a dismissed suggestion resurface).
-	dismissedSuggestionKeys: Set<string>;
-	onDismissSuggestion: (key: string) => void;
 };
 
 // Checked items sink to the bottom of their section (still alphabetical
@@ -85,11 +78,14 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 	recipes,
 	onUpdate,
 	onUpdateRecipes,
-	dismissedSuggestionKeys,
-	onDismissSuggestion,
 }: GroceryListDetailProps) {
 	const [search, setSearch] = useState("");
-	const [groceryModeOpen, setGroceryModeOpen] = useState(false);
+	// This detail view is now a stable route (no more collapse/expand
+	// remount cycle), so a dismissal can just live here instead of being
+	// lifted to an outlasting parent.
+	const [dismissedSuggestionKeys, setDismissedSuggestionKeys] = useState<
+		Set<string>
+	>(new Set());
 
 	function handleToggleItem(id: string) {
 		const result = toggleGroceryListItem(list, recipes, id);
@@ -188,21 +184,11 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 			<section>
 				<div className="flex flex-wrap items-center justify-between gap-2">
 					<h4 className="font-medium">Items</h4>
-					<div className="flex items-center gap-3">
-						<Button
-							className="gap-1.5"
-							disabled={list.items.length === 0}
-							onClick={() => setGroceryModeOpen(true)}
-						>
-							<ShoppingCart className="size-4" aria-hidden="true" />
-							Shop
-						</Button>
-						<Checkbox
-							checked={allChecked}
-							onChange={handleCheckAll}
-							label="Check all"
-						/>
-					</div>
+					<Checkbox
+						checked={allChecked}
+						onChange={handleCheckAll}
+						label="Check all"
+					/>
 				</div>
 
 				{visibleSuggestion ? (
@@ -218,7 +204,9 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 							<Button
 								variant="secondary"
 								onClick={() =>
-									onDismissSuggestion(suggestionKey(visibleSuggestion))
+									setDismissedSuggestionKeys((keys) =>
+										new Set(keys).add(suggestionKey(visibleSuggestion)),
+									)
 								}
 							>
 								Not the same
@@ -277,16 +265,6 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 					<p className="mt-3 text-ink-dim text-xs">{APPROXIMATE_ITEMS_NOTE}</p>
 				) : null}
 			</section>
-
-			{groceryModeOpen ? (
-				<GroceryMode
-					list={list}
-					recipes={recipes}
-					onUpdate={onUpdate}
-					onUpdateRecipes={onUpdateRecipes}
-					onClose={() => setGroceryModeOpen(false)}
-				/>
-			) : null}
 		</div>
 	);
 });

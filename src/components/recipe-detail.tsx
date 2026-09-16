@@ -1,8 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { ChefHat } from "lucide-react";
 import { memo, useState } from "react";
-import { CookMode } from "#/components/cook-mode";
-import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { IngredientLine } from "#/components/ui/ingredient-line";
 import { ServingsStepper } from "#/components/ui/servings-stepper";
@@ -19,9 +16,8 @@ type RecipeDetailProps = {
 const CONTINUATION_ERROR_MESSAGE =
 	"Couldn't load the rest of the recipe. Please try again.";
 
-// Memoized so toggling an ingredient/step in one expanded recipe doesn't
-// re-render other rows' detail panels (only one is normally expanded at a
-// time anyway, but this keeps it cheap regardless).
+// Memoized so an unrelated recipe update elsewhere in the app doesn't
+// re-render this detail page's content.
 export const RecipeDetail = memo(function RecipeDetail({
 	recipe,
 	onUpdate,
@@ -29,7 +25,6 @@ export const RecipeDetail = memo(function RecipeDetail({
 	const [continuationError, setContinuationError] = useState<string | null>(
 		null,
 	);
-	const [cookModeOpen, setCookModeOpen] = useState(false);
 	const continueMutation = useMutation({
 		mutationFn: () =>
 			continueRecipe({
@@ -137,144 +132,121 @@ export const RecipeDetail = memo(function RecipeDetail({
 	const sections = groupSteps(recipe.steps);
 
 	return (
-		<>
-			<div className="flex flex-col gap-5">
-				<p className="text-sm text-ink-dim">{recipe.prompt}</p>
-				<p className="text-sm">{recipe.overview}</p>
+		<div className="flex flex-col gap-5">
+			<p className="text-sm text-ink-dim">{recipe.prompt}</p>
+			<p className="text-sm">{recipe.overview}</p>
 
-				<div className="flex items-center gap-3">
-					<span className="text-sm font-medium">Servings</span>
-					<ServingsStepper
-						value={recipe.currentServings}
-						onChange={handleServingsChange}
+			<div className="flex items-center gap-3">
+				<span className="text-sm font-medium">Servings</span>
+				<ServingsStepper
+					value={recipe.currentServings}
+					onChange={handleServingsChange}
+				/>
+			</div>
+
+			<section>
+				<div className="flex items-center justify-between">
+					<h4 className="font-medium">Ingredients</h4>
+					<Checkbox
+						checked={allIngredientsChecked}
+						onChange={handleCheckAllIngredients}
+						label="Check all"
 					/>
 				</div>
-
-				<section>
-					<div className="flex items-center justify-between">
-						<h4 className="font-medium">Ingredients</h4>
-						<Checkbox
-							checked={allIngredientsChecked}
-							onChange={handleCheckAllIngredients}
-							label="Check all"
-						/>
-					</div>
+				<div
+					role="progressbar"
+					aria-label="Ingredients checked"
+					aria-valuenow={progressPercent}
+					aria-valuemin={0}
+					aria-valuemax={100}
+					className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-bg2"
+				>
 					<div
-						role="progressbar"
-						aria-label="Ingredients checked"
-						aria-valuenow={progressPercent}
-						aria-valuemin={0}
-						aria-valuemax={100}
-						className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-bg2"
-					>
-						<div
-							className="h-full rounded-full bg-sage transition-[width] duration-300 ease-out"
-							style={{ width: `${progressPercent}%` }}
-						/>
-					</div>
-					<p className="mt-1 text-xs text-ink-dim tabular-nums">
-						{checkedCount}/{recipe.ingredients.length} checked
-					</p>
-					<ul className="mt-3 grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
-						{recipe.ingredients.map((ingredient) => (
-							<li key={ingredient.id}>
-								<Checkbox
-									checked={ingredient.checked}
-									onChange={() => handleToggleIngredient(ingredient.id)}
-									label={
-										<IngredientLine
-											checked={ingredient.checked}
-											quantity={formatIngredientQuantity(
-												scaleQuantity(
-													ingredient.quantity,
-													recipe.baseServings,
-													recipe.currentServings,
-												),
-												ingredient.unit,
-												ingredient.text,
-											)}
-											name={ingredient.text}
-										/>
-									}
-								/>
-							</li>
-						))}
-					</ul>
-				</section>
-
-				<section>
-					<div className="flex items-center justify-between">
-						<h4 className="font-medium">Steps</h4>
-						{recipe.steps.length > 0 ? (
-							<Button
-								variant="primary"
-								className="gap-1.5"
-								onClick={() => setCookModeOpen(true)}
-							>
-								<ChefHat className="size-4" aria-hidden="true" />
-								Start Cooking
-							</Button>
-						) : null}
-					</div>
-					{sections.map((section, index) => (
-						<div
-							key={section.name ?? `ungrouped-${index}`}
-							className={index > 0 ? "mt-3" : "mt-2"}
-						>
-							{section.name ? (
-								<h5 className="text-sm font-semibold">{section.name}</h5>
-							) : null}
-							<ol className="mt-1 flex flex-col gap-2">
-								{section.steps.map((step) => (
-									<li key={step.id}>
-										<Checkbox
-											checked={step.checked}
-											onChange={() => handleToggleStep(step.id)}
-											label={
-												<span
-													className={
-														step.checked
-															? "text-ink-dim line-through"
-															: undefined
-													}
-												>
-													{step.text}
-												</span>
-											}
-										/>
-									</li>
-								))}
-							</ol>
-						</div>
+						className="h-full rounded-full bg-sage transition-[width] duration-300 ease-out"
+						style={{ width: `${progressPercent}%` }}
+					/>
+				</div>
+				<p className="mt-1 text-xs text-ink-dim tabular-nums">
+					{checkedCount}/{recipe.ingredients.length} checked
+				</p>
+				<ul className="mt-3 grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
+					{recipe.ingredients.map((ingredient) => (
+						<li key={ingredient.id}>
+							<Checkbox
+								checked={ingredient.checked}
+								onChange={() => handleToggleIngredient(ingredient.id)}
+								label={
+									<IngredientLine
+										checked={ingredient.checked}
+										quantity={formatIngredientQuantity(
+											scaleQuantity(
+												ingredient.quantity,
+												recipe.baseServings,
+												recipe.currentServings,
+											),
+											ingredient.unit,
+											ingredient.text,
+										)}
+										name={ingredient.text}
+									/>
+								}
+							/>
+						</li>
 					))}
-				</section>
+				</ul>
+			</section>
 
-				{recipe.truncated ? (
-					<div className="rounded-[18px] border border-line bg-bg2 p-3 text-sm">
-						<p className="text-ink-dim">
-							This recipe got cut off before it finished generating.
-						</p>
-						<button
-							type="button"
-							onClick={handleLoadMore}
-							disabled={continueMutation.isPending}
-							className="mt-2 rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-white disabled:opacity-60"
-						>
-							{continueMutation.isPending ? "Loading more…" : "Load more"}
-						</button>
-						{continuationError ? (
-							<p className="mt-2 text-warn">{continuationError}</p>
+			<section>
+				<h4 className="font-medium">Steps</h4>
+				{sections.map((section, index) => (
+					<div
+						key={section.name ?? `ungrouped-${index}`}
+						className={index > 0 ? "mt-3" : "mt-2"}
+					>
+						{section.name ? (
+							<h5 className="text-sm font-semibold">{section.name}</h5>
 						) : null}
+						<ol className="mt-1 flex flex-col gap-2">
+							{section.steps.map((step) => (
+								<li key={step.id}>
+									<Checkbox
+										checked={step.checked}
+										onChange={() => handleToggleStep(step.id)}
+										label={
+											<span
+												className={
+													step.checked ? "text-ink-dim line-through" : undefined
+												}
+											>
+												{step.text}
+											</span>
+										}
+									/>
+								</li>
+							))}
+						</ol>
 					</div>
-				) : null}
-			</div>
-			{cookModeOpen ? (
-				<CookMode
-					recipe={recipe}
-					onUpdate={onUpdate}
-					onClose={() => setCookModeOpen(false)}
-				/>
+				))}
+			</section>
+
+			{recipe.truncated ? (
+				<div className="rounded-[18px] border border-line bg-bg2 p-3 text-sm">
+					<p className="text-ink-dim">
+						This recipe got cut off before it finished generating.
+					</p>
+					<button
+						type="button"
+						onClick={handleLoadMore}
+						disabled={continueMutation.isPending}
+						className="mt-2 rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+					>
+						{continueMutation.isPending ? "Loading more…" : "Load more"}
+					</button>
+					{continuationError ? (
+						<p className="mt-2 text-warn">{continuationError}</p>
+					) : null}
+				</div>
 			) : null}
-		</>
+		</div>
 	);
 });

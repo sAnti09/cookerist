@@ -10,33 +10,84 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TabsRouteImport } from './routes/_tabs'
+import { Route as TabsGroceryRouteImport } from './routes/_tabs.grocery'
+import { Route as TabsRecipesRouteImport } from './routes/_tabs.recipes'
+import { Route as TabsGroceryListIdRouteImport } from './routes/_tabs.grocery_.$listId'
+import { Route as TabsRecipesRecipeIdRouteImport } from './routes/_tabs.recipes_.$recipeId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TabsRoute = TabsRouteImport.update({
+  id: '/_tabs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TabsGroceryRoute = TabsGroceryRouteImport.update({
+  id: '/grocery',
+  path: '/grocery',
+  getParentRoute: () => TabsRoute,
+} as any)
+const TabsRecipesRoute = TabsRecipesRouteImport.update({
+  id: '/recipes',
+  path: '/recipes',
+  getParentRoute: () => TabsRoute,
+} as any)
+const TabsGroceryListIdRoute = TabsGroceryListIdRouteImport.update({
+  id: '/grocery_/$listId',
+  path: '/grocery/$listId',
+  getParentRoute: () => TabsRoute,
+} as any)
+const TabsRecipesRecipeIdRoute = TabsRecipesRecipeIdRouteImport.update({
+  id: '/recipes_/$recipeId',
+  path: '/recipes/$recipeId',
+  getParentRoute: () => TabsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/grocery': typeof TabsGroceryRoute
+  '/recipes': typeof TabsRecipesRoute
+  '/grocery/$listId': typeof TabsGroceryListIdRoute
+  '/recipes/$recipeId': typeof TabsRecipesRecipeIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/grocery': typeof TabsGroceryRoute
+  '/recipes': typeof TabsRecipesRoute
+  '/grocery/$listId': typeof TabsGroceryListIdRoute
+  '/recipes/$recipeId': typeof TabsRecipesRecipeIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_tabs': typeof TabsRouteWithChildren
+  '/_tabs/grocery': typeof TabsGroceryRoute
+  '/_tabs/recipes': typeof TabsRecipesRoute
+  '/_tabs/grocery_/$listId': typeof TabsGroceryListIdRoute
+  '/_tabs/recipes_/$recipeId': typeof TabsRecipesRecipeIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    '/' | '/grocery' | '/recipes' | '/grocery/$listId' | '/recipes/$recipeId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/grocery' | '/recipes' | '/grocery/$listId' | '/recipes/$recipeId'
+  id:
+    | '__root__'
+    | '/'
+    | '/_tabs'
+    | '/_tabs/grocery'
+    | '/_tabs/recipes'
+    | '/_tabs/grocery_/$listId'
+    | '/_tabs/recipes_/$recipeId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  TabsRoute: typeof TabsRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +99,63 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_tabs': {
+      id: '/_tabs'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof TabsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_tabs/grocery': {
+      id: '/_tabs/grocery'
+      path: '/grocery'
+      fullPath: '/grocery'
+      preLoaderRoute: typeof TabsGroceryRouteImport
+      parentRoute: typeof TabsRoute
+    }
+    '/_tabs/recipes': {
+      id: '/_tabs/recipes'
+      path: '/recipes'
+      fullPath: '/recipes'
+      preLoaderRoute: typeof TabsRecipesRouteImport
+      parentRoute: typeof TabsRoute
+    }
+    '/_tabs/grocery_/$listId': {
+      id: '/_tabs/grocery_/$listId'
+      path: '/grocery/$listId'
+      fullPath: '/grocery/$listId'
+      preLoaderRoute: typeof TabsGroceryListIdRouteImport
+      parentRoute: typeof TabsRoute
+    }
+    '/_tabs/recipes_/$recipeId': {
+      id: '/_tabs/recipes_/$recipeId'
+      path: '/recipes/$recipeId'
+      fullPath: '/recipes/$recipeId'
+      preLoaderRoute: typeof TabsRecipesRecipeIdRouteImport
+      parentRoute: typeof TabsRoute
+    }
   }
 }
 
+interface TabsRouteChildren {
+  TabsGroceryRoute: typeof TabsGroceryRoute
+  TabsRecipesRoute: typeof TabsRecipesRoute
+  TabsGroceryListIdRoute: typeof TabsGroceryListIdRoute
+  TabsRecipesRecipeIdRoute: typeof TabsRecipesRecipeIdRoute
+}
+
+const TabsRouteChildren: TabsRouteChildren = {
+  TabsGroceryRoute: TabsGroceryRoute,
+  TabsRecipesRoute: TabsRecipesRoute,
+  TabsGroceryListIdRoute: TabsGroceryListIdRoute,
+  TabsRecipesRecipeIdRoute: TabsRecipesRecipeIdRoute,
+}
+
+const TabsRouteWithChildren = TabsRoute._addFileChildren(TabsRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  TabsRoute: TabsRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

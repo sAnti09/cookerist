@@ -56,11 +56,6 @@ function renderDetail(
 ) {
 	const onUpdate = vi.fn();
 	const onUpdateRecipes = vi.fn();
-	// Dismissed suggestions are owned by the caller in production
-	// (GroceryListRow, so a dismissal survives the detail view
-	// unmounting/remounting on collapse/expand) — mirror that ownership here
-	// instead of letting GroceryListDetail track it itself.
-	let dismissedSuggestionKeys = new Set<string>();
 	let currentList = { ...list, ...overrides };
 
 	function renderWithCurrentState() {
@@ -70,11 +65,6 @@ function renderDetail(
 				recipes={recipesOverride}
 				onUpdate={onUpdate}
 				onUpdateRecipes={onUpdateRecipes}
-				dismissedSuggestionKeys={dismissedSuggestionKeys}
-				onDismissSuggestion={(key) => {
-					dismissedSuggestionKeys = new Set(dismissedSuggestionKeys).add(key);
-					renderWithCurrentState();
-				}}
 			/>,
 		);
 	}
@@ -85,11 +75,6 @@ function renderDetail(
 			recipes={recipesOverride}
 			onUpdate={onUpdate}
 			onUpdateRecipes={onUpdateRecipes}
-			dismissedSuggestionKeys={dismissedSuggestionKeys}
-			onDismissSuggestion={(key) => {
-				dismissedSuggestionKeys = new Set(dismissedSuggestionKeys).add(key);
-				renderWithCurrentState();
-			}}
 		/>,
 	);
 	return {
@@ -591,23 +576,6 @@ describe("GroceryListDetail", () => {
 				{ recipeId: "recipe-1", ingredientId: "ing-b" },
 			],
 		});
-	});
-
-	it("opens Grocery Mode from the Shop action and can exit back to the list", async () => {
-		const user = userEvent.setup();
-		renderDetail();
-
-		await user.click(screen.getByRole("button", { name: "Shop" }));
-		expect(screen.getByText("Grocery Mode")).toBeInTheDocument();
-
-		await user.click(screen.getByRole("button", { name: "Exit grocery mode" }));
-		expect(screen.queryByText("Grocery Mode")).not.toBeInTheDocument();
-	});
-
-	it("disables the Shop action when the list has no items", () => {
-		renderDetail({ items: [] });
-
-		expect(screen.getByRole("button", { name: "Shop" })).toBeDisabled();
 	});
 
 	it("dismisses a merge suggestion and does not re-show it for the same pair", async () => {
