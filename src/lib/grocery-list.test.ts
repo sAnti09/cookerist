@@ -29,43 +29,28 @@ function makeItem(checked: boolean) {
 }
 
 describe("generateGroceryListName", () => {
-	it("joins recipe titles with a comma and space", () => {
-		expect(generateGroceryListName(["Shrimp Pasta", "Garlic Bread"])).toBe(
-			"Shrimp Pasta, Garlic Bread",
+	const date = new Date("2026-09-16T12:00:00.000Z");
+
+	it("defaults to just the date when no recipes are selected", () => {
+		expect(generateGroceryListName(0, date)).toBe("Sep 16, 2026");
+	});
+
+	it("appends the singular 'recipe' for exactly one", () => {
+		expect(generateGroceryListName(1, date)).toBe("Sep 16, 2026 for 1 recipe");
+	});
+
+	it("appends the plural 'recipes' for more than one", () => {
+		expect(generateGroceryListName(3, date)).toBe("Sep 16, 2026 for 3 recipes");
+	});
+
+	it("defaults the date to today when none is given", () => {
+		expect(generateGroceryListName(0)).toBe(
+			new Date().toLocaleDateString(undefined, {
+				year: "numeric",
+				month: "short",
+				day: "numeric",
+			}),
 		);
-	});
-
-	it("returns a single title unchanged", () => {
-		expect(generateGroceryListName(["Shrimp Pasta"])).toBe("Shrimp Pasta");
-	});
-
-	it("returns an empty string for no titles", () => {
-		expect(generateGroceryListName([])).toBe("");
-	});
-
-	it("leaves a joined string at exactly the max length untouched", () => {
-		const title = "a".repeat(255);
-		expect(generateGroceryListName([title])).toBe(title);
-		expect(generateGroceryListName([title]).length).toBe(255);
-	});
-
-	it("truncates a joined string over 255 characters and appends an ellipsis", () => {
-		const title = "a".repeat(300);
-
-		const name = generateGroceryListName([title]);
-
-		expect(name.length).toBe(255);
-		expect(name.endsWith("…")).toBe(true);
-		expect(name).toBe(`${"a".repeat(254)}…`);
-	});
-
-	it("truncates the joined result of multiple titles, not each title individually", () => {
-		const titles = ["a".repeat(200), "b".repeat(100), "c".repeat(100)];
-
-		const name = generateGroceryListName(titles);
-
-		expect(name.length).toBe(255);
-		expect(name.endsWith("…")).toBe(true);
 	});
 });
 

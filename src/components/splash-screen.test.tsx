@@ -35,7 +35,7 @@ describe("SplashScreen", () => {
 	it("hides once both ready and the minimum duration have elapsed", () => {
 		render(<SplashScreen ready={true} />);
 		act(() => {
-			vi.advanceTimersByTime(500);
+			vi.advanceTimersByTime(1000);
 		});
 
 		expect(screen.getByTestId("splash-screen")).toHaveAttribute(
@@ -47,7 +47,7 @@ describe("SplashScreen", () => {
 	it("does not hide on the minimum duration alone if data isn't ready yet", () => {
 		render(<SplashScreen ready={false} />);
 		act(() => {
-			vi.advanceTimersByTime(500);
+			vi.advanceTimersByTime(1000);
 		});
 
 		expect(screen.getByTestId("splash-screen")).toHaveAttribute(

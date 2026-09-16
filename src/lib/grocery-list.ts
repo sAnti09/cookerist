@@ -42,10 +42,21 @@ export type GroceryList = {
 
 export const GROCERY_LIST_NAME_MAX_LENGTH = 255;
 
-export function generateGroceryListName(recipeTitles: string[]): string {
-	const joined = recipeTitles.join(", ");
-	if (joined.length <= GROCERY_LIST_NAME_MAX_LENGTH) return joined;
-	return `${joined.slice(0, GROCERY_LIST_NAME_MAX_LENGTH - 1)}…`;
+// Default name for a new grocery list, e.g. "Sep 16, 2026" (no recipes
+// selected yet, or a custom-only list) or "Sep 16, 2026 for 3 recipes" —
+// same date format used for recipe/grocery-list rows elsewhere in the app.
+export function generateGroceryListName(
+	recipeCount: number,
+	date: Date = new Date(),
+): string {
+	const formattedDate = date.toLocaleDateString(undefined, {
+		year: "numeric",
+		month: "short",
+		day: "numeric",
+	});
+	if (recipeCount === 0) return formattedDate;
+	const recipeWord = recipeCount === 1 ? "recipe" : "recipes";
+	return `${formattedDate} for ${recipeCount} ${recipeWord}`;
 }
 
 export type GroceryListProgress = {

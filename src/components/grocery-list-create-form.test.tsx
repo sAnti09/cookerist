@@ -587,6 +587,8 @@ describe("GroceryListCreateForm", () => {
 	});
 
 	it("persists the grocery list once the confirmation dialog is confirmed", async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		vi.setSystemTime(new Date("2026-09-16T12:00:00.000Z"));
 		const user = userEvent.setup();
 		const recipe = makeRecipe();
 		const { props } = renderForm({ recipes: [recipe] });
@@ -600,7 +602,7 @@ describe("GroceryListCreateForm", () => {
 
 		expect(props.onSave).toHaveBeenCalledTimes(1);
 		const created = vi.mocked(props.onSave).mock.calls[0][0];
-		expect(created.name).toBe("Shrimp Pasta");
+		expect(created.name).toBe("Sep 16, 2026 for 1 recipe");
 		expect(created.recipeIds).toEqual(["recipe-1"]);
 		expect(created.items).toHaveLength(1);
 		expect(created.items[0]).toMatchObject({
@@ -608,21 +610,25 @@ describe("GroceryListCreateForm", () => {
 			quantity: 453.75,
 			unit: "g",
 		});
+		vi.useRealTimers();
 	});
 
 	it("defaults the name to the auto-generated value and lets it be edited", async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		vi.setSystemTime(new Date("2026-09-16T12:00:00.000Z"));
 		const user = userEvent.setup();
 		renderForm({ recipes: [makeRecipe()] });
 
 		await addRecipe(user, "Shrimp Pasta");
 
 		const nameInput = screen.getByLabelText("List name");
-		expect(nameInput).toHaveValue("Shrimp Pasta");
+		expect(nameInput).toHaveValue("Sep 16, 2026 for 1 recipe");
 
 		await user.clear(nameInput);
 		await user.type(nameInput, "My custom list");
 
 		expect(nameInput).toHaveValue("My custom list");
+		vi.useRealTimers();
 	});
 
 	it("enforces a 255 character max length on the name field", async () => {

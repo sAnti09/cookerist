@@ -6,8 +6,9 @@ import { useEffect, useState } from "react";
 // wordmark + tagline live here now instead of in every page header (see the
 // nav-overhaul mockup, artboard 0e). Stays up until data has actually loaded
 // AND a minimum duration has elapsed, whichever is longer, so it never just
-// flashes on a fast load.
-const MINIMUM_VISIBLE_MS = 500;
+// flashes on a fast load — long enough for the flame icon to actually
+// register, not just a 500ms blip.
+const MINIMUM_VISIBLE_MS = 1000;
 
 export function SplashScreen({ ready }: { ready: boolean }) {
 	const [minimumElapsed, setMinimumElapsed] = useState(false);

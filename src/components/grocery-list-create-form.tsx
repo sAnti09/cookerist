@@ -114,9 +114,7 @@ export function GroceryListCreateForm({
 		[selectedRecipes, customIngredients],
 	);
 	const canSave = selectedRecipes.length > 0 || customIngredients.length > 0;
-	const defaultName = generateGroceryListName(
-		selectedRecipes.map((recipe) => recipe.title),
-	);
+	const defaultName = generateGroceryListName(selectedRecipes.length);
 	const name = customName ?? defaultName;
 
 	// Only recipe ingredients feed the suggestions — custom ingredients the

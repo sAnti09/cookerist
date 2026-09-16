@@ -158,12 +158,15 @@ describe("Grocery screen", () => {
 		);
 
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+		// Default list name is now "<today's date> for 1 recipe" rather than
+		// the recipe's own title — see generateGroceryListName.
 		expect(
-			await screen.findByRole("heading", { name: "Garlic Shrimp Pasta" }),
+			await screen.findByRole("heading", { name: /for 1 recipe$/ }),
 		).toBeInTheDocument();
 		const stored = JSON.parse(
 			window.localStorage.getItem("cookerist:grocery-lists") ?? "[]",
 		);
 		expect(stored).toHaveLength(1);
+		expect(stored[0].name).toMatch(/for 1 recipe$/);
 	});
 });
