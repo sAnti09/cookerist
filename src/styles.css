@@ -133,15 +133,26 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  color: var(--accent);
-  text-decoration-color: color-mix(in oklab, var(--accent) 50%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
-}
+/* Layered (not a bare rule) so a Tailwind utility class like
+   text-primary-foreground can still win on an <a> styled as a solid button
+   (e.g. a Link used as a FAB or CTA) — a bare, unlayered rule here would
+   otherwise always beat every Tailwind utility regardless of specificity,
+   since @import 'tailwindcss' puts all of Tailwind's own rules (base,
+   components, utilities) inside named layers, and any unlayered rule
+   automatically outranks every layered one. Found via a real bug: the meal
+   plan FAB/CTA links rendered with invisible (accent-on-accent) icons/text
+   because of this. */
+@layer base {
+  a {
+    color: var(--accent);
+    text-decoration-color: color-mix(in oklab, var(--accent) 50%, transparent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
 
-a:hover {
-  color: var(--ink);
+  a:hover {
+    color: var(--ink);
+  }
 }
 
 code,

@@ -3,14 +3,13 @@ import { Book, Calendar, ShoppingCart } from "lucide-react";
 import { cn } from "#/lib/utils";
 
 // Fixed bottom navigation replacing the old pill ViewToggle — three tabs
-// (Recipes / Meal Plan / Grocery) per the nav-overhaul mockup. Meal Plan has
-// no route yet (confirmed 2026-09-16: ships as a disabled placeholder, not a
-// real page) so it's a plain inert button, never a Link.
+// (Recipes / Meal Plan / Grocery) per the nav-overhaul mockup.
 export function BottomTabBar() {
 	const pathname = useRouterState({
 		select: (state) => state.location.pathname,
 	});
 	const onRecipes = pathname === "/" || pathname.startsWith("/recipes");
+	const onMealPlan = pathname.startsWith("/meal-plan");
 	const onGrocery = pathname.startsWith("/grocery");
 
 	return (
@@ -32,15 +31,17 @@ export function BottomTabBar() {
 				<Book className="size-[22px]" aria-hidden="true" />
 				<span className="text-[11px]">Recipes</span>
 			</Link>
-			<button
-				type="button"
-				disabled
-				aria-disabled="true"
-				className="flex flex-1 cursor-not-allowed flex-col items-center gap-1 text-ink-dim/60"
+			<Link
+				to="/meal-plan"
+				aria-current={onMealPlan ? "page" : undefined}
+				className={cn(
+					"flex flex-1 flex-col items-center gap-1",
+					onMealPlan ? "font-semibold text-accent" : "text-ink-dim",
+				)}
 			>
 				<Calendar className="size-[22px]" aria-hidden="true" />
 				<span className="text-[11px]">Meal Plan</span>
-			</button>
+			</Link>
 			<Link
 				to="/grocery"
 				aria-current={onGrocery ? "page" : undefined}

@@ -14,6 +14,8 @@ import { cn } from "#/lib/utils";
 const DETAIL_ROUTE_IDS = new Set([
 	"/_tabs/recipes_/$recipeId",
 	"/_tabs/grocery_/$listId",
+	"/_tabs/meal-plan_/new",
+	"/_tabs/meal-plan_/$planId",
 ]);
 
 export const Route = createFileRoute("/_tabs")({

@@ -1,0 +1,219 @@
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { ChevronLeft, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { MealPlanBuilding } from "#/components/meal-plan-building";
+import { MealPlanDraft } from "#/components/meal-plan-draft";
+import { MealPlanReady } from "#/components/meal-plan-ready";
+import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { IconButton } from "#/components/ui/icon-button";
+import { aggregateGroceryItems } from "#/lib/aggregate-grocery-items";
+import { useAppData } from "#/lib/app-data-context";
+import type { GroceryList } from "#/lib/grocery-list";
+import {
+	DEFAULT_MEAL_PLAN_SERVINGS,
+	formatMealPlanDateRange,
+	type MealPlan,
+} from "#/lib/meal-plan";
+import type { Recipe } from "#/lib/recipe";
+import { useBuildMealPlan } from "#/lib/use-build-meal-plan";
+
+export const Route = createFileRoute("/_tabs/meal-plan_/$planId")({
+	component: MealPlanDetailScreen,
+});
+
+const STATUS_SUBTITLES: Record<MealPlan["status"], string> = {
+	draft: "Draft · review before building",
+	building: "Building",
+	ready: "Ready",
+};
+
+// Stable placeholder passed to useBuildMealPlan when the real plan can't be
+// found — hooks must run unconditionally every render, and a non-"building"
+// status makes the hook's effect/loop no-op immediately.
+const NOT_FOUND_PLAN: MealPlan = {
+	id: "__not-found__",
+	createdAt: "",
+	startDate: "",
+	endDate: "",
+	description: "",
+	defaultServings: DEFAULT_MEAL_PLAN_SERVINGS,
+	status: "ready",
+	entries: [],
+	refineInstructions: [],
+};
+
+function MealPlanDetailScreen() {
+	const { planId } = Route.useParams();
+	const navigate = useNavigate();
+	const {
+		mealPlans,
+		recipes,
+		updateMealPlan,
+		deleteMealPlan,
+		createRecipe,
+		updateRecipe,
+		updateRecipes,
+		saveGroceryListForm,
+	} = useAppData();
+	const [confirmingDelete, setConfirmingDelete] = useState(false);
+	const plan = mealPlans.find((p) => p.id === planId);
+
+	const buildDeps = useMemo(
+		() => ({
+			recipes,
+			onUpdatePlan: updateMealPlan,
+			onCreateRecipe: createRecipe,
+			onUpdateRecipe: updateRecipe,
+		}),
+		[recipes, updateMealPlan, createRecipe, updateRecipe],
+	);
+	const { retryEntry } = useBuildMealPlan(plan ?? NOT_FOUND_PLAN, buildDeps);
+
+	if (!plan) {
+		return (
+			<div className="flex flex-col items-center gap-3 px-5 pt-16 text-center">
+				<p className="text-sm text-ink-dim">
+					This meal plan couldn't be found — it may have been deleted.
+				</p>
+				<Link
+					to="/meal-plan"
+					className="font-medium text-accent underline underline-offset-2"
+				>
+					Back to meal plans
+				</Link>
+			</div>
+		);
+	}
+
+	function handleApprove() {
+		if (!plan) return;
+		updateMealPlan({
+			...plan,
+			status: "building",
+			builtBefore: true,
+			preAdjustEntries: undefined,
+		});
+	}
+
+	// For a brand-new plan's first draft review, Discard deletes it outright
+	// — there's nothing built yet to lose. For an already-built plan being
+	// adjusted, Discard instead cancels the adjustment: restore the entries
+	// as they were right before "Adjust plan" was clicked and go back to
+	// viewing the plan, same as it was before this adjustment started.
+	function handleDiscard() {
+		if (!plan) return;
+		if (plan.builtBefore) {
+			updateMealPlan({
+				...plan,
+				status: "ready",
+				entries: plan.preAdjustEntries ?? plan.entries,
+				preAdjustEntries: undefined,
+			});
+			return;
+		}
+		deleteMealPlan(plan.id);
+		navigate({ to: "/meal-plan" });
+	}
+
+	function handleAdjustPlan() {
+		if (!plan) return;
+		updateMealPlan({
+			...plan,
+			status: "draft",
+			preAdjustEntries: plan.entries,
+		});
+	}
+
+	// Client-side only — reuses the same aggregateGroceryItems math the
+	// grocery-list create form uses (see grocery-list-create-form.tsx), keyed
+	// directly off this plan's built recipes. No Groq call.
+	function handleBuildGroceryList() {
+		if (!plan) return;
+		const planRecipes = plan.entries
+			.map((entry) =>
+				entry.recipeId
+					? recipes.find((recipe) => recipe.id === entry.recipeId)
+					: undefined,
+			)
+			.filter((recipe): recipe is Recipe => Boolean(recipe));
+		if (planRecipes.length === 0) return;
+		const list: GroceryList = {
+			id: crypto.randomUUID(),
+			createdAt: new Date().toISOString(),
+			name: `${formatMealPlanDateRange(plan.startDate, plan.endDate)} meal plan`,
+			recipeIds: planRecipes.map((recipe) => recipe.id),
+			items: aggregateGroceryItems(planRecipes),
+			expanded: false,
+		};
+		saveGroceryListForm(list);
+		updateMealPlan({ ...plan, groceryListId: list.id });
+		navigate({ to: "/grocery/$listId", params: { listId: list.id } });
+	}
+
+	return (
+		<div>
+			<div className="sticky top-0 z-10 flex items-center gap-2 border-line border-b bg-bg px-4 py-3.5">
+				<IconButton
+					aria-label="Back to meal plans"
+					onClick={() => navigate({ to: "/meal-plan" })}
+				>
+					<ChevronLeft className="size-[18px]" aria-hidden="true" />
+				</IconButton>
+				<div className="display-title flex-1 truncate text-[15px] font-semibold">
+					Meal Plan
+				</div>
+				<IconButton
+					aria-label="Delete this meal plan"
+					onClick={() => setConfirmingDelete(true)}
+				>
+					<Trash2 className="size-4 text-ink-dim" />
+				</IconButton>
+			</div>
+
+			<div className="px-5 pt-5">
+				<h1 className="display-title text-2xl font-semibold leading-tight">
+					{formatMealPlanDateRange(plan.startDate, plan.endDate)}
+				</h1>
+				<p className="mt-1 text-ink-dim text-xs">
+					{STATUS_SUBTITLES[plan.status]}
+				</p>
+
+				<div className="mt-5">
+					{plan.status === "draft" ? (
+						<MealPlanDraft
+							plan={plan}
+							onUpdatePlan={updateMealPlan}
+							onApprove={handleApprove}
+							onDiscard={handleDiscard}
+						/>
+					) : plan.status === "building" ? (
+						<MealPlanBuilding plan={plan} onRetryEntry={retryEntry} />
+					) : (
+						<MealPlanReady
+							plan={plan}
+							recipes={recipes}
+							onUpdatePlan={updateMealPlan}
+							onUpdateRecipes={updateRecipes}
+							onAdjustPlan={handleAdjustPlan}
+							onBuildGroceryList={handleBuildGroceryList}
+						/>
+					)}
+				</div>
+			</div>
+
+			<ConfirmDialog
+				open={confirmingDelete}
+				title="Delete this meal plan?"
+				description="This meal plan will be permanently removed. Any recipes it built stay in your Recipes list."
+				confirmLabel="Delete"
+				cancelLabel="Cancel"
+				onConfirm={() => {
+					setConfirmingDelete(false);
+					deleteMealPlan(plan.id);
+					navigate({ to: "/meal-plan" });
+				}}
+				onCancel={() => setConfirmingDelete(false)}
+			/>
+		</div>
+	);
+}

@@ -3,6 +3,7 @@ import {
 	DEFAULT_GROCERY_CATEGORY,
 	GROCERY_CATEGORIES,
 } from "#/lib/grocery-category";
+import { MEAL_TYPES } from "#/lib/meal-plan";
 
 export const onTopicResponseSchema = z.object({
 	on_topic: z.boolean(),
@@ -105,3 +106,24 @@ export const categorizeIngredientsResponseSchema = z.object({
 export type CategorizeIngredientsResponse = z.infer<
 	typeof categorizeIngredientsResponseSchema
 >;
+
+// Used by generateMealPlanDraft/refineMealPlanDraft (see
+// groq/generate-meal-plan.ts) — a lightweight per-dish suggestion (title +
+// overview only, no ingredients/steps yet) for one slot in a meal plan's
+// wizard grid. `day`/`mealType`/`slotIndex` echo the requested slot back so
+// the response can be matched to the entry it's for without relying on
+// array order.
+const mealPlanDraftEntrySchema = z.object({
+	day: z.string().min(1),
+	mealType: z.enum(MEAL_TYPES),
+	slotIndex: z.number().int().nonnegative(),
+	title: z.string().min(1),
+	overview: z.string().min(1),
+});
+
+export const mealPlanDraftResponseSchema = z.object({
+	entries: z.array(mealPlanDraftEntrySchema),
+});
+
+export type MealPlanDraftEntry = z.infer<typeof mealPlanDraftEntrySchema>;
+export type MealPlanDraftResponse = z.infer<typeof mealPlanDraftResponseSchema>;

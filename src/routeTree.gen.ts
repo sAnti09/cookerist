@@ -12,8 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TabsRouteImport } from './routes/_tabs'
 import { Route as TabsGroceryRouteImport } from './routes/_tabs.grocery'
+import { Route as TabsMealPlanRouteImport } from './routes/_tabs.meal-plan'
 import { Route as TabsRecipesRouteImport } from './routes/_tabs.recipes'
 import { Route as TabsGroceryListIdRouteImport } from './routes/_tabs.grocery_.$listId'
+import { Route as TabsMealPlanPlanIdRouteImport } from './routes/_tabs.meal-plan_.$planId'
+import { Route as TabsMealPlanNewRouteImport } from './routes/_tabs.meal-plan_.new'
 import { Route as TabsRecipesRecipeIdRouteImport } from './routes/_tabs.recipes_.$recipeId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -30,6 +33,11 @@ const TabsGroceryRoute = TabsGroceryRouteImport.update({
   path: '/grocery',
   getParentRoute: () => TabsRoute,
 } as any)
+const TabsMealPlanRoute = TabsMealPlanRouteImport.update({
+  id: '/meal-plan',
+  path: '/meal-plan',
+  getParentRoute: () => TabsRoute,
+} as any)
 const TabsRecipesRoute = TabsRecipesRouteImport.update({
   id: '/recipes',
   path: '/recipes',
@@ -38,6 +46,16 @@ const TabsRecipesRoute = TabsRecipesRouteImport.update({
 const TabsGroceryListIdRoute = TabsGroceryListIdRouteImport.update({
   id: '/grocery_/$listId',
   path: '/grocery/$listId',
+  getParentRoute: () => TabsRoute,
+} as any)
+const TabsMealPlanPlanIdRoute = TabsMealPlanPlanIdRouteImport.update({
+  id: '/meal-plan_/$planId',
+  path: '/meal-plan/$planId',
+  getParentRoute: () => TabsRoute,
+} as any)
+const TabsMealPlanNewRoute = TabsMealPlanNewRouteImport.update({
+  id: '/meal-plan_/new',
+  path: '/meal-plan/new',
   getParentRoute: () => TabsRoute,
 } as any)
 const TabsRecipesRecipeIdRoute = TabsRecipesRecipeIdRouteImport.update({
@@ -49,15 +67,21 @@ const TabsRecipesRecipeIdRoute = TabsRecipesRecipeIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/grocery': typeof TabsGroceryRoute
+  '/meal-plan': typeof TabsMealPlanRoute
   '/recipes': typeof TabsRecipesRoute
   '/grocery/$listId': typeof TabsGroceryListIdRoute
+  '/meal-plan/$planId': typeof TabsMealPlanPlanIdRoute
+  '/meal-plan/new': typeof TabsMealPlanNewRoute
   '/recipes/$recipeId': typeof TabsRecipesRecipeIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/grocery': typeof TabsGroceryRoute
+  '/meal-plan': typeof TabsMealPlanRoute
   '/recipes': typeof TabsRecipesRoute
   '/grocery/$listId': typeof TabsGroceryListIdRoute
+  '/meal-plan/$planId': typeof TabsMealPlanPlanIdRoute
+  '/meal-plan/new': typeof TabsMealPlanNewRoute
   '/recipes/$recipeId': typeof TabsRecipesRecipeIdRoute
 }
 export interface FileRoutesById {
@@ -65,23 +89,44 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_tabs': typeof TabsRouteWithChildren
   '/_tabs/grocery': typeof TabsGroceryRoute
+  '/_tabs/meal-plan': typeof TabsMealPlanRoute
   '/_tabs/recipes': typeof TabsRecipesRoute
   '/_tabs/grocery_/$listId': typeof TabsGroceryListIdRoute
+  '/_tabs/meal-plan_/$planId': typeof TabsMealPlanPlanIdRoute
+  '/_tabs/meal-plan_/new': typeof TabsMealPlanNewRoute
   '/_tabs/recipes_/$recipeId': typeof TabsRecipesRecipeIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/grocery' | '/recipes' | '/grocery/$listId' | '/recipes/$recipeId'
+    | '/'
+    | '/grocery'
+    | '/meal-plan'
+    | '/recipes'
+    | '/grocery/$listId'
+    | '/meal-plan/$planId'
+    | '/meal-plan/new'
+    | '/recipes/$recipeId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/grocery' | '/recipes' | '/grocery/$listId' | '/recipes/$recipeId'
+  to:
+    | '/'
+    | '/grocery'
+    | '/meal-plan'
+    | '/recipes'
+    | '/grocery/$listId'
+    | '/meal-plan/$planId'
+    | '/meal-plan/new'
+    | '/recipes/$recipeId'
   id:
     | '__root__'
     | '/'
     | '/_tabs'
     | '/_tabs/grocery'
+    | '/_tabs/meal-plan'
     | '/_tabs/recipes'
     | '/_tabs/grocery_/$listId'
+    | '/_tabs/meal-plan_/$planId'
+    | '/_tabs/meal-plan_/new'
     | '/_tabs/recipes_/$recipeId'
   fileRoutesById: FileRoutesById
 }
@@ -113,6 +158,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TabsGroceryRouteImport
       parentRoute: typeof TabsRoute
     }
+    '/_tabs/meal-plan': {
+      id: '/_tabs/meal-plan'
+      path: '/meal-plan'
+      fullPath: '/meal-plan'
+      preLoaderRoute: typeof TabsMealPlanRouteImport
+      parentRoute: typeof TabsRoute
+    }
     '/_tabs/recipes': {
       id: '/_tabs/recipes'
       path: '/recipes'
@@ -127,6 +179,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TabsGroceryListIdRouteImport
       parentRoute: typeof TabsRoute
     }
+    '/_tabs/meal-plan_/$planId': {
+      id: '/_tabs/meal-plan_/$planId'
+      path: '/meal-plan/$planId'
+      fullPath: '/meal-plan/$planId'
+      preLoaderRoute: typeof TabsMealPlanPlanIdRouteImport
+      parentRoute: typeof TabsRoute
+    }
+    '/_tabs/meal-plan_/new': {
+      id: '/_tabs/meal-plan_/new'
+      path: '/meal-plan/new'
+      fullPath: '/meal-plan/new'
+      preLoaderRoute: typeof TabsMealPlanNewRouteImport
+      parentRoute: typeof TabsRoute
+    }
     '/_tabs/recipes_/$recipeId': {
       id: '/_tabs/recipes_/$recipeId'
       path: '/recipes/$recipeId'
@@ -139,15 +205,21 @@ declare module '@tanstack/react-router' {
 
 interface TabsRouteChildren {
   TabsGroceryRoute: typeof TabsGroceryRoute
+  TabsMealPlanRoute: typeof TabsMealPlanRoute
   TabsRecipesRoute: typeof TabsRecipesRoute
   TabsGroceryListIdRoute: typeof TabsGroceryListIdRoute
+  TabsMealPlanPlanIdRoute: typeof TabsMealPlanPlanIdRoute
+  TabsMealPlanNewRoute: typeof TabsMealPlanNewRoute
   TabsRecipesRecipeIdRoute: typeof TabsRecipesRecipeIdRoute
 }
 
 const TabsRouteChildren: TabsRouteChildren = {
   TabsGroceryRoute: TabsGroceryRoute,
+  TabsMealPlanRoute: TabsMealPlanRoute,
   TabsRecipesRoute: TabsRecipesRoute,
   TabsGroceryListIdRoute: TabsGroceryListIdRoute,
+  TabsMealPlanPlanIdRoute: TabsMealPlanPlanIdRoute,
+  TabsMealPlanNewRoute: TabsMealPlanNewRoute,
   TabsRecipesRecipeIdRoute: TabsRecipesRecipeIdRoute,
 }
 

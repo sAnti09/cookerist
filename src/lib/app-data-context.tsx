@@ -13,6 +13,13 @@ import {
 	saveGroceryList,
 	updateGroceryList,
 } from "#/lib/grocery-storage";
+import type { MealPlan } from "#/lib/meal-plan";
+import {
+	deleteMealPlan,
+	loadMealPlans,
+	saveMealPlan,
+	updateMealPlan,
+} from "#/lib/meal-plan-storage";
 import { MIGRATIONS, runMigrations } from "#/lib/migrations";
 import type { Recipe } from "#/lib/recipe";
 import {
@@ -35,6 +42,7 @@ import {
 type AppDataContextValue = {
 	recipes: Recipe[];
 	groceryLists: GroceryList[];
+	mealPlans: MealPlan[];
 	// True once the initial localStorage load (and migration kickoff) has
 	// run — the splash screen stays up until this flips true.
 	ready: boolean;
@@ -51,6 +59,9 @@ type AppDataContextValue = {
 	openEditGroceryList: (list: GroceryList) => void;
 	closeGroceryListForm: () => void;
 	saveGroceryListForm: (list: GroceryList) => void;
+	createMealPlan: (plan: MealPlan) => void;
+	updateMealPlan: (plan: MealPlan) => void;
+	deleteMealPlan: (id: string) => void;
 };
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -58,6 +69,7 @@ const AppDataContext = createContext<AppDataContextValue | null>(null);
 export function AppDataProvider({ children }: { children: ReactNode }) {
 	const [recipes, setRecipes] = useState<Recipe[]>([]);
 	const [groceryLists, setGroceryLists] = useState<GroceryList[]>([]);
+	const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
 	const [ready, setReady] = useState(false);
 	const [creatingGroceryList, setCreatingGroceryList] = useState(false);
 	const [editingGroceryList, setEditingGroceryList] =
@@ -75,6 +87,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		});
 		setRecipes(loadRecipes());
 		setGroceryLists(loadGroceryLists());
+		setMealPlans(loadMealPlans());
 		setReady(true);
 	}, []);
 
@@ -132,9 +145,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		[editingGroceryList],
 	);
 
+	const handleCreateMealPlan = useCallback((plan: MealPlan) => {
+		setMealPlans((current) => saveMealPlan(current, plan));
+	}, []);
+
+	const handleUpdateMealPlan = useCallback((plan: MealPlan) => {
+		setMealPlans((current) => updateMealPlan(current, plan));
+	}, []);
+
+	const handleDeleteMealPlan = useCallback((id: string) => {
+		setMealPlans((current) => deleteMealPlan(current, id));
+	}, []);
+
 	const value: AppDataContextValue = {
 		recipes,
 		groceryLists,
+		mealPlans,
 		ready,
 		deleteRecipe: handleDeleteRecipe,
 		toggleFavoriteRecipe: handleToggleFavoriteRecipe,
@@ -149,6 +175,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		openEditGroceryList,
 		closeGroceryListForm,
 		saveGroceryListForm,
+		createMealPlan: handleCreateMealPlan,
+		updateMealPlan: handleUpdateMealPlan,
+		deleteMealPlan: handleDeleteMealPlan,
 	};
 
 	return (
