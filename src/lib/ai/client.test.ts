@@ -77,6 +77,7 @@ describe("getAiClient", () => {
 		expect(groqConstructorMock).toHaveBeenCalledWith({
 			apiKey: "groq-key",
 			baseURL: undefined,
+			timeout: 180_000,
 			defaultHeaders: undefined,
 		});
 	});
@@ -87,11 +88,22 @@ describe("getAiClient", () => {
 		expect(groqConstructorMock).toHaveBeenCalledWith({
 			apiKey: "or-key",
 			baseURL: "https://openrouter.ai/api/v1",
+			timeout: 180_000,
 			defaultHeaders: {
 				"HTTP-Referer": "https://cookerist.jameseuangel-limpiado.workers.dev",
 				"X-Title": "Cookerist",
 			},
 		});
+	});
+
+	it("passes an explicit request timeout longer than groq-sdk's 1-minute default, for both providers", () => {
+		process.env.GROQ_API_KEY = "groq-key";
+		process.env.OPENROUTER_API_KEY = "or-key";
+		getAiClient("groq");
+		getAiClient("openrouter");
+		for (const call of groqConstructorMock.mock.calls) {
+			expect(call[0].timeout).toBeGreaterThan(60_000);
+		}
 	});
 
 	it("defaults to the active provider (via AI_PROVIDER) when none is passed explicitly", () => {

@@ -25,6 +25,22 @@ const PROVIDER_CONFIG: Record<
 	},
 };
 
+// groq-sdk defaults to a 1-minute request timeout when none is given.
+// That was always the effective ceiling here too (getAiClient never
+// overrode it), but harmless as long as every response came back in a
+// handful of seconds — which stopped being true once OpenRouter's
+// `provider.sort` moved from "latency" (Cerebras, always fast) to "price"
+// (routinely 20-145s+ on the cheapest tier). Once real responses started
+// approaching/exceeding 60s, the SDK's own timeout began firing and
+// silently doubling latency via chatCompletion's cross-provider failover
+// (a full second ~60s-capped attempt on top of the first) — the actual
+// cause behind a wave of "Load failed" errors, since a real browser is far
+// more likely to abort a 60-145s in-flight request than my scripted test
+// was. A longer, explicit timeout gives a legitimately-slow-but-succeeding
+// call room to finish on its first attempt instead of being killed and
+// retried.
+const AI_REQUEST_TIMEOUT_MS = 180_000;
+
 export function getActiveProvider(): AiProvider {
 	return process.env.AI_PROVIDER === "openrouter" ? "openrouter" : "groq";
 }
@@ -50,6 +66,7 @@ export function getAiClient(provider: AiProvider = getActiveProvider()): Groq {
 	return new Groq({
 		apiKey,
 		baseURL,
+		timeout: AI_REQUEST_TIMEOUT_MS,
 		defaultHeaders:
 			provider === "openrouter"
 				? {
