@@ -42,9 +42,8 @@ vi.mock("#/server/identify-dish", () => ({
 	identifyDish: (...args: unknown[]) => identifyDishMock(...args),
 }));
 
-// See routes/index.test.tsx's original equivalent comment — the
-// categorize-recipe-ingredients migration calls this in the background
-// whenever any recipe is seeded; mocked so it never hits getGroqClient().
+// The categorize-recipe-ingredients migration calls this in the background
+// whenever any recipe is seeded; mocked so it never hits the AI client.
 vi.mock("#/server/categorize-ingredients", () => ({
 	categorizeIngredients: (...args: unknown[]) =>
 		categorizeIngredientsMock(...args),

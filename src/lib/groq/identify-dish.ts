@@ -1,16 +1,14 @@
-import { getGroqClient } from "./client";
+import { chatCompletion } from "#/lib/ai/client";
 import { extractJson } from "./extract-json";
 import { regionHint } from "./region-hint";
 import { dishIdentificationResponseSchema } from "./schema";
 
-const IDENTIFY_MODEL = "qwen/qwen3.6-27b";
-
-// This account's on-demand tier caps qwen/qwen3.6-27b at 1000 output tokens
-// per minute — well below the model's own 2048-token default, which Groq
-// reserves upfront based on max_completion_tokens (not actual output length),
-// so an unset/high value gets rejected before the call even runs. The actual
-// JSON reply here is tiny (a boolean plus a short phrase), so 200 is
-// generous headroom while comfortably clearing that per-minute budget.
+// This account's on-demand Groq tier caps qwen/qwen3.6-27b at 1000 output
+// tokens per minute — well below the model's own 2048-token default, which
+// Groq reserves upfront based on max_completion_tokens (not actual output
+// length), so an unset/high value gets rejected before the call even runs.
+// The actual JSON reply here is tiny (a boolean plus a short phrase), so 200
+// is generous headroom while comfortably clearing that per-minute budget.
 const IDENTIFY_MAX_COMPLETION_TOKENS = 200;
 
 const IDENTIFY_SYSTEM_PROMPT = `You look at a photo and identify whether it shows a specific prepared food, drink, or dessert that could be turned into one recipe. Respond with ONLY a JSON object of the exact shape {"is_food": boolean, "description": string}. No other text.
@@ -35,11 +33,8 @@ export async function identifyDish(
 	// see region-hint.ts.
 	timezone?: string,
 ): Promise<IdentifyDishResult> {
-	const client = getGroqClient();
-
 	try {
-		const completion = await client.chat.completions.create({
-			model: IDENTIFY_MODEL,
+		const completion = await chatCompletion("identifyDish", {
 			response_format: { type: "json_object" },
 			max_completion_tokens: IDENTIFY_MAX_COMPLETION_TOKENS,
 			// This is a plain classification, not a task that benefits from

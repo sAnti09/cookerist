@@ -8,10 +8,11 @@ import type { RecipeResponse } from "./schema";
 
 const createMock = vi.fn();
 
-vi.mock("./client", () => ({
-	getGroqClient: () => ({
-		chat: { completions: { create: createMock } },
-	}),
+// createMock only ever sees the params (not the call-type string) so every
+// existing assertion below — written against the old getGroqClient() mock,
+// where index [0] was always the params object — still lines up unchanged.
+vi.mock("#/lib/ai/client", () => ({
+	chatCompletion: (_callType: string, params: unknown) => createMock(params),
 }));
 
 function jsonResponse(content: unknown, finishReason = "stop") {

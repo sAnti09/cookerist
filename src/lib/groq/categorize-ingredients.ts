@@ -1,4 +1,4 @@
-import { getGroqClient } from "./client";
+import { chatCompletion } from "#/lib/ai/client";
 import { extractJson } from "./extract-json";
 import {
 	APPROX_WEIGHT_RULE,
@@ -10,13 +10,6 @@ import {
 	type CategorizeIngredientsResponse,
 	categorizeIngredientsResponseSchema,
 } from "./schema";
-
-// Reuses the recipe-generation model rather than the cheap on-topic-check
-// one — this pass has to correctly apply the same nuanced baseName rule a
-// fresh generation does (see prompt-rules.ts), and a wrong correction here
-// would misfile an ingredient for good (or wrongly merge/split it on the
-// grocery list), so it's worth the extra cost for a one-time cleanup.
-const CATEGORIZE_MODEL = "openai/gpt-oss-120b";
 
 // One batch's worth of items comfortably fits well under this — sized the
 // same way as the recipe continuation call (a similarly-sized array of
@@ -53,11 +46,8 @@ export type CategorizeIngredientsResult =
 export async function categorizeIngredients(
 	items: CategorizeIngredientsInput[],
 ): Promise<CategorizeIngredientsResult> {
-	const client = getGroqClient();
-
 	try {
-		const completion = await client.chat.completions.create({
-			model: CATEGORIZE_MODEL,
+		const completion = await chatCompletion("categorizeIngredients", {
 			response_format: { type: "json_object" },
 			max_completion_tokens: CATEGORIZE_MAX_COMPLETION_TOKENS,
 			messages: [

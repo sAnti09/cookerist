@@ -1,5 +1,5 @@
+import { chatCompletion } from "#/lib/ai/client";
 import { combineIngredientName } from "#/lib/recipe";
-import { getGroqClient } from "./client";
 import { extractJson } from "./extract-json";
 import {
 	APPROX_WEIGHT_RULE,
@@ -14,9 +14,6 @@ import {
 	recipeContinuationResponseSchema,
 	recipeResponseSchema,
 } from "./schema";
-
-const ON_TOPIC_MODEL = "openai/gpt-oss-20b";
-const RECIPE_MODEL = "openai/gpt-oss-120b";
 
 // Generous headroom for an elaborate recipe (many ingredients/steps) — first
 // line of defense against Groq truncating the response mid-JSON (TEST-243).
@@ -173,12 +170,9 @@ export async function generateRecipe(
 	// is the only call worth keeping as cheap/minimal as possible).
 	timezone?: string,
 ): Promise<GenerateRecipeResult> {
-	const client = getGroqClient();
-
 	let onTopic: boolean;
 	try {
-		const classification = await client.chat.completions.create({
-			model: ON_TOPIC_MODEL,
+		const classification = await chatCompletion("onTopicCheck", {
 			messages: [
 				{ role: "system", content: ON_TOPIC_SYSTEM_PROMPT },
 				{ role: "user", content: prompt },
@@ -206,8 +200,7 @@ export async function generateRecipe(
 	}
 
 	try {
-		const completion = await client.chat.completions.create({
-			model: RECIPE_MODEL,
+		const completion = await chatCompletion("recipeGeneration", {
 			response_format: { type: "json_object" },
 			max_completion_tokens: RECIPE_MAX_COMPLETION_TOKENS,
 			messages: [
@@ -243,11 +236,8 @@ export async function continueRecipe(
 		steps: RecipeResponse["steps"];
 	},
 ): Promise<ContinueRecipeResult> {
-	const client = getGroqClient();
-
 	try {
-		const completion = await client.chat.completions.create({
-			model: RECIPE_MODEL,
+		const completion = await chatCompletion("recipeContinuation", {
 			response_format: { type: "json_object" },
 			max_completion_tokens: CONTINUATION_MAX_COMPLETION_TOKENS,
 			messages: [
@@ -288,11 +278,8 @@ export async function modifyRecipe(
 	instruction: string,
 	current: RecipeResponse,
 ): Promise<ModifyRecipeResult> {
-	const client = getGroqClient();
-
 	try {
-		const completion = await client.chat.completions.create({
-			model: RECIPE_MODEL,
+		const completion = await chatCompletion("recipeModification", {
 			response_format: { type: "json_object" },
 			max_completion_tokens: MODIFICATION_MAX_COMPLETION_TOKENS,
 			messages: [

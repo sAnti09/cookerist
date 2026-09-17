@@ -1,15 +1,10 @@
+import { chatCompletion } from "#/lib/ai/client";
 import { MEAL_TYPE_LABELS, type MealType } from "#/lib/meal-plan";
-import { getGroqClient } from "./client";
 import { extractJson } from "./extract-json";
 import { regionHint } from "./region-hint";
 import type { MealPlanDraftEntry } from "./schema";
 import { mealPlanDraftResponseSchema } from "./schema";
 
-// Same generation model as full recipes (see generate-recipe.ts) — this call
-// is asked to plan an entire week with variety, which warrants the larger
-// model even though its per-dish output (title + overview only) is much
-// smaller than a full recipe.
-const MEAL_PLAN_MODEL = "openai/gpt-oss-120b";
 // Generous headroom for a full 14-day, multi-meal, multi-dish plan — each
 // entry's JSON is small (day/mealType/slotIndex/title/overview), but a
 // maximal plan can request well over 100 of them.
@@ -74,8 +69,6 @@ export async function generateMealPlanDraft(config: {
 	// generateRecipe (see use-build-meal-plan.ts), which already gets it.
 	timezone?: string;
 }): Promise<GenerateMealPlanDraftResult> {
-	const client = getGroqClient();
-
 	const trimmedDescription = config.description.trim();
 	const userPrompt =
 		[
@@ -88,8 +81,7 @@ export async function generateMealPlanDraft(config: {
 			.join("\n") + regionHint(config.timezone);
 
 	try {
-		const completion = await client.chat.completions.create({
-			model: MEAL_PLAN_MODEL,
+		const completion = await chatCompletion("mealPlanDraft", {
 			response_format: { type: "json_object" },
 			max_completion_tokens: MEAL_PLAN_MAX_COMPLETION_TOKENS,
 			messages: [
@@ -132,8 +124,6 @@ export async function refineMealPlanDraft(
 	// No portionSizeHint here either, for the same reason as above.
 	timezone?: string,
 ): Promise<RefineMealPlanDraftResult> {
-	const client = getGroqClient();
-
 	const trimmedDescription = description.trim();
 	const userPrompt =
 		[
@@ -148,8 +138,7 @@ export async function refineMealPlanDraft(
 			.join("\n") + regionHint(timezone);
 
 	try {
-		const completion = await client.chat.completions.create({
-			model: MEAL_PLAN_MODEL,
+		const completion = await chatCompletion("mealPlanRefine", {
 			response_format: { type: "json_object" },
 			max_completion_tokens: MEAL_PLAN_MAX_COMPLETION_TOKENS,
 			messages: [
