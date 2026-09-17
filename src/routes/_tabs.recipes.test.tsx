@@ -123,6 +123,7 @@ beforeEach(() => {
 	categorizeIngredientsMock.mockReset();
 	categorizeIngredientsMock.mockResolvedValue({ type: "success", items: [] });
 	window.localStorage.clear();
+	window.sessionStorage.clear();
 	MockIntersectionObserver.instances = [];
 	vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
 });
@@ -371,6 +372,27 @@ describe("Recipes screen", () => {
 		expect(screen.getAllByText(/^Recipe \d+$/)).toHaveLength(10);
 
 		MockIntersectionObserver.instances[0]?.intersect();
+
+		await waitFor(() =>
+			expect(screen.getAllByText(/^Recipe \d+$/)).toHaveLength(12),
+		);
+	});
+
+	it("keeps previously-loaded recipes rendered (not truncated back to 10) after navigating into one and back", async () => {
+		seedRecipes(12);
+		await renderApp("/recipes");
+		const user = userEvent.setup();
+
+		expect(screen.getAllByText(/^Recipe \d+$/)).toHaveLength(10);
+		MockIntersectionObserver.instances[0]?.intersect();
+		await waitFor(() =>
+			expect(screen.getAllByText(/^Recipe \d+$/)).toHaveLength(12),
+		);
+
+		await user.click(screen.getByText("Recipe 11"));
+		await user.click(
+			await screen.findByRole("button", { name: "Back to recipes" }),
+		);
 
 		await waitFor(() =>
 			expect(screen.getAllByText(/^Recipe \d+$/)).toHaveLength(12),

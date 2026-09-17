@@ -38,6 +38,28 @@ const GENERIC_ERROR_MESSAGE =
 const PHOTO_ERROR_MESSAGE =
 	"Something went wrong identifying that photo. Please try again.";
 const PAGE_SIZE = 10;
+// Remembers how many recipes were lazily loaded across a navigate-away-
+// and-back round trip within this browser tab (e.g. tapping into a recipe,
+// then using the back button or a swipe-back gesture) — plain useState
+// wouldn't survive RecipesScreen fully unmounting on that round trip.
+// Without this, the list always re-renders truncated back down to
+// PAGE_SIZE, and if the router's scroll restoration (see use-go-back.ts)
+// then scrolls the page to a position that assumed more items were
+// rendered, the user lands somewhere below all rendered content — a blank
+// screen, since the IntersectionObserver that would otherwise grow the
+// list again never fires (its sentinel sits above the current, empty
+// viewport instead of inside it). sessionStorage rather than localStorage:
+// this is a within-tab scroll/pagination convenience, not data worth
+// keeping past this browsing session.
+const VISIBLE_COUNT_STORAGE_KEY = "cookerist:recipes-visible-count";
+
+function readStoredVisibleCount(): number {
+	if (typeof window === "undefined") return PAGE_SIZE;
+	const stored = Number(
+		window.sessionStorage.getItem(VISIBLE_COUNT_STORAGE_KEY),
+	);
+	return Number.isFinite(stored) && stored > PAGE_SIZE ? stored : PAGE_SIZE;
+}
 
 function RecipesScreen() {
 	const isOnline = useOnlineStatus();
@@ -45,7 +67,7 @@ function RecipesScreen() {
 	const { recipes, createRecipe, deleteRecipe } = useAppData();
 	const [pending, setPending] = useState<PendingRow[]>([]);
 	const [promptValue, setPromptValue] = useState("");
-	const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+	const [visibleCount, setVisibleCount] = useState(readStoredVisibleCount);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | "all">(
 		"all",
@@ -54,7 +76,21 @@ function RecipesScreen() {
 	const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 	const [deletingRecipeId, setDeletingRecipeId] = useState<string | null>(null);
 	const sentinelRef = useRef<HTMLDivElement | null>(null);
-	const isInitialFilterMount = useRef(true);
+	// Compared against on every filter-reset effect run (below) instead of a
+	// simple "have I run once yet" boolean ref — a boolean flag mutated
+	// inside the effect body is exactly what React StrictMode's dev-mode
+	// double-invocation of effects (mount → simulated cleanup → mount again,
+	// same component instance, same refs) breaks: the second invocation
+	// would see the flag already flipped by the first and wrongly treat an
+	// unchanged first render as a real filter change, resetting
+	// visibleCount back down to PAGE_SIZE. Comparing against the actual
+	// previous values is idempotent under that double-invocation, since
+	// nothing changed between the two calls.
+	const prevFiltersRef = useRef({
+		searchQuery: "",
+		difficultyFilter: "all",
+		favoritesOnly: false,
+	});
 	const mutation = useMutation({
 		mutationFn: (input: { prompt: string; timezone?: string }) =>
 			generateRecipe({ data: input }),
@@ -76,14 +112,22 @@ function RecipesScreen() {
 		[recipes, searchQuery, difficultyFilter, favoritesOnly],
 	);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally re-runs on filter change to reset pagination, not to read the values
 	useEffect(() => {
-		if (isInitialFilterMount.current) {
-			isInitialFilterMount.current = false;
-			return;
-		}
-		setVisibleCount(PAGE_SIZE);
+		const prev = prevFiltersRef.current;
+		const changed =
+			prev.searchQuery !== searchQuery ||
+			prev.difficultyFilter !== difficultyFilter ||
+			prev.favoritesOnly !== favoritesOnly;
+		prevFiltersRef.current = { searchQuery, difficultyFilter, favoritesOnly };
+		if (changed) setVisibleCount(PAGE_SIZE);
 	}, [searchQuery, difficultyFilter, favoritesOnly]);
+
+	useEffect(() => {
+		window.sessionStorage.setItem(
+			VISIBLE_COUNT_STORAGE_KEY,
+			String(visibleCount),
+		);
+	}, [visibleCount]);
 
 	const hasMore = visibleCount < filteredRecipes.length;
 
