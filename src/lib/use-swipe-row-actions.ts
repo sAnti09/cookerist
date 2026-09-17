@@ -63,6 +63,14 @@ export function useSwipeRowActions<T extends HTMLElement>({
 			? { x: touch.clientX, y: touch.clientY }
 			: null;
 		isDraggingRef.current = false;
+		// Clears a suppression flag left over from a previous swipe whose
+		// synthetic click never reached the row (e.g. it opened a full-screen
+		// confirm dialog, whose backdrop intercepted that click instead — see
+		// handleClick below). By the time a new touch starts, the browser has
+		// already dispatched (or permanently skipped) that earlier click, so
+		// any leftover suppression is stale and would otherwise eat this
+		// unrelated tap's navigation instead.
+		suppressClickRef.current = false;
 	}
 
 	function handleTouchMove(event: ReactTouchEvent<T>) {

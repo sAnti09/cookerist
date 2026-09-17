@@ -53,6 +53,19 @@ function swipeRight(element: Element) {
 	});
 }
 
+// A plain tap on a touch device: touchstart/touchend with a negligible
+// delta (not a swipe), followed by the compatibility `click` event real
+// mobile browsers fire right after — reproduces the actual event sequence
+// use-swipe-row-actions.ts's suppressClickRef handling depends on, unlike
+// userEvent.click (which never dispatches touch events in jsdom).
+function tap(element: Element) {
+	fireEvent.touchStart(element, { touches: [{ clientX: 100, clientY: 0 }] });
+	fireEvent.touchEnd(element, {
+		changedTouches: [{ clientX: 100, clientY: 0 }],
+	});
+	fireEvent.click(element);
+}
+
 describe("Grocery screen", () => {
 	it("shows the bottom tab bar", async () => {
 		await renderApp("/grocery");
@@ -230,6 +243,29 @@ describe("Grocery screen", () => {
 			await user.click(screen.getByRole("button", { name: "Cancel" }));
 
 			expect(screen.getByText("Weeknight Groceries")).toBeInTheDocument();
+		});
+
+		it("navigates on the very next tap after cancelling a swipe-left delete confirmation", async () => {
+			saveGroceryList(
+				loadGroceryLists(),
+				makeGroceryList({ name: "Weeknight Groceries" }),
+			);
+			await renderApp("/grocery");
+			const user = userEvent.setup();
+			const row = screen.getByText("Weeknight Groceries").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeLeft(row);
+			await screen.findByRole("alertdialog", {
+				name: "Delete this grocery list?",
+			});
+			await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+			tap(row);
+
+			expect(
+				await screen.findByRole("button", { name: "Back to grocery lists" }),
+			).toBeInTheDocument();
 		});
 
 		it("swiping right on a grocery list row with items opens Shop mode directly", async () => {

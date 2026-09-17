@@ -60,6 +60,19 @@ function swipeRight(element: Element) {
 	});
 }
 
+// A plain tap on a touch device: touchstart/touchend with a negligible
+// delta (not a swipe), followed by the compatibility `click` event real
+// mobile browsers fire right after — reproduces the actual event sequence
+// use-swipe-row-actions.ts's suppressClickRef handling depends on, unlike
+// userEvent.click (which never dispatches touch events in jsdom).
+function tap(element: Element) {
+	fireEvent.touchStart(element, { touches: [{ clientX: 100, clientY: 0 }] });
+	fireEvent.touchEnd(element, {
+		changedTouches: [{ clientX: 100, clientY: 0 }],
+	});
+	fireEvent.click(element);
+}
+
 describe("Meal Plan screen", () => {
 	it("shows the bottom tab bar", async () => {
 		await renderApp("/meal-plan");
@@ -222,6 +235,26 @@ describe("Meal Plan screen", () => {
 			await user.click(screen.getByRole("button", { name: "Cancel" }));
 
 			expect(screen.getByText("Sep 15 – Sep 21")).toBeInTheDocument();
+		});
+
+		it("navigates on the very next tap after cancelling a swipe-left delete confirmation", async () => {
+			saveMealPlan(loadMealPlans(), makePlan());
+			await renderApp("/meal-plan");
+			const user = userEvent.setup();
+			const row = screen.getByText("Sep 15 – Sep 21").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeLeft(row);
+			await screen.findByRole("alertdialog", {
+				name: "Delete this meal plan?",
+			});
+			await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+			tap(row);
+
+			expect(
+				await screen.findByRole("button", { name: "Back to meal plans" }),
+			).toBeInTheDocument();
 		});
 
 		it("swiping right on a meal plan row does nothing (no secondary action)", async () => {

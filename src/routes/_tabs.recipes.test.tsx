@@ -98,6 +98,19 @@ function swipeRight(element: Element) {
 	});
 }
 
+// A plain tap on a touch device: touchstart/touchend with a negligible
+// delta (not a swipe), followed by the compatibility `click` event real
+// mobile browsers fire right after — reproduces the actual event sequence
+// use-swipe-row-actions.ts's suppressClickRef handling depends on, unlike
+// userEvent.click (which never dispatches touch events in jsdom).
+function tap(element: Element) {
+	fireEvent.touchStart(element, { touches: [{ clientX: 100, clientY: 0 }] });
+	fireEvent.touchEnd(element, {
+		changedTouches: [{ clientX: 100, clientY: 0 }],
+	});
+	fireEvent.click(element);
+}
+
 async function selectPhoto(file: File) {
 	const input = document.querySelector<HTMLInputElement>('input[type="file"]');
 	if (!input) throw new Error("photo input not found");
@@ -489,6 +502,24 @@ describe("Recipes screen", () => {
 			await user.click(screen.getByRole("button", { name: "Cancel" }));
 
 			expect(screen.getByText("Garlic Shrimp Pasta")).toBeInTheDocument();
+		});
+
+		it("navigates on the very next tap after cancelling a swipe-left delete confirmation", async () => {
+			seedRecipe({ title: "Garlic Shrimp Pasta" });
+			await renderApp("/recipes");
+			const user = userEvent.setup();
+			const row = screen.getByText("Garlic Shrimp Pasta").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeLeft(row);
+			await screen.findByRole("alertdialog", { name: "Delete this recipe?" });
+			await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+			tap(row);
+
+			expect(
+				await screen.findByRole("button", { name: "Back to recipes" }),
+			).toBeInTheDocument();
 		});
 
 		it("swiping right on a recipe row with steps opens Cook Mode directly", async () => {
