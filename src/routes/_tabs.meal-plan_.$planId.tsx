@@ -19,6 +19,7 @@ import {
 	type MealPlan,
 } from "#/lib/meal-plan";
 import type { Recipe } from "#/lib/recipe";
+import { reapplyConfirmedMerges } from "#/lib/suggest-grocery-merges";
 import { useBuildMealPlan } from "#/lib/use-build-meal-plan";
 import { useGoBack } from "#/lib/use-go-back";
 
@@ -194,7 +195,10 @@ function MealPlanDetailScreen() {
 		updateGroceryList({
 			...existingList,
 			recipeIds: planRecipes.map((recipe) => recipe.id),
-			items: carryOverCheckedState(existingList.items, newItems),
+			items: reapplyConfirmedMerges(
+				carryOverCheckedState(existingList.items, newItems),
+				existingList.confirmedMergeKeys,
+			),
 		});
 		const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
 		updateMealPlan({

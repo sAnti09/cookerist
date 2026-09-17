@@ -5,6 +5,7 @@ import {
 } from "#/lib/aggregate-grocery-items";
 import { loadGroceryLists, replaceGroceryLists } from "#/lib/grocery-storage";
 import { loadRecipes } from "#/lib/recipes-storage";
+import { reapplyConfirmedMerges } from "#/lib/suggest-grocery-merges";
 
 export const REAGGREGATE_GROCERY_LISTS_MIGRATION_ID =
 	"reaggregate-grocery-lists-after-ingredient-categorization";
@@ -101,7 +102,13 @@ export function reaggregateGroceryLists(): void {
 
 		const freshItems = aggregateGroceryItems(listRecipes, customIngredients);
 		anyChanged = true;
-		return { ...list, items: carryOverCheckedState(list.items, freshItems) };
+		return {
+			...list,
+			items: reapplyConfirmedMerges(
+				carryOverCheckedState(list.items, freshItems),
+				list.confirmedMergeKeys,
+			),
+		};
 	});
 
 	if (anyChanged) replaceGroceryLists(updated);

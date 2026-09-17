@@ -44,6 +44,16 @@ export type GroceryList = {
 	// Absent/undefined on a list saved before this field existed — treated as
 	// no dismissals.
 	dismissedMergeSuggestionKeys?: string[];
+	// Keys (same suggestionKey format as above) of merge suggestions the user
+	// has explicitly confirmed ARE the same item. aggregateGroceryItems has no
+	// memory of a manual merge — it only groups by normalized base name — so
+	// without this, re-aggregating the list (the meal-plan "Update grocery
+	// list" banner, or Edit-and-save) would silently split a previously-merged
+	// pair back into two items and re-surface the exact suggestion the user
+	// already accepted. See reapplyConfirmedMerges in suggest-grocery-merges.ts,
+	// run after every re-aggregation. Absent/undefined on a list saved before
+	// this field existed, or one with no confirmed merges yet.
+	confirmedMergeKeys?: string[];
 };
 
 export const GROCERY_LIST_NAME_MAX_LENGTH = 255;

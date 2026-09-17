@@ -632,6 +632,81 @@ describe("Meal plan detail screen — ready — stale grocery list", () => {
 		) as MealPlan[];
 		expect(storedPlans[0].groceryListSnapshot).toEqual(["recipe-2@4"]);
 	});
+
+	it("preserves a previously confirmed merge decision when refreshing a stale grocery list", async () => {
+		saveRecipe(
+			loadRecipes(),
+			makeRecipe({
+				id: "recipe-1",
+				currentServings: 4,
+				ingredients: [
+					{
+						id: "ing-onion",
+						text: "onion",
+						quantity: 300,
+						unit: "g",
+						checked: false,
+					},
+					{
+						id: "ing-yellow-onion",
+						text: "yellow onion",
+						quantity: 500,
+						unit: "g",
+						checked: false,
+					},
+				],
+			}),
+		);
+		// The saved list already has the two ingredients merged into one
+		// "onion" item (confirmed via the merge-suggestion banner) — a fresh
+		// aggregation from the recipe would otherwise split them back into two
+		// items, since aggregateGroceryItems groups strictly by base name.
+		saveGroceryList(
+			loadGroceryLists(),
+			makeGroceryList({
+				items: [
+					{
+						id: "item-onion",
+						text: "onion",
+						quantity: 800,
+						unit: "g",
+						checked: false,
+						source: "recipe",
+						origins: [
+							{ recipeId: "recipe-1", ingredientId: "ing-onion" },
+							{ recipeId: "recipe-1", ingredientId: "ing-yellow-onion" },
+						],
+					},
+				],
+				confirmedMergeKeys: ["onion::yellow onion"],
+			}),
+		);
+		saveMealPlan(
+			loadMealPlans(),
+			readyPlan({
+				entries: [makeEntry({ status: "ready", recipeId: "recipe-1" })],
+				groceryListId: "list-1",
+				// Stale relative to the recipe's actual currentServings (4) above.
+				groceryListSnapshot: ["recipe-1@2"],
+			}),
+		);
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		await user.click(
+			await screen.findByRole("button", { name: "Update grocery list" }),
+		);
+
+		const storedLists = JSON.parse(
+			window.localStorage.getItem("cookerist:grocery-lists") ?? "[]",
+		) as GroceryList[];
+		expect(storedLists).toHaveLength(1);
+		expect(storedLists[0].items).toHaveLength(1);
+		expect(storedLists[0].items[0]).toEqual(
+			expect.objectContaining({ text: "onion", quantity: 800, unit: "g" }),
+		);
+		expect(storedLists[0].confirmedMergeKeys).toEqual(["onion::yellow onion"]);
+	});
 });
 
 describe("Meal plan detail screen — ready — entry swipe actions", () => {

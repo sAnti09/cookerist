@@ -847,6 +847,66 @@ describe("GroceryListCreateForm", () => {
 			]);
 		});
 
+		it("reapplies a previously confirmed merge decision after re-aggregating on save", async () => {
+			const user = userEvent.setup();
+			const recipe = makeRecipe({
+				id: "recipe-1",
+				ingredients: [
+					{
+						id: "ing-onion",
+						text: "onion",
+						quantity: 300,
+						unit: "g",
+						checked: false,
+					},
+					{
+						id: "ing-yellow-onion",
+						text: "yellow onion",
+						quantity: 500,
+						unit: "g",
+						checked: false,
+					},
+				],
+			});
+			// The saved list already has the two ingredients merged into one
+			// "onion" item (the user confirmed the merge suggestion earlier) —
+			// re-aggregating from the recipe would otherwise split them back
+			// into two separate items, since aggregateGroceryItems groups
+			// strictly by base name.
+			const editingList = makeEditingList({
+				recipeIds: ["recipe-1"],
+				items: [
+					{
+						id: "item-onion",
+						text: "onion",
+						quantity: 800,
+						unit: "g",
+						checked: false,
+						source: "recipe",
+						origins: [
+							{ recipeId: "recipe-1", ingredientId: "ing-onion" },
+							{ recipeId: "recipe-1", ingredientId: "ing-yellow-onion" },
+						],
+					},
+				],
+				confirmedMergeKeys: ["onion::yellow onion"],
+			});
+			const { props } = renderForm({ recipes: [recipe], editingList });
+
+			await user.click(screen.getByRole("button", { name: "Save" }));
+			const confirmDialog = screen.getByRole("alertdialog");
+			await user.click(
+				within(confirmDialog).getByRole("button", { name: "Save" }),
+			);
+
+			expect(props.onSave).toHaveBeenCalledTimes(1);
+			const saved = vi.mocked(props.onSave).mock.calls[0][0];
+			expect(saved.items).toHaveLength(1);
+			expect(saved.items[0]).toEqual(
+				expect.objectContaining({ text: "onion", quantity: 800, unit: "g" }),
+			);
+		});
+
 		it("lets the name be changed independently of the recipe/ingredient selection, up to 255 characters", async () => {
 			const user = userEvent.setup();
 			renderForm({

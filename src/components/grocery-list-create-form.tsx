@@ -28,6 +28,7 @@ import {
 import { parseCustomIngredientInput } from "#/lib/parse-custom-ingredient";
 import type { Recipe } from "#/lib/recipe";
 import { formatIngredientQuantity } from "#/lib/scale-servings";
+import { reapplyConfirmedMerges } from "#/lib/suggest-grocery-merges";
 import { useBodyScrollLock } from "#/lib/use-body-scroll-lock";
 
 // How many search matches to surface at once — enough to scan, not enough to
@@ -220,7 +221,10 @@ export function GroceryListCreateForm({
 				...editingList,
 				name: finalName,
 				recipeIds,
-				items: carryOverCheckedState(editingList.items, previewItems),
+				items: reapplyConfirmedMerges(
+					carryOverCheckedState(editingList.items, previewItems),
+					editingList.confirmedMergeKeys,
+				),
 			});
 			return;
 		}

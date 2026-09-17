@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { GroceryListItem } from "./grocery-list";
-import { suggestGroceryMerges, suggestionKey } from "./suggest-grocery-merges";
+import {
+	reapplyConfirmedMerges,
+	suggestGroceryMerges,
+	suggestionKey,
+} from "./suggest-grocery-merges";
 
 function makeItem(overrides: Partial<GroceryListItem> = {}): GroceryListItem {
 	return {
@@ -100,5 +104,61 @@ describe("suggestionKey", () => {
 				b: makeItem({ text: "Yellow Onion" }),
 			}),
 		);
+	});
+});
+
+describe("reapplyConfirmedMerges", () => {
+	it("re-merges a pair whose suggestion key was previously confirmed", () => {
+		const a = makeItem({ text: "yellow onion", quantity: 500, unit: "g" });
+		const b = makeItem({ text: "onion", quantity: 300, unit: "g" });
+		const confirmedKey = suggestionKey({ a, b });
+
+		const result = reapplyConfirmedMerges([a, b], [confirmedKey]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0].text).toBe("onion");
+		expect(result[0].quantity).toBe(800);
+	});
+
+	it("merges every confirmed pair when several are present", () => {
+		const onion = makeItem({ text: "yellow onion", quantity: 500, unit: "g" });
+		const onion2 = makeItem({ text: "onion", quantity: 300, unit: "g" });
+		const pepper = makeItem({
+			text: "red bell pepper",
+			quantity: 1,
+			unit: "",
+		});
+		const pepper2 = makeItem({ text: "bell pepper", quantity: 2, unit: "" });
+		const confirmedKeys = [
+			suggestionKey({ a: onion, b: onion2 }),
+			suggestionKey({ a: pepper, b: pepper2 }),
+		];
+
+		const result = reapplyConfirmedMerges(
+			[onion, onion2, pepper, pepper2],
+			confirmedKeys,
+		);
+
+		expect(result.map((item) => item.text).sort()).toEqual([
+			"bell pepper",
+			"onion",
+		]);
+	});
+
+	it("leaves items unchanged when there are no confirmed keys", () => {
+		const a = makeItem({ text: "yellow onion" });
+		const b = makeItem({ text: "onion" });
+
+		expect(reapplyConfirmedMerges([a, b], undefined)).toEqual([a, b]);
+		expect(reapplyConfirmedMerges([a, b], [])).toEqual([a, b]);
+	});
+
+	it("ignores a confirmed key that no longer matches any current pair", () => {
+		const a = makeItem({ text: "carrot" });
+		const b = makeItem({ text: "celery" });
+
+		const result = reapplyConfirmedMerges([a, b], ["onion::yellow onion"]);
+
+		expect(result).toEqual([a, b]);
 	});
 });

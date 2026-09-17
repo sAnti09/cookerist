@@ -113,6 +113,8 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 	}
 
 	function handleMergeSuggestion(suggestion: GroceryMergeSuggestion) {
+		const key = suggestionKey(suggestion);
+		const confirmed = list.confirmedMergeKeys ?? [];
 		onUpdate({
 			...list,
 			items: [
@@ -121,6 +123,9 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 				),
 				suggestion.merged,
 			],
+			confirmedMergeKeys: confirmed.includes(key)
+				? confirmed
+				: [...confirmed, key],
 		});
 		// Syncs the merged item's checked state (true only when both halves
 		// were already checked — see merge-grocery-items.ts) onto every

@@ -106,3 +106,37 @@ export function suggestGroceryMerges(
 
 	return suggestions;
 }
+
+// Re-applies merge decisions the user has already confirmed (see
+// GroceryList.confirmedMergeKeys) onto a freshly re-aggregated item list.
+// aggregateGroceryItems has no memory of a manual merge — it only groups by
+// normalized base name — so without this, every re-aggregation (the
+// meal-plan "Update grocery list" banner, or Edit-and-save) would silently
+// split a previously-merged pair back into two items and re-surface the
+// exact suggestion the user already accepted. Looping (rather than a single
+// pass) handles a confirmed merge whose two source texts only line back up
+// with each other after an earlier confirmed merge in the same list already
+// ran — each iteration merges at most one pair, so it's bounded by the item
+// count shrinking by one each time and always terminates.
+export function reapplyConfirmedMerges(
+	items: readonly GroceryListItem[],
+	confirmedMergeKeys: readonly string[] | undefined,
+): GroceryListItem[] {
+	if (!confirmedMergeKeys || confirmedMergeKeys.length === 0) {
+		return [...items];
+	}
+	const confirmedKeys = new Set(confirmedMergeKeys);
+	let current = [...items];
+	for (;;) {
+		const match = suggestGroceryMerges(current).find((candidate) =>
+			confirmedKeys.has(suggestionKey(candidate)),
+		);
+		if (!match) return current;
+		current = [
+			...current.filter(
+				(item) => item.id !== match.a.id && item.id !== match.b.id,
+			),
+			match.merged,
+		];
+	}
+}
