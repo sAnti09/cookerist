@@ -10,8 +10,10 @@ import {
 	groupMealPlanEntryDiffsByDay,
 	MEAL_TYPE_LABELS,
 	type MealPlan,
+	type MealPlanEntry,
 	type MealPlanEntryDiff,
 	type MealPlanEntryDiffDay,
+	mealPlanSlotKey,
 } from "#/lib/meal-plan";
 import { getUserTimezone } from "#/lib/user-region";
 import { refineMealPlanDraft } from "#/server/meal-plan";
@@ -151,9 +153,10 @@ export function MealPlanDraft({
 		const trimmed = instruction.trim();
 		if (!trimmed || mutation.isPending) return;
 		setError(null);
+		const currentEntries = toDraftEntries(plan);
 		mutation.mutate(
 			{
-				currentEntries: toDraftEntries(plan),
+				currentEntries,
 				instruction: trimmed,
 				description: plan.description,
 				timezone: getUserTimezone(),
@@ -164,17 +167,42 @@ export function MealPlanDraft({
 						setError(result.message);
 						return;
 					}
+					// Diffed against THIS round's input (not the session baseline
+					// below, which is for display only) so an "unchanged" slot can
+					// keep its existing MealPlanEntry — id, status, recipeId,
+					// reused — completely untouched instead of being reset to
+					// "suggested" and re-entering the build queue. Without this,
+					// every slot re-builds on every refine, since Groq's response
+					// always echoes back the full entry list rather than a diff.
+					const roundDiffs = diffMealPlanEntries(
+						currentEntries,
+						result.entries,
+					);
+					const previousEntriesBySlot = new Map(
+						plan.entries.map((entry) => [mealPlanSlotKey(entry), entry]),
+					);
+					const nextEntries: MealPlanEntry[] = roundDiffs
+						.filter((diff) => diff.status !== "removed")
+						.map((diff) => {
+							if (diff.status === "unchanged") {
+								const existing = previousEntriesBySlot.get(
+									mealPlanSlotKey(diff),
+								);
+								if (existing) return existing;
+							}
+							return {
+								id: crypto.randomUUID(),
+								day: diff.day,
+								mealType: diff.mealType,
+								slotIndex: diff.slotIndex,
+								status: "suggested",
+								suggestedTitle: diff.title,
+								suggestedOverview: diff.overview,
+							};
+						});
 					onUpdatePlan({
 						...plan,
-						entries: result.entries.map((entry) => ({
-							id: crypto.randomUUID(),
-							day: entry.day,
-							mealType: entry.mealType,
-							slotIndex: entry.slotIndex,
-							status: "suggested",
-							suggestedTitle: entry.title,
-							suggestedOverview: entry.overview,
-						})),
+						entries: nextEntries,
 						refineInstructions: [...plan.refineInstructions, trimmed],
 					});
 					setDiffDays(

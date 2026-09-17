@@ -560,6 +560,107 @@ describe("Meal plan detail screen — ready", () => {
 		expect(stored[0].status).toBe("ready");
 		expect(stored[0].entries[0].recipeId).toBe("recipe-1");
 	});
+
+	it("only rebuilds the entry a refine actually changed, leaving untouched entries alone", async () => {
+		const breakfastEntry = makeEntry({
+			id: "e1",
+			status: "ready",
+			recipeId: "recipe-1",
+		});
+		const dinnerEntry = makeEntry({
+			id: "e2",
+			mealType: "dinner",
+			status: "ready",
+			recipeId: "recipe-2",
+			suggestedTitle: "Pancakes",
+			suggestedOverview: "Fluffy pancakes with syrup.",
+		});
+		refineMealPlanDraftMock.mockResolvedValueOnce({
+			type: "success",
+			entries: [
+				// Echoed back byte-for-byte — the refine instruction only targets
+				// dinner, so this slot must be classified "unchanged".
+				{
+					day: breakfastEntry.day,
+					mealType: breakfastEntry.mealType,
+					slotIndex: breakfastEntry.slotIndex,
+					title: breakfastEntry.suggestedTitle,
+					overview: breakfastEntry.suggestedOverview,
+				},
+				{
+					day: dinnerEntry.day,
+					mealType: dinnerEntry.mealType,
+					slotIndex: dinnerEntry.slotIndex,
+					title: "Veggie Stir Fry",
+					overview: "Tofu and vegetables in a savory sauce.",
+				},
+			],
+		});
+		generateRecipeMock.mockResolvedValueOnce({
+			type: "success",
+			recipe: {
+				title: "Veggie Stir Fry",
+				overview: "Tofu and vegetables in a savory sauce.",
+				baseServings: 2,
+				difficulty: "quick_and_easy",
+				estimatedMinutes: 20,
+				caloriesPerServing: 350,
+				ingredients: [],
+				steps: [],
+			},
+			truncated: false,
+		});
+		saveRecipe(loadRecipes(), makeRecipe({ id: "recipe-1" }));
+		saveRecipe(
+			loadRecipes(),
+			makeRecipe({ id: "recipe-2", title: "Pancakes" }),
+		);
+		saveMealPlan(
+			loadMealPlans(),
+			makePlan({
+				status: "ready",
+				builtBefore: true,
+				entries: [breakfastEntry, dinnerEntry],
+			}),
+		);
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		await user.click(screen.getByRole("button", { name: "Adjust plan" }));
+		await user.type(
+			screen.getByLabelText("Describe a change to this plan"),
+			"swap dinner for something vegetarian",
+		);
+		await user.click(screen.getByRole("button", { name: "Refine plan" }));
+		await screen.findByText("Veggie Stir Fry");
+		// The untouched slot renders with its original entry, not a fresh
+		// "Suggested" one — confirms the diff-aware carryover kicked in before
+		// build even starts.
+		expect(screen.queryByText(/Suggested/)).not.toBeInTheDocument();
+
+		await user.click(screen.getByRole("button", { name: "Approve & build" }));
+
+		await screen.findByText("Servings for this plan");
+		expect(generateRecipeMock).toHaveBeenCalledTimes(1);
+		const stored = JSON.parse(
+			window.localStorage.getItem("cookerist:meal-plans") ?? "[]",
+		) as MealPlan[];
+		const rebuiltBreakfast = stored[0].entries.find(
+			(entry) => entry.mealType === "breakfast",
+		);
+		const rebuiltDinner = stored[0].entries.find(
+			(entry) => entry.mealType === "dinner",
+		);
+		// Untouched entry keeps its identity and recipe link entirely.
+		expect(rebuiltBreakfast).toMatchObject({
+			id: "e1",
+			status: "ready",
+			recipeId: "recipe-1",
+		});
+		// Changed entry gets a genuinely new recipe, not the old one.
+		expect(rebuiltDinner?.status).toBe("ready");
+		expect(rebuiltDinner?.recipeId).not.toBe("recipe-2");
+	});
 });
 
 describe("Meal plan detail screen — ready — stale grocery list", () => {

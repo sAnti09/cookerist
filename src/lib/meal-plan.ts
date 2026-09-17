@@ -461,7 +461,10 @@ export type MealPlanEntryDiff = MealPlanDraftLikeEntry & {
 	previousOverview?: string;
 };
 
-function mealPlanSlotKey(entry: {
+// Exported so callers that need to correlate a diff result back to the
+// MealPlanEntry it came from (see meal-plan-draft.tsx's refine handler) key
+// on the exact same string, rather than duplicating the format.
+export function mealPlanSlotKey(entry: {
 	day: string;
 	mealType: MealType;
 	slotIndex: number;

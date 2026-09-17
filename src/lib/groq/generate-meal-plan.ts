@@ -23,7 +23,7 @@ const MEAL_PLAN_REFINE_SYSTEM_PROMPT = `You are refining a draft week-long meal 
 
 { "entries": [ ${MEAL_PLAN_ENTRY_SHAPE} ] }
 
-Return the FULL revised list of entries — the same day/mealType/slotIndex slots as the current plan, carried over as-is unless the instruction affects them. Apply the requested change thoroughly (e.g. an instruction naming one day only affects that day's entries; an instruction with no day named applies plan-wide) while STILL honoring the original notes for every entry the instruction doesn't touch (e.g. if the original notes said "nothing too spicy for the kids", a change to Tuesday's dinner shouldn't make Wednesday's lunch spicy).`;
+Return the FULL revised list of entries — the same day/mealType/slotIndex slots as the current plan. For every entry the instruction does NOT affect, you MUST reproduce its "title" and "overview" fields character-for-character identical to what you were given — do not rephrase, restate, or "clean up" wording for a slot you weren't asked to change, even slightly. Apply the requested change thoroughly only to the entries it does affect (e.g. an instruction naming one day only affects that day's entries; an instruction with no day named applies plan-wide) while STILL honoring the original notes for every entry the instruction doesn't touch (e.g. if the original notes said "nothing too spicy for the kids", a change to Tuesday's dinner shouldn't make Wednesday's lunch spicy).`;
 
 export type GenerateMealPlanDraftResult =
 	| { type: "error"; message: string }
