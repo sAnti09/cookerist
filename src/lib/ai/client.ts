@@ -65,17 +65,22 @@ export function getAiClient(provider: AiProvider = getActiveProvider()): Groq {
 // providers actually escapes Groq's own rate limits instead of silently
 // landing back on Groq's capacity via OpenRouter's cross-provider load
 // balancing (OpenRouter lists Groq as one of several hosts for gpt-oss).
-// `sort: "latency"` overrides OpenRouter's default price-weighted balancing
-// (cheapest healthy provider first) with fastest-provider-first — the meal
-// plan's concurrent build workers care about wall-clock speed, not shaving
-// fractions of a cent, and the price-weighted default was landing requests
-// on genuinely slower upstream hosts for the same model (confirmed: some
-// OpenRouter-routed dishes taking 20-50s vs. under 10s for others).
+// `sort: "price"` makes OpenRouter deterministically try the single cheapest
+// provider first (with automatic failover to the next-cheapest on error),
+// instead of its default weighted-random balancing (mostly cheap, but
+// occasionally a pricier provider "for redundancy") or `sort: "latency"`
+// (always the fastest, which for this model is Cerebras — 4-5x the
+// completion-token price of the cheapest tier). Cost matters more than
+// wall-clock speed once meal-plan building isn't just for one paying user
+// (a planned free public rollout) — `sort: "price"` is also strictly better
+// than the default here: it avoids the default's occasional pricier pick
+// AND the inconsistent per-call speed that caused (some OpenRouter-routed
+// dishes taking 20-50s vs. under 10s for others, before this was added).
 function providerExtras(provider: AiProvider): {
-	provider?: { ignore: string[]; sort: "latency" };
+	provider?: { ignore: string[]; sort: "price" };
 } {
 	return provider === "openrouter"
-		? { provider: { ignore: ["groq"], sort: "latency" } }
+		? { provider: { ignore: ["groq"], sort: "price" } }
 		: {};
 }
 
