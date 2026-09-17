@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import type { AiProvider } from "#/lib/ai/client";
 import type { MealPlan, MealPlanEntry } from "#/lib/meal-plan";
 import type { Recipe } from "#/lib/recipe";
 import { toStoredRecipe } from "#/lib/recipes-storage";
@@ -6,6 +7,48 @@ import { getUserTimezone } from "#/lib/user-region";
 import { generateRecipe } from "#/server/generate-recipe";
 
 const GENERATION_FAILED_MESSAGE = "Couldn't generate this dish. Try again?";
+
+// Hard ceiling on concurrent OpenRouter workers, even for a very large plan
+// — OpenRouter itself won't rate-limit a paid account, but `sort: "latency"`
+// (client.ts) still funnels concurrent calls toward whichever single
+// upstream is fastest right now, so an unbounded pool just relocates the
+// bottleneck there instead of actually parallelizing.
+const MAX_OPENROUTER_WORKERS = 5;
+
+// Roughly halves the remaining dishes once Groq's own worker is accounted
+// for — each OpenRouter worker ends up pulling ~2 dishes off the shared
+// queue over the course of a run, so this is a right-sizing estimate for the
+// *initial* pool, not an exact final per-worker count. 0 or 1 pending dishes
+// needs no OpenRouter worker at all: the sole Groq worker below handles it
+// alone rather than spinning up a second worker that would just find
+// nothing left to claim.
+function computeOpenRouterWorkerCount(pendingCount: number): number {
+	if (pendingCount <= 1) return 0;
+	return Math.max(
+		1,
+		Math.min(Math.floor((pendingCount - 1) / 2), MAX_OPENROUTER_WORKERS),
+	);
+}
+
+// Exactly one Groq worker, always — never scaled up, regardless of plan
+// size. Groq's free-tier account has a real, fixed rate ceiling (~30
+// req/min, 6K-30K tokens/min depending on model — see CLAUDE.md's AI
+// provider abstraction section), shared with every other Groq call the app
+// makes; a single worker (which naturally self-throttles to one in-flight
+// request at a time) is the safe upper bound. All additional concurrency
+// for a bigger plan comes from OpenRouter instead (see
+// computeOpenRouterWorkerCount above), which has no such per-account
+// ceiling on a paid plan. chatCompletion's existing one-shot
+// cross-provider failover still applies underneath each worker if its
+// pinned provider errors.
+export function computeBuildWorkerProviders(
+	pendingCount: number,
+): AiProvider[] {
+	const openrouterWorkers = computeOpenRouterWorkerCount(pendingCount);
+	const providers: AiProvider[] = ["groq"];
+	for (let i = 0; i < openrouterWorkers; i++) providers.push("openrouter");
+	return providers;
+}
 
 type BuildMealPlanDeps = {
 	recipes: Recipe[];
@@ -36,6 +79,7 @@ async function resolveEntry(
 	recipes: Recipe[],
 	onCreateRecipe: (recipe: Recipe) => void,
 	onUpdateRecipe: (recipe: Recipe) => void,
+	provider: AiProvider,
 ): Promise<MealPlanEntry> {
 	const existing = findExistingRecipe(recipes, entry.suggestedTitle);
 	if (existing) {
@@ -53,8 +97,17 @@ async function resolveEntry(
 
 	const prompt = `${entry.suggestedTitle} — ${entry.suggestedOverview}`;
 	try {
+		// skipOnTopicCheck: true — this prompt is the app's own meal-plan
+		// suggestion (mealPlanDraft), provably on-topic by construction, so
+		// there's no need to risk the cheap classifier's occasional
+		// false-negative rejecting a dish the app itself just suggested.
 		const result = await generateRecipe({
-			data: { prompt, timezone: getUserTimezone() },
+			data: {
+				prompt,
+				timezone: getUserTimezone(),
+				skipOnTopicCheck: true,
+				provider,
+			},
 		});
 		if (result.type !== "success") {
 			return {
@@ -107,14 +160,24 @@ async function resolveEntry(
 // double-mount.
 const activeBuildLoops = new Set<string>();
 
-// Drives a plan from status "building" to "ready", resolving each
-// "suggested" entry in turn, sequentially — never in parallel, to avoid
-// bursting the expensive recipe-generation model with a dozen simultaneous
-// requests. Progress persists (via onUpdatePlan) after every single entry
-// resolves, so the loop can safely keep running even if the component using
-// this hook unmounts (e.g. the user navigates to another tab) — it isn't
+// Drives a plan from status "building" to "ready" using a small pool of
+// concurrent workers (sized by computeBuildWorkerProviders above) instead of
+// one strictly-sequential loop — safe now that OpenRouter is genuine
+// separate capacity from Groq, not just a same-provider retry target. Each
+// worker repeatedly claims the next unclaimed "suggested" entry and resolves it
+// against its own pinned provider; `claimed` is a plain in-memory Set (never
+// persisted — it only needs to prevent two workers in *this* run from
+// picking the same entry, not to survive a reload) rather than a new entry
+// status, since JS's single-threaded execution means claiming is atomic as
+// long as it happens synchronously with no `await` in between (it does).
+// Progress still persists (via onUpdatePlan) after every single entry
+// resolves — each worker reads `planRef.current` fresh right before writing
+// its own result back, so a worker that finishes later merges onto whatever
+// the other workers already wrote instead of clobbering it, the same
+// read-latest-then-merge pattern the old sequential loop relied on, just now
+// contended by more than one in-flight resolve at a time. The loop isn't
 // tied to the component's lifecycle, only to the plan's id/status via
-// activeBuildLoops, which prevents ever double-starting a loop for the same
+// activeBuildLoops, which prevents ever double-starting a pool for the same
 // plan. A reload picks back up automatically: mounting this hook against a
 // plan that's still "building" with unresolved entries re-triggers the
 // effect below exactly the same way a fresh "Approve & build" does.
@@ -134,34 +197,56 @@ export function useBuildMealPlan(plan: MealPlan, deps: BuildMealPlanDeps) {
 		}
 		activeBuildLoops.add(planId);
 
-		async function run() {
+		const claimed = new Set<string>();
+
+		// Nothing left to resolve (globally, across all workers), but the plan
+		// is still marked "building" — reconcile rather than silently leaving
+		// it stuck. This is the self-healing counterpart to activeBuildLoops
+		// above: that prevents a *future* race from corrupting status/entries
+		// out of sync, but can't repair a plan already left stuck by a *past*
+		// one (or any other drift) — every entry can be "ready" while status
+		// never got flipped, and nothing else here ever re-checks that once
+		// there's nothing queued to process. A claimed-but-still-in-flight
+		// entry is still "suggested" in planRef.current until its worker
+		// finishes, so this only fires once every entry has truly settled.
+		function reconcileIfNothingLeft() {
+			const currentPlan = planRef.current;
+			if (currentPlan.id !== planId || currentPlan.status !== "building")
+				return;
+			const stillPending = currentPlan.entries.some(
+				(entry) => entry.status === "suggested",
+			);
+			if (stillPending) return;
+			const allReady = currentPlan.entries.every(
+				(entry) => entry.status === "ready",
+			);
+			if (allReady) {
+				const reconciled: MealPlan = { ...currentPlan, status: "ready" };
+				planRef.current = reconciled;
+				depsRef.current.onUpdatePlan(reconciled);
+			}
+		}
+
+		function claimNextEntry(): MealPlanEntry | undefined {
+			const currentPlan = planRef.current;
+			if (currentPlan.id !== planId || currentPlan.status !== "building")
+				return undefined;
+			const next = currentPlan.entries.find(
+				(entry) => entry.status === "suggested" && !claimed.has(entry.id),
+			);
+			if (next) claimed.add(next.id);
+			return next;
+		}
+
+		async function worker(provider: AiProvider) {
 			while (true) {
-				const currentPlan = planRef.current;
-				if (currentPlan.id !== planId || currentPlan.status !== "building")
-					break;
-				const nextEntry = currentPlan.entries.find(
-					(entry) => entry.status === "suggested",
-				);
+				const nextEntry = claimNextEntry();
 				if (!nextEntry) {
-					// Nothing left to resolve, but the plan is still marked
-					// "building" — reconcile rather than silently leaving it stuck.
-					// This is the self-healing counterpart to activeBuildLoops above:
-					// that prevents a *future* race from corrupting status/entries
-					// out of sync, but can't repair a plan already left stuck by a
-					// *past* one (or any other drift) — every entry can be "ready"
-					// while status never got flipped, and nothing else in this loop
-					// ever re-checks that once there's nothing queued to process.
-					const allReady = currentPlan.entries.every(
-						(entry) => entry.status === "ready",
-					);
-					if (allReady) {
-						const reconciled: MealPlan = { ...currentPlan, status: "ready" };
-						planRef.current = reconciled;
-						depsRef.current.onUpdatePlan(reconciled);
-					}
+					reconcileIfNothingLeft();
 					break;
 				}
 
+				const currentPlan = planRef.current;
 				const { recipes, onCreateRecipe, onUpdateRecipe } = depsRef.current;
 				const resolved = await resolveEntry(
 					nextEntry,
@@ -169,6 +254,7 @@ export function useBuildMealPlan(plan: MealPlan, deps: BuildMealPlanDeps) {
 					recipes,
 					onCreateRecipe,
 					onUpdateRecipe,
+					provider,
 				);
 
 				// The plan may have moved on (deleted, or a different plan mounted
@@ -191,6 +277,14 @@ export function useBuildMealPlan(plan: MealPlan, deps: BuildMealPlanDeps) {
 				planRef.current = updatedPlan;
 				depsRef.current.onUpdatePlan(updatedPlan);
 			}
+		}
+
+		async function run() {
+			const pendingCount = planRef.current.entries.filter(
+				(entry) => entry.status === "suggested",
+			).length;
+			const providers = computeBuildWorkerProviders(pendingCount);
+			await Promise.all(providers.map(worker));
 			activeBuildLoops.delete(planId);
 		}
 

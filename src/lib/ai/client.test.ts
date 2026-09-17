@@ -129,7 +129,7 @@ describe("chatCompletion", () => {
 		expect(openrouterPostMock).not.toHaveBeenCalled();
 	});
 
-	it("excludes groq as an OpenRouter upstream when OpenRouter is the active provider", async () => {
+	it("excludes groq as an OpenRouter upstream and sorts by latency when OpenRouter is the active provider", async () => {
 		process.env.AI_PROVIDER = "openrouter";
 		openrouterPostMock.mockResolvedValueOnce({ choices: [] });
 
@@ -147,7 +147,7 @@ describe("chatCompletion", () => {
 			expect.objectContaining({
 				body: expect.objectContaining({
 					model: "openai/gpt-oss-120b",
-					provider: { ignore: ["groq"] },
+					provider: { ignore: ["groq"], sort: "latency" },
 				}),
 			}),
 		);
@@ -171,7 +171,7 @@ describe("chatCompletion", () => {
 			expect.objectContaining({
 				body: expect.objectContaining({
 					model: "openai/gpt-oss-120b",
-					provider: { ignore: ["groq"] },
+					provider: { ignore: ["groq"], sort: "latency" },
 				}),
 			}),
 		);
@@ -189,6 +189,37 @@ describe("chatCompletion", () => {
 		).rejects.toThrow("openrouter down");
 		expect(groqCreateMock).toHaveBeenCalledTimes(1);
 		expect(openrouterPostMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("uses the explicitly passed provider instead of the global AI_PROVIDER default", async () => {
+		process.env.AI_PROVIDER = "groq";
+		openrouterPostMock.mockResolvedValueOnce({ choices: ["from-override"] });
+
+		const result = await chatCompletion(
+			"recipeGeneration",
+			{ messages: [{ role: "user", content: "hi" }] },
+			{ provider: "openrouter" },
+		);
+
+		expect(result).toEqual({ choices: ["from-override"] });
+		expect(groqCreateMock).not.toHaveBeenCalled();
+		expect(openrouterPostMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("still fails over from an explicitly passed provider when that call throws", async () => {
+		process.env.AI_PROVIDER = "openrouter";
+		groqCreateMock.mockResolvedValueOnce({ choices: ["from-groq-fallback"] });
+		openrouterPostMock.mockRejectedValueOnce(new Error("openrouter down"));
+
+		const result = await chatCompletion(
+			"recipeGeneration",
+			{ messages: [{ role: "user", content: "hi" }] },
+			{ provider: "openrouter" },
+		);
+
+		expect(result).toEqual({ choices: ["from-groq-fallback"] });
+		expect(openrouterPostMock).toHaveBeenCalledTimes(1);
+		expect(groqCreateMock).toHaveBeenCalledTimes(1);
 	});
 
 	it("does not attempt failover, and surfaces the original error, when the other provider has no credentials configured", async () => {

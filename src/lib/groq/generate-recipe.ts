@@ -1,3 +1,4 @@
+import type { AiProvider } from "#/lib/ai/client";
 import { chatCompletion } from "#/lib/ai/client";
 import { combineIngredientName } from "#/lib/recipe";
 import { extractJson } from "./extract-json";
@@ -169,48 +170,73 @@ export async function generateRecipe(
 	// never applied to the on-topic check below (irrelevant there, and this
 	// is the only call worth keeping as cheap/minimal as possible).
 	timezone?: string,
+	options?: {
+		// Skip the onTopicCheck call entirely. Only for prompts that are
+		// provably on-topic by construction — e.g. a meal-plan entry's own
+		// title/overview, itself produced by mealPlanDraft — never for
+		// free-typed user input, which still needs the classifier. Avoids
+		// the cheap classifier's occasional false-negative rejecting a dish
+		// the app itself just suggested, and saves one AI call per dish.
+		skipOnTopicCheck?: boolean;
+		// Pins this call's provider (see chatCompletion) — used by the
+		// meal-plan build worker pool to run several dishes concurrently
+		// across Groq and OpenRouter rather than all defaulting to the same
+		// global AI_PROVIDER.
+		provider?: AiProvider;
+	},
 ): Promise<GenerateRecipeResult> {
-	let onTopic: boolean;
-	try {
-		const classification = await chatCompletion("onTopicCheck", {
-			messages: [
-				{ role: "system", content: ON_TOPIC_SYSTEM_PROMPT },
-				{ role: "user", content: prompt },
-			],
-		});
-		const parsed = onTopicResponseSchema.safeParse(
-			extractJson(classification.choices[0]?.message?.content),
-		);
-		if (!parsed.success) {
+	if (!options?.skipOnTopicCheck) {
+		let onTopic: boolean;
+		try {
+			const classification = await chatCompletion(
+				"onTopicCheck",
+				{
+					messages: [
+						{ role: "system", content: ON_TOPIC_SYSTEM_PROMPT },
+						{ role: "user", content: prompt },
+					],
+				},
+				{ provider: options?.provider },
+			);
+			const parsed = onTopicResponseSchema.safeParse(
+				extractJson(classification.choices[0]?.message?.content),
+			);
+			if (!parsed.success) {
+				return {
+					type: "error",
+					message: "Malformed on-topic classification response from Groq",
+				};
+			}
+			onTopic = parsed.data.on_topic;
+		} catch (error) {
 			return {
 				type: "error",
-				message: "Malformed on-topic classification response from Groq",
+				message:
+					error instanceof Error ? error.message : "On-topic check failed",
 			};
 		}
-		onTopic = parsed.data.on_topic;
-	} catch (error) {
-		return {
-			type: "error",
-			message: error instanceof Error ? error.message : "On-topic check failed",
-		};
-	}
 
-	if (!onTopic) {
-		return { type: "off_topic" };
+		if (!onTopic) {
+			return { type: "off_topic" };
+		}
 	}
 
 	try {
-		const completion = await chatCompletion("recipeGeneration", {
-			response_format: { type: "json_object" },
-			max_completion_tokens: RECIPE_MAX_COMPLETION_TOKENS,
-			messages: [
-				{ role: "system", content: RECIPE_SYSTEM_PROMPT },
-				{
-					role: "user",
-					content: `${prompt}${regionHint(timezone)}${portionSizeHint(timezone)}`,
-				},
-			],
-		});
+		const completion = await chatCompletion(
+			"recipeGeneration",
+			{
+				response_format: { type: "json_object" },
+				max_completion_tokens: RECIPE_MAX_COMPLETION_TOKENS,
+				messages: [
+					{ role: "system", content: RECIPE_SYSTEM_PROMPT },
+					{
+						role: "user",
+						content: `${prompt}${regionHint(timezone)}${portionSizeHint(timezone)}`,
+					},
+				],
+			},
+			{ provider: options?.provider },
+		);
 		const choice = completion.choices[0];
 		const truncated = choice?.finish_reason === "length";
 		const parsed = recipeResponseSchema.safeParse(

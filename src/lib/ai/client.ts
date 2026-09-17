@@ -65,10 +65,18 @@ export function getAiClient(provider: AiProvider = getActiveProvider()): Groq {
 // providers actually escapes Groq's own rate limits instead of silently
 // landing back on Groq's capacity via OpenRouter's cross-provider load
 // balancing (OpenRouter lists Groq as one of several hosts for gpt-oss).
+// `sort: "latency"` overrides OpenRouter's default price-weighted balancing
+// (cheapest healthy provider first) with fastest-provider-first — the meal
+// plan's concurrent build workers care about wall-clock speed, not shaving
+// fractions of a cent, and the price-weighted default was landing requests
+// on genuinely slower upstream hosts for the same model (confirmed: some
+// OpenRouter-routed dishes taking 20-50s vs. under 10s for others).
 function providerExtras(provider: AiProvider): {
-	provider?: { ignore: string[] };
+	provider?: { ignore: string[]; sort: "latency" };
 } {
-	return provider === "openrouter" ? { provider: { ignore: ["groq"] } } : {};
+	return provider === "openrouter"
+		? { provider: { ignore: ["groq"], sort: "latency" } }
+		: {};
 }
 
 function requestFor(
@@ -112,11 +120,19 @@ function createChatCompletion(
 // the first failure. Only attempted when the other provider has credentials
 // set; otherwise the original error surfaces exactly as it did before this
 // existed (e.g. a bare AI_PROVIDER switch with no second key configured).
+//
+// `options.provider` overrides the *starting* provider for this one call
+// only (e.g. a meal-plan build worker explicitly pinned to "openrouter" to
+// run alongside a Groq-pinned worker) — the fallback behavior above is
+// unchanged and still applies on top of whichever provider is passed.
+// Omitting it keeps the normal global-default behavior via
+// getActiveProvider().
 export async function chatCompletion(
 	callType: AiCallType,
 	contentParams: AiChatParams,
+	options?: { provider?: AiProvider },
 ) {
-	const primary = getActiveProvider();
+	const primary = options?.provider ?? getActiveProvider();
 
 	try {
 		return await createChatCompletion(

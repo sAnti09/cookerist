@@ -38,7 +38,7 @@ export type MealSlotConfig = {
 };
 
 export const MAX_DISH_COUNT_PER_SLOT = 2;
-export const MAX_PLAN_DAYS = 14;
+export const MAX_PLAN_DAYS = 7;
 export const DEFAULT_PLAN_DAYS = 7;
 export const DEFAULT_MEAL_PLAN_SERVINGS = 4;
 

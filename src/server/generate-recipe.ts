@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { AiProvider } from "#/lib/ai/client";
 import {
 	continueRecipe as continueRecipeCore,
 	generateRecipe as generateRecipeCore,
@@ -7,8 +8,20 @@ import {
 import type { RecipeResponse } from "#/lib/groq/schema";
 
 export const generateRecipe = createServerFn({ method: "POST" })
-	.validator((data: { prompt: string; timezone?: string }) => data)
-	.handler(async ({ data }) => generateRecipeCore(data.prompt, data.timezone));
+	.validator(
+		(data: {
+			prompt: string;
+			timezone?: string;
+			skipOnTopicCheck?: boolean;
+			provider?: AiProvider;
+		}) => data,
+	)
+	.handler(async ({ data }) =>
+		generateRecipeCore(data.prompt, data.timezone, {
+			skipOnTopicCheck: data.skipOnTopicCheck,
+			provider: data.provider,
+		}),
+	);
 
 export const continueRecipe = createServerFn({ method: "POST" })
 	.validator(

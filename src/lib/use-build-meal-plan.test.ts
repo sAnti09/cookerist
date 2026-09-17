@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MealPlan, MealPlanEntry } from "#/lib/meal-plan";
 import type { Recipe } from "#/lib/recipe";
 import { generateRecipe } from "#/server/generate-recipe";
-import { useBuildMealPlan } from "./use-build-meal-plan";
+import {
+	computeBuildWorkerProviders,
+	useBuildMealPlan,
+} from "./use-build-meal-plan";
 
 vi.mock("#/server/generate-recipe", () => ({
 	generateRecipe: vi.fn(),
@@ -92,6 +95,39 @@ beforeEach(() => {
 	generateRecipeMock.mockReset();
 });
 
+describe("computeBuildWorkerProviders", () => {
+	it("spins up only the sole groq worker, no idle openrouter worker, for a single dish", () => {
+		expect(computeBuildWorkerProviders(1)).toEqual(["groq"]);
+	});
+
+	it("still returns just the groq worker for 0 pending, so a stuck plan can self-heal", () => {
+		expect(computeBuildWorkerProviders(0)).toEqual(["groq"]);
+	});
+
+	it.each([
+		[2, 2],
+		[3, 2],
+		[4, 2],
+		[5, 3],
+		[6, 3],
+		[7, 4],
+		[8, 4],
+		[9, 5],
+		[10, 5],
+	])("returns %i total workers (1 groq + scaling openrouter) for %i pending dishes", (pendingCount, expectedTotal) => {
+		const providers = computeBuildWorkerProviders(pendingCount);
+		expect(providers).toHaveLength(expectedTotal);
+		expect(providers.filter((p) => p === "groq")).toEqual(["groq"]);
+	});
+
+	it("never scales groq past one worker, capping openrouter instead, for a very large plan", () => {
+		const providers = computeBuildWorkerProviders(30);
+		expect(providers.filter((p) => p === "groq")).toHaveLength(1);
+		expect(providers.filter((p) => p === "openrouter")).toHaveLength(5);
+		expect(providers).toHaveLength(6);
+	});
+});
+
 describe("useBuildMealPlan", () => {
 	it("reuses an existing recipe by title match without calling generateRecipe", async () => {
 		const existing = makeRecipe({ id: "existing-recipe", currentServings: 4 });
@@ -178,24 +214,14 @@ describe("useBuildMealPlan", () => {
 		});
 	});
 
-	it("processes entries sequentially, never starting the next before the previous resolves", async () => {
+	it("resolves entries concurrently across the worker pool, not one at a time", async () => {
 		const order: string[] = [];
-		let resolveFirst: (value: ReturnType<typeof successResult>) => void =
-			() => {};
-		const firstPromise = new Promise<ReturnType<typeof successResult>>(
-			(resolve) => {
-				resolveFirst = resolve;
-			},
-		);
-		generateRecipeMock.mockImplementationOnce(async ({ data }) => {
+		const releasers: Array<() => void> = [];
+		generateRecipeMock.mockImplementation(async ({ data }) => {
 			order.push(`start:${data.prompt}`);
-			const result = await firstPromise;
+			await new Promise<void>((resolve) => releasers.push(resolve));
 			order.push(`end:${data.prompt}`);
-			return result;
-		});
-		generateRecipeMock.mockImplementationOnce(async ({ data }) => {
-			order.push(`start:${data.prompt}`);
-			return successResult("Second Dish");
+			return successResult(data.prompt.split(" — ")[0] ?? data.prompt);
 		});
 
 		const plan = makePlan({
@@ -214,20 +240,102 @@ describe("useBuildMealPlan", () => {
 			}),
 		);
 
-		await waitFor(() => expect(generateRecipeMock).toHaveBeenCalledTimes(1));
-		// Give any (incorrect) concurrent kickoff a chance to happen before we
-		// resolve the first call.
-		await new Promise((resolve) => setTimeout(resolve, 10));
-		expect(generateRecipeMock).toHaveBeenCalledTimes(1);
-
-		resolveFirst(successResult("First Dish"));
-
+		// One worker per entry here (2 pending dishes -> 1 groq + 1
+		// openrouter) — both should be in-flight together, not started one
+		// after another.
 		await waitFor(() => expect(generateRecipeMock).toHaveBeenCalledTimes(2));
 		expect(order).toEqual([
 			"start:First Dish — Crisp vegetables in a garlic-ginger sauce.",
-			"end:First Dish — Crisp vegetables in a garlic-ginger sauce.",
 			"start:Second Dish — Crisp vegetables in a garlic-ginger sauce.",
 		]);
+
+		for (const release of releasers) release();
+		await waitFor(() => expect(order).toHaveLength(4));
+	});
+
+	it("sizes the worker pool to 1 groq + 1 openrouter for a typical single day's dishes", async () => {
+		const releasers: Array<() => void> = [];
+		generateRecipeMock.mockImplementation(async () => {
+			await new Promise<void>((resolve) => releasers.push(resolve));
+			return successResult("Dish");
+		});
+
+		const plan = makePlan({
+			entries: [
+				makeEntry({ id: "e1", suggestedTitle: "First Dish" }),
+				makeEntry({ id: "e2", suggestedTitle: "Second Dish" }),
+				makeEntry({ id: "e3", suggestedTitle: "Third Dish" }),
+			],
+		});
+
+		renderHook(() =>
+			useBuildMealPlan(plan, {
+				recipes: [],
+				onUpdatePlan: vi.fn(),
+				onCreateRecipe: vi.fn(),
+				onUpdateRecipe: vi.fn(),
+			}),
+		);
+
+		// 3 pending dishes -> computeBuildWorkerProviders(3) is 1 groq + 1
+		// openrouter (2 total) — exactly 2 calls in flight, the third dish
+		// waits for a worker to free up rather than getting its own worker.
+		await waitFor(() => expect(generateRecipeMock).toHaveBeenCalledTimes(2));
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect(generateRecipeMock).toHaveBeenCalledTimes(2);
+		const providers = generateRecipeMock.mock.calls.map(
+			([{ data }]) => data.provider,
+		);
+		expect(providers).toEqual(["groq", "openrouter"]);
+
+		// Drain everything so no promise is left dangling past the test.
+		while (releasers.length > 0) {
+			const pending = releasers.splice(0, releasers.length);
+			for (const release of pending) release();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+	});
+
+	it("scales the openrouter worker count for a bigger plan while keeping exactly one groq worker", async () => {
+		const releasers: Array<() => void> = [];
+		generateRecipeMock.mockImplementation(async () => {
+			await new Promise<void>((resolve) => releasers.push(resolve));
+			return successResult("Dish");
+		});
+
+		const plan = makePlan({
+			entries: Array.from({ length: 9 }, (_, i) =>
+				makeEntry({ id: `e${i}`, suggestedTitle: `Dish ${i}` }),
+			),
+		});
+
+		renderHook(() =>
+			useBuildMealPlan(plan, {
+				recipes: [],
+				onUpdatePlan: vi.fn(),
+				onCreateRecipe: vi.fn(),
+				onUpdateRecipe: vi.fn(),
+			}),
+		);
+
+		// 9 pending dishes -> computeBuildWorkerProviders(9) is 1 groq + 4
+		// openrouter (5 total): exactly that many calls in flight, with the
+		// remaining 4 dishes left unclaimed until a worker frees up — never a
+		// second groq worker, no matter how big the plan.
+		await waitFor(() => expect(generateRecipeMock).toHaveBeenCalledTimes(5));
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect(generateRecipeMock).toHaveBeenCalledTimes(5);
+		const providers = generateRecipeMock.mock.calls.map(
+			([{ data }]) => data.provider,
+		);
+		expect(providers.filter((p) => p === "groq")).toHaveLength(1);
+		expect(providers.filter((p) => p === "openrouter")).toHaveLength(4);
+
+		while (releasers.length > 0) {
+			const pending = releasers.splice(0, releasers.length);
+			for (const release of pending) release();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
 	});
 
 	it("marks an entry failed on a Groq error and keeps the plan in building status", async () => {

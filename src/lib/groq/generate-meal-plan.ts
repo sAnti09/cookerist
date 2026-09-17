@@ -5,9 +5,10 @@ import { regionHint } from "./region-hint";
 import type { MealPlanDraftEntry } from "./schema";
 import { mealPlanDraftResponseSchema } from "./schema";
 
-// Generous headroom for a full 14-day, multi-meal, multi-dish plan — each
-// entry's JSON is small (day/mealType/slotIndex/title/overview), but a
-// maximal plan can request well over 100 of them.
+// Generous headroom for a full 7-day (MAX_PLAN_DAYS), multi-meal,
+// multi-dish plan — each entry's JSON is small
+// (day/mealType/slotIndex/title/overview), but a maximal plan can still
+// request several dozen of them.
 const MEAL_PLAN_MAX_COMPLETION_TOKENS = 8192;
 
 const MEAL_PLAN_ENTRY_SHAPE = `{ "day": string (ISO date, e.g. "2026-09-15" — must exactly match one of the requested dates), "mealType": "breakfast" | "morning_snack" | "lunch" | "afternoon_snack" | "dinner" (must exactly match the requested meal type), "slotIndex": number (0-based — when a slot asks for more than one dish, use 0, 1, 2, … for each one, otherwise 0), "title": string (a real dish title, not a restatement of the request), "overview": string (1-2 sentence description of the dish) }`;

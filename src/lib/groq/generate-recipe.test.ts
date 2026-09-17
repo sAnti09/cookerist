@@ -104,6 +104,25 @@ describe("generateRecipe", () => {
 		expect(createMock).toHaveBeenCalledTimes(2);
 	});
 
+	it("skips the on-topic classifier call entirely when skipOnTopicCheck is set", async () => {
+		createMock.mockResolvedValueOnce(jsonResponse(validRecipe));
+
+		const result = await generateRecipe(
+			"Veggie Stir-Fry — a quick dinner",
+			undefined,
+			{
+				skipOnTopicCheck: true,
+			},
+		);
+
+		expect(result).toEqual({
+			type: "success",
+			recipe: validRecipe,
+			truncated: false,
+		});
+		expect(createMock).toHaveBeenCalledTimes(1);
+	});
+
 	it("falls back an ingredient's category to \"Other\" instead of failing the whole recipe, when Groq's value is missing or unrecognized", async () => {
 		createMock
 			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
