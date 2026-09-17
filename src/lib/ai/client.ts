@@ -1,5 +1,8 @@
 import Groq from "groq-sdk";
-import type { ChatCompletionCreateParamsNonStreaming } from "groq-sdk/resources/chat/completions";
+import type {
+	ChatCompletion,
+	ChatCompletionCreateParamsNonStreaming,
+} from "groq-sdk/resources/chat/completions";
 import { type AiCallType, getModelFor } from "#/lib/ai/models";
 
 export type AiProvider = "groq" | "openrouter";
@@ -80,6 +83,28 @@ function requestFor(
 	};
 }
 
+// groq-sdk's chat.completions.create() always posts to the literal path
+// "/openai/v1/chat/completions", hardcoded independent of baseURL — that
+// only resolves correctly against Groq's own domain (api.groq.com), whose
+// real endpoint happens to have that same "/openai/v1" segment. OpenRouter's
+// real endpoint is just "<baseURL>/chat/completions" with no such segment,
+// so no baseURL value can make the high-level wrapper hit the right route
+// for it (confirmed live: it 404s to OpenRouter's own website, not even a
+// JSON API error). Route OpenRouter through the SDK's lower-level post()
+// with the correct relative path instead; Groq keeps using the wrapper.
+function createChatCompletion(
+	client: Groq,
+	provider: AiProvider,
+	callType: AiCallType,
+	contentParams: AiChatParams,
+) {
+	const body = requestFor(callType, provider, contentParams);
+	if (provider === "openrouter") {
+		return client.post<ChatCompletion>("/chat/completions", { body });
+	}
+	return client.chat.completions.create(body);
+}
+
 // The single seam every recipe/meal-plan/dish call goes through. Resolves
 // the active provider's client + model and, if that call throws for any
 // reason (rate limit, timeout, outage), silently retries once against
@@ -94,16 +119,22 @@ export async function chatCompletion(
 	const primary = getActiveProvider();
 
 	try {
-		return await getAiClient(primary).chat.completions.create(
-			requestFor(callType, primary, contentParams),
+		return await createChatCompletion(
+			getAiClient(primary),
+			primary,
+			callType,
+			contentParams,
 		);
 	} catch (error) {
 		const fallback = otherProvider(primary);
 		if (!hasCredentials(fallback)) {
 			throw error;
 		}
-		return await getAiClient(fallback).chat.completions.create(
-			requestFor(callType, fallback, contentParams),
+		return await createChatCompletion(
+			getAiClient(fallback),
+			fallback,
+			callType,
+			contentParams,
 		);
 	}
 }

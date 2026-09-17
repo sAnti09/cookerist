@@ -3,21 +3,28 @@ import { chatCompletion, getActiveProvider, getAiClient } from "./client";
 
 const groqConstructorMock = vi.fn();
 const groqCreateMock = vi.fn();
-const openrouterCreateMock = vi.fn();
+const openrouterPostMock = vi.fn();
 
-// Routes each constructed client's .chat.completions.create to a mock keyed
-// by baseURL, so tests can tell which provider a given request actually went
-// to (needed for the failover tests below).
+// Routes each constructed client's request method to a mock keyed by
+// baseURL, so tests can tell which provider a given request actually went
+// to (needed for the failover tests below). Groq goes through
+// .chat.completions.create() (matches its real domain shape); OpenRouter
+// must go through the lower-level .post() — see client.ts's
+// createChatCompletion for why .create() can never reach OpenRouter's real
+// endpoint.
 vi.mock("groq-sdk", () => ({
 	default: class {
 		chat: { completions: { create: (...args: unknown[]) => unknown } };
+		post: (...args: unknown[]) => unknown;
 		constructor(opts: { baseURL?: string }) {
 			groqConstructorMock(opts);
-			const create =
-				opts.baseURL === "https://openrouter.ai/api/v1"
-					? openrouterCreateMock
-					: groqCreateMock;
-			this.chat = { completions: { create } };
+			const isOpenrouter = opts.baseURL === "https://openrouter.ai/api/v1";
+			this.chat = { completions: { create: groqCreateMock } };
+			this.post = isOpenrouter
+				? openrouterPostMock
+				: () => {
+						throw new Error("post() should not be called for groq");
+					};
 		}
 	},
 }));
@@ -27,7 +34,7 @@ const ORIGINAL_ENV = { ...process.env };
 beforeEach(() => {
 	groqConstructorMock.mockReset();
 	groqCreateMock.mockReset();
-	openrouterCreateMock.mockReset();
+	openrouterPostMock.mockReset();
 });
 
 afterEach(() => {
@@ -119,21 +126,29 @@ describe("chatCompletion", () => {
 			}),
 		);
 		expect(groqCreateMock.mock.calls[0]?.[0].provider).toBeUndefined();
-		expect(openrouterCreateMock).not.toHaveBeenCalled();
+		expect(openrouterPostMock).not.toHaveBeenCalled();
 	});
 
 	it("excludes groq as an OpenRouter upstream when OpenRouter is the active provider", async () => {
 		process.env.AI_PROVIDER = "openrouter";
-		openrouterCreateMock.mockResolvedValueOnce({ choices: [] });
+		openrouterPostMock.mockResolvedValueOnce({ choices: [] });
 
 		await chatCompletion("recipeGeneration", {
 			messages: [{ role: "user", content: "hi" }],
 		});
 
-		expect(openrouterCreateMock).toHaveBeenCalledWith(
+		// Must go through client.post("/chat/completions", ...) rather than
+		// chat.completions.create() — the latter always posts to the literal
+		// "/openai/v1/chat/completions" path, which 404s against OpenRouter's
+		// real endpoint regardless of baseURL (see client.ts's
+		// createChatCompletion for the full explanation).
+		expect(openrouterPostMock).toHaveBeenCalledWith(
+			"/chat/completions",
 			expect.objectContaining({
-				model: "openai/gpt-oss-120b",
-				provider: { ignore: ["groq"] },
+				body: expect.objectContaining({
+					model: "openai/gpt-oss-120b",
+					provider: { ignore: ["groq"] },
+				}),
 			}),
 		);
 		expect(groqCreateMock).not.toHaveBeenCalled();
@@ -142,7 +157,7 @@ describe("chatCompletion", () => {
 	it("silently retries on the other provider when the primary call throws", async () => {
 		process.env.AI_PROVIDER = "groq";
 		groqCreateMock.mockRejectedValueOnce(new Error("rate limited"));
-		openrouterCreateMock.mockResolvedValueOnce({ choices: ["fallback"] });
+		openrouterPostMock.mockResolvedValueOnce({ choices: ["fallback"] });
 
 		const result = await chatCompletion("recipeGeneration", {
 			messages: [{ role: "user", content: "hi" }],
@@ -150,11 +165,14 @@ describe("chatCompletion", () => {
 
 		expect(result).toEqual({ choices: ["fallback"] });
 		expect(groqCreateMock).toHaveBeenCalledTimes(1);
-		expect(openrouterCreateMock).toHaveBeenCalledTimes(1);
-		expect(openrouterCreateMock).toHaveBeenCalledWith(
+		expect(openrouterPostMock).toHaveBeenCalledTimes(1);
+		expect(openrouterPostMock).toHaveBeenCalledWith(
+			"/chat/completions",
 			expect.objectContaining({
-				model: "openai/gpt-oss-120b",
-				provider: { ignore: ["groq"] },
+				body: expect.objectContaining({
+					model: "openai/gpt-oss-120b",
+					provider: { ignore: ["groq"] },
+				}),
 			}),
 		);
 	});
@@ -162,7 +180,7 @@ describe("chatCompletion", () => {
 	it("propagates the fallback provider's own error when it also fails", async () => {
 		process.env.AI_PROVIDER = "groq";
 		groqCreateMock.mockRejectedValueOnce(new Error("groq down"));
-		openrouterCreateMock.mockRejectedValueOnce(new Error("openrouter down"));
+		openrouterPostMock.mockRejectedValueOnce(new Error("openrouter down"));
 
 		await expect(
 			chatCompletion("recipeGeneration", {
@@ -170,7 +188,7 @@ describe("chatCompletion", () => {
 			}),
 		).rejects.toThrow("openrouter down");
 		expect(groqCreateMock).toHaveBeenCalledTimes(1);
-		expect(openrouterCreateMock).toHaveBeenCalledTimes(1);
+		expect(openrouterPostMock).toHaveBeenCalledTimes(1);
 	});
 
 	it("does not attempt failover, and surfaces the original error, when the other provider has no credentials configured", async () => {
@@ -183,6 +201,6 @@ describe("chatCompletion", () => {
 				messages: [{ role: "user", content: "hi" }],
 			}),
 		).rejects.toThrow("groq down");
-		expect(openrouterCreateMock).not.toHaveBeenCalled();
+		expect(openrouterPostMock).not.toHaveBeenCalled();
 	});
 });
