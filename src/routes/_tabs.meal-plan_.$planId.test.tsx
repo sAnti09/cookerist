@@ -490,6 +490,106 @@ describe("Meal plan detail screen — ready — entry swipe actions", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("live-drags the card via touchmove and snaps back if released before the swipe threshold", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const entry = screen.getByTestId("meal-plan-entry-e1");
+
+		fireEvent.touchStart(entry, { touches: [{ clientX: 200, clientY: 0 }] });
+		fireEvent.touchMove(entry, { touches: [{ clientX: 170, clientY: 0 }] });
+		expect(entry.style.transform).toBe("translateX(-30px)");
+
+		fireEvent.touchEnd(entry, {
+			changedTouches: [{ clientX: 170, clientY: 0 }],
+		});
+		// Settles back to the (unchanged) closed resting position — driven by
+		// the same inline transform as the drag itself, not an empty style.
+		expect(entry.style.transform).toBe("translateX(0px)");
+		expect(
+			screen.queryByRole("button", { name: "Change recipe for Breakfast" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("clamps the live drag offset to the reveal width", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const entry = screen.getByTestId("meal-plan-entry-e1");
+
+		fireEvent.touchStart(entry, { touches: [{ clientX: 300, clientY: 0 }] });
+		fireEvent.touchMove(entry, { touches: [{ clientX: 0, clientY: 0 }] });
+		expect(entry.style.transform).toBe("translateX(-144px)");
+		fireEvent.touchEnd(entry, { changedTouches: [{ clientX: 0, clientY: 0 }] });
+	});
+
+	it("drags from the already-revealed position when swiping right to close", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const entry = screen.getByTestId("meal-plan-entry-e1");
+
+		swipeLeft(entry);
+		expect(
+			screen.getByRole("button", { name: "Change recipe for Breakfast" }),
+		).toBeInTheDocument();
+
+		fireEvent.touchStart(entry, { touches: [{ clientX: 100, clientY: 0 }] });
+		fireEvent.touchMove(entry, { touches: [{ clientX: 140, clientY: 0 }] });
+		expect(entry.style.transform).toBe("translateX(-104px)");
+		fireEvent.touchEnd(entry, {
+			changedTouches: [{ clientX: 200, clientY: 0 }],
+		});
+
+		expect(
+			screen.queryByRole("button", { name: "Change recipe for Breakfast" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("ignores a mostly-vertical touchmove (leaves the resting position untouched)", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const entry = screen.getByTestId("meal-plan-entry-e1");
+
+		fireEvent.touchStart(entry, { touches: [{ clientX: 200, clientY: 0 }] });
+		fireEvent.touchMove(entry, {
+			touches: [{ clientX: 180, clientY: 100 }],
+		});
+		expect(entry.style.transform).toBe("translateX(0px)");
+		fireEvent.touchEnd(entry, {
+			changedTouches: [{ clientX: 180, clientY: 100 }],
+		});
+	});
+
+	it("settles back to the resting position if a touchend arrives with no changed touches mid-drag", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const entry = screen.getByTestId("meal-plan-entry-e1");
+
+		fireEvent.touchStart(entry, { touches: [{ clientX: 200, clientY: 0 }] });
+		fireEvent.touchMove(entry, { touches: [{ clientX: 100, clientY: 0 }] });
+		expect(entry.style.transform).toBe("translateX(-100px)");
+
+		fireEvent.touchEnd(entry, { changedTouches: [] });
+		expect(entry.style.transform).toBe("translateX(0px)");
+	});
+
+	it("resets the live drag on touchcancel", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const entry = screen.getByTestId("meal-plan-entry-e1");
+
+		fireEvent.touchStart(entry, { touches: [{ clientX: 200, clientY: 0 }] });
+		fireEvent.touchMove(entry, { touches: [{ clientX: 100, clientY: 0 }] });
+		expect(entry.style.transform).toBe("translateX(-100px)");
+
+		fireEvent.touchCancel(entry);
+		expect(entry.style.transform).toBe("translateX(0px)");
+	});
+
 	it("suppresses the click right after a swipe, then closes (without navigating) on a later tap while revealed", async () => {
 		saveRecipe(loadRecipes(), makeRecipe());
 		saveMealPlan(loadMealPlans(), readyPlan());
