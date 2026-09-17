@@ -151,7 +151,7 @@ describe("Meal plan detail screen — draft", () => {
 		expect(screen.getByText("Overnight Oats")).toBeInTheDocument();
 	});
 
-	it("refines the draft, replaces the entries, and shows a struck-through before value for an edited slot", async () => {
+	it("refines the draft and replaces the entries without a diff — a first-time draft has no prior meal to compare against", async () => {
 		refineMealPlanDraftMock.mockResolvedValueOnce({
 			type: "success",
 			entries: [
@@ -175,16 +175,16 @@ describe("Meal plan detail screen — draft", () => {
 		await user.click(screen.getByRole("button", { name: "Refine plan" }));
 
 		expect(await screen.findByText("Tofu Scramble")).toBeInTheDocument();
-		expect(screen.getByText("Edited · Breakfast")).toBeInTheDocument();
-		// Same day/mealType/slotIndex as the pre-refine entry, different title
-		// — the draft screen's diff indicator keeps the old value visible,
-		// struck through, next to the new one, rather than dropping it.
-		const before = screen.getByText("Overnight Oats");
-		expect(before).toBeInTheDocument();
-		expect(before).toHaveClass("line-through");
+		// A brand-new plan's first draft was never a real built meal, so
+		// there's nothing to diff a refine against — the new suggestion just
+		// replaces the old one outright, with no "Edited" badge and no
+		// struck-through before value.
+		expect(screen.getByText("Suggested · Breakfast")).toBeInTheDocument();
+		expect(screen.queryByText(/Edited/)).not.toBeInTheDocument();
+		expect(screen.queryByText("Overnight Oats")).not.toBeInTheDocument();
 	});
 
-	it("diffs a second refine round against the original entries, not the round before it", async () => {
+	it("keeps replacing entries fresh across multiple refine rounds of a first-time draft, without diffing against an earlier round", async () => {
 		refineMealPlanDraftMock
 			.mockResolvedValueOnce({
 				type: "success",
@@ -224,12 +224,10 @@ describe("Meal plan detail screen — draft", () => {
 		await user.click(submit);
 
 		expect(await screen.findByText("Chickpea Scramble")).toBeInTheDocument();
-		// The diff on this second round should still be measured against the
-		// plan's true original entry ("Overnight Oats"), not the
-		// first round's intermediate result ("Tofu Scramble") — the latter
-		// should no longer appear anywhere once the second refine lands.
-		expect(screen.getByText("Overnight Oats")).toHaveClass("line-through");
+		expect(screen.getByText("Suggested · Breakfast")).toBeInTheDocument();
+		expect(screen.queryByText(/Edited/)).not.toBeInTheDocument();
 		expect(screen.queryByText("Tofu Scramble")).not.toBeInTheDocument();
+		expect(screen.queryByText("Overnight Oats")).not.toBeInTheDocument();
 	});
 
 	it("passes the plan's original description along with a refine instruction", async () => {
@@ -345,6 +343,40 @@ describe("Meal plan detail screen — draft", () => {
 			status: "ready",
 			reused: true,
 		});
+	});
+
+	it("still shows diff highlighting for an in-progress adjustment after navigating back into it", async () => {
+		// Simulates the persisted state right after a refine from an EARLIER
+		// mount of this screen (e.g. the user adjusted a meal, then navigated
+		// away and back) — preAdjustEntries/entries come straight from
+		// storage, not from any local component state set up by this test.
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(
+			loadMealPlans(),
+			makePlan({
+				status: "draft",
+				builtBefore: true,
+				preAdjustEntries: [
+					makeEntry({ id: "e1", status: "ready", recipeId: "recipe-1" }),
+				],
+				entries: [
+					makeEntry({
+						id: "e1",
+						suggestedTitle: "Tofu Scramble",
+						suggestedOverview: "Turmeric-spiced tofu with peppers.",
+					}),
+				],
+			}),
+		);
+		await renderApp("/meal-plan/plan-1");
+
+		expect(await screen.findByText("Edited · Breakfast")).toBeInTheDocument();
+		const before = screen.getByText("Overnight Oats");
+		expect(before).toBeInTheDocument();
+		expect(before).toHaveClass("line-through");
+		expect(
+			screen.getByRole("button", { name: "Approve & build" }),
+		).not.toBeDisabled();
 	});
 });
 

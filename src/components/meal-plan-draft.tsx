@@ -21,8 +21,8 @@ import { refineMealPlanDraft } from "#/server/meal-plan";
 const GENERIC_ERROR_MESSAGE =
 	"Something went wrong refining that plan. Please try again.";
 
-function toDraftEntries(plan: MealPlan): MealPlanDraftEntry[] {
-	return plan.entries.map((entry) => ({
+function toDraftEntries(entries: MealPlanEntry[]): MealPlanDraftEntry[] {
+	return entries.map((entry) => ({
 		day: entry.day,
 		mealType: entry.mealType,
 		slotIndex: entry.slotIndex,
@@ -32,9 +32,11 @@ function toDraftEntries(plan: MealPlan): MealPlanDraftEntry[] {
 }
 
 // Renders one entry in the draft list, styled per its diff status against
-// the original entries this draft session opened with (or, before any
-// refine has happened yet, every entry is treated as freshly "inserted" —
-// see MealPlanDraft below).
+// the plan's preAdjustEntries — the entries as they stood right before this
+// re-adjustment of an already-built plan started. A brand-new plan's very
+// first draft has no such reference point (there's no previously-built meal
+// to compare against, just an initial AI suggestion), so every entry there
+// is always treated as freshly "inserted" instead — see MealPlanDraft below.
 function MealPlanDiffEntryCard({ entry }: { entry: MealPlanEntryDiff }) {
 	const label = MEAL_TYPE_LABELS[entry.mealType];
 
@@ -67,16 +69,16 @@ function MealPlanDiffEntryCard({ entry }: { entry: MealPlanEntryDiff }) {
 	}
 
 	// "edited" and "inserted" share this card shape — only the badge label
-	// and (for "edited") a before → after line differ. Same neutral
-	// background/border as the "unchanged" card (per the app's own card
-	// rule: cards are separated by a border + shadow, never a contrasting
-	// fill) — the accent color lives only in the label text.
+	// and (for "edited") a before → after line differ. Given an accent
+	// border + wash, the same treatment "removed" gets with --warn/--warn-wash
+	// above, so a changed/new meal is glanceable at the panel level rather
+	// than only readable from the small badge text.
 	const titleChanged =
 		entry.status === "edited" && entry.previousTitle !== entry.title;
 	const overviewChanged =
 		entry.status === "edited" && entry.previousOverview !== entry.overview;
 	return (
-		<div className="rounded-[18px] border border-line bg-surface p-3.5">
+		<div className="rounded-[18px] border border-accent/35 bg-accent-wash p-3.5">
 			<span className="font-bold text-[10px] text-accent uppercase tracking-wide">
 				{entry.status === "edited" ? "Edited" : "Suggested"} · {label}
 			</span>
@@ -117,29 +119,6 @@ export function MealPlanDraft({
 }) {
 	const [instruction, setInstruction] = useState("");
 	const [error, setError] = useState<string | null>(null);
-	// Resets to false every time this component mounts fresh — which happens
-	// exactly when the route switches into rendering it, i.e. once per
-	// "enter draft" transition (a brand-new plan's first review, or an
-	// already-built plan's "Adjust plan"). Only matters for the latter: see
-	// approveDisabled below.
-	const [hasRefined, setHasRefined] = useState(false);
-	// The entries as they stood the moment this draft session opened —
-	// captured once via the lazy initializer, never updated again — so every
-	// refine round's diff is always measured against the original plan (a
-	// brand-new plan's first suggestions, or an already-built plan's
-	// pre-adjustment entries), not just the round before it. That way a
-	// slot edited twice in a row still shows one before → after span from
-	// the true original, and a slot edited then reverted back to its
-	// original value correctly reads as unchanged rather than "edited".
-	const [baselineEntries] = useState<MealPlanDraftEntry[]>(() =>
-		toDraftEntries(plan),
-	);
-	// Set once the first refine of this draft session completes — the diff
-	// of the baseline above against the latest refine result, grouped by
-	// day. Null before any refine has happened, in which case every entry
-	// just renders as freshly "inserted" (see displayDays below) — there's
-	// nothing to diff the original entries against yet.
-	const [diffDays, setDiffDays] = useState<MealPlanEntryDiffDay[] | null>(null);
 	const mutation = useMutation({
 		mutationFn: (input: {
 			currentEntries: MealPlanDraftEntry[];
@@ -153,7 +132,7 @@ export function MealPlanDraft({
 		const trimmed = instruction.trim();
 		if (!trimmed || mutation.isPending) return;
 		setError(null);
-		const currentEntries = toDraftEntries(plan);
+		const currentEntries = toDraftEntries(plan.entries);
 		mutation.mutate(
 			{
 				currentEntries,
@@ -167,8 +146,7 @@ export function MealPlanDraft({
 						setError(result.message);
 						return;
 					}
-					// Diffed against THIS round's input (not the session baseline
-					// below, which is for display only) so an "unchanged" slot can
+					// Diffed against THIS round's input so an "unchanged" slot can
 					// keep its existing MealPlanEntry — id, status, recipeId,
 					// reused — completely untouched instead of being reset to
 					// "suggested" and re-entering the build queue. Without this,
@@ -205,46 +183,54 @@ export function MealPlanDraft({
 						entries: nextEntries,
 						refineInstructions: [...plan.refineInstructions, trimmed],
 					});
-					setDiffDays(
-						groupMealPlanEntryDiffsByDay(
-							diffMealPlanEntries(baselineEntries, result.entries),
-						),
-					);
 					setInstruction("");
-					setHasRefined(true);
 				},
 				onError: () => setError(GENERIC_ERROR_MESSAGE),
 			},
 		);
 	}
 
-	// Before any refine in this session, an already-built plan's "Adjust
-	// plan" re-entry starts from its existing entries, not new suggestions —
-	// so it should read as the default/unchanged style from the first paint
-	// (there's nothing to highlight until a refine actually changes
-	// something). A brand-new plan's first review has no such prior state,
-	// so its initial entries are genuinely new and keep the "Suggested"
-	// treatment.
-	const initialEntryStatus = plan.builtBefore ? "unchanged" : "inserted";
-	const displayDays: MealPlanEntryDiffDay[] =
-		diffDays ??
-		groupMealPlanEntriesByDay(plan.entries).map(({ day, entries }) => ({
-			day,
-			entries: entries.map((entry) => ({
-				day: entry.day,
-				mealType: entry.mealType,
-				slotIndex: entry.slotIndex,
-				title: entry.suggestedTitle,
-				overview: entry.suggestedOverview,
-				status: initialEntryStatus,
-			})),
-		}));
+	// Diffed against the plan's own persisted preAdjustEntries — the entries
+	// as they stood right before this re-adjustment of an already-built plan
+	// started, captured eagerly the moment "Adjust plan" was clicked (see
+	// _tabs.meal-plan_.$planId.tsx). Gated on builtBefore, not just on
+	// preAdjustEntries being set, so a brand-new plan's very first draft
+	// never shows diff highlighting even across several refines — there's no
+	// previously-built meal to compare against yet, just one AI suggestion
+	// replacing another, so every entry there always reads as freshly
+	// "inserted" instead (see the fallback branch below). Living entirely on
+	// the plan rather than in local component state means this is a pure
+	// function of persisted data and survives navigating away from and back
+	// into an in-progress adjustment (a remount of this component) instead
+	// of resetting to "nothing changed" the moment that happens.
+	const entryDiffs: MealPlanEntryDiff[] | null = plan.builtBefore
+		? diffMealPlanEntries(
+				toDraftEntries(plan.preAdjustEntries ?? plan.entries),
+				toDraftEntries(plan.entries),
+			)
+		: null;
+	const displayDays: MealPlanEntryDiffDay[] = entryDiffs
+		? groupMealPlanEntryDiffsByDay(entryDiffs)
+		: groupMealPlanEntriesByDay(plan.entries).map(({ day, entries }) => ({
+				day,
+				entries: entries.map((entry) => ({
+					day: entry.day,
+					mealType: entry.mealType,
+					slotIndex: entry.slotIndex,
+					title: entry.suggestedTitle,
+					overview: entry.suggestedOverview,
+					status: "inserted" as const,
+				})),
+			}));
 
 	// Re-approving an already-built plan without changing anything would just
-	// waste a rebuild — require at least one successful refine first. A
-	// brand-new plan's first review has no such requirement: approving its
-	// initial suggestions outright is the normal path.
-	const approveDisabled = plan.builtBefore && !hasRefined;
+	// waste a rebuild — require at least one entry to actually differ from
+	// preAdjustEntries first. A brand-new plan's first review has no such
+	// requirement: approving its initial suggestions outright is the normal
+	// path.
+	const approveDisabled =
+		plan.builtBefore &&
+		!(entryDiffs?.some((diff) => diff.status !== "unchanged") ?? false);
 
 	return (
 		<div className="pb-32">

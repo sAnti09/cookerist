@@ -14,6 +14,7 @@
   --ink-dim: #8a8072;
   --line: #e9e4d9;
   --accent: #d9793a;
+  --accent-wash: #fbf0e3;
   --sage: #63805f;
   --warn: #b65a3a;
   --warn-wash: #f8eee5;
@@ -48,6 +49,7 @@
     --ink-dim: #b6a891;
     --line: #3e3324;
     --accent: #e8935a;
+    --accent-wash: #3a2b19;
     --sage: #8fae73;
     --warn: #dd8264;
     --warn-wash: #3b2a21;
@@ -66,6 +68,7 @@
   --ink-dim: #b6a891;
   --line: #3e3324;
   --accent: #e8935a;
+  --accent-wash: #3a2b19;
   --sage: #8fae73;
   --warn: #dd8264;
   --warn-wash: #3b2a21;
@@ -92,6 +95,7 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-wash: var(--accent-wash);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
