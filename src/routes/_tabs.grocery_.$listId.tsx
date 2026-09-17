@@ -7,6 +7,7 @@ import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { IconButton } from "#/components/ui/icon-button";
 import { useAppData } from "#/lib/app-data-context";
 import { getGroceryListProgress } from "#/lib/grocery-list";
+import { useGoBack } from "#/lib/use-go-back";
 import { cn } from "#/lib/utils";
 
 type GroceryDetailSearch = {
@@ -29,6 +30,7 @@ function GroceryDetailScreen() {
 	const { listId } = Route.useParams();
 	const search = Route.useSearch();
 	const navigate = useNavigate();
+	const goBack = useGoBack();
 	const {
 		groceryLists,
 		recipes,
@@ -71,7 +73,7 @@ function GroceryDetailScreen() {
 			<div className="sticky top-0 z-10 flex items-center gap-2 border-line border-b bg-bg px-4 py-3.5">
 				<IconButton
 					aria-label="Back to grocery lists"
-					onClick={() => navigate({ to: "/grocery" })}
+					onClick={() => goBack(() => navigate({ to: "/grocery" }))}
 				>
 					<ChevronLeft className="size-[18px]" aria-hidden="true" />
 				</IconButton>

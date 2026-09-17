@@ -99,6 +99,25 @@ describe("Meal plan detail screen — not found", () => {
 	});
 });
 
+describe("Meal plan detail screen — back navigation", () => {
+	it("uses a true history back (a POP, not a fresh navigation) when arrived at via in-app navigation, so the list's scroll position can be restored", async () => {
+		saveMealPlan(loadMealPlans(), makePlan());
+		const { router } = await renderApp("/meal-plan");
+		const user = userEvent.setup();
+		const historyBackSpy = vi.spyOn(router.history, "back");
+
+		await user.click(screen.getByTestId("meal-plan-row-plan-1"));
+		await user.click(
+			await screen.findByRole("button", { name: "Back to meal plans" }),
+		);
+
+		expect(historyBackSpy).toHaveBeenCalledTimes(1);
+		expect(
+			await screen.findByRole("heading", { name: "Meal Plan" }),
+		).toBeInTheDocument();
+	});
+});
+
 describe("Meal plan detail screen — draft", () => {
 	it("hides the bottom tab bar and shows the suggested entries", async () => {
 		saveMealPlan(loadMealPlans(), makePlan());

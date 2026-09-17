@@ -121,6 +121,23 @@ describe("Recipe detail screen", () => {
 		).toBeInTheDocument();
 	});
 
+	it("uses a true history back (a POP, not a fresh navigation) when arrived at via in-app navigation, so the list's scroll position can be restored", async () => {
+		const recipe = seedRecipe();
+		const { router } = await renderApp("/recipes");
+		const user = userEvent.setup();
+		const historyBackSpy = vi.spyOn(router.history, "back");
+
+		await user.click(screen.getByText(recipe.title));
+		await user.click(
+			await screen.findByRole("button", { name: "Back to recipes" }),
+		);
+
+		expect(historyBackSpy).toHaveBeenCalledTimes(1);
+		expect(
+			await screen.findByRole("heading", { name: "Recipes" }),
+		).toBeInTheDocument();
+	});
+
 	it("toggles favorite from the header star and persists it", async () => {
 		const recipe = seedRecipe({ favorite: false });
 		await renderApp(`/recipes/${recipe.id}`);

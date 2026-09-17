@@ -112,6 +112,24 @@ describe("Grocery detail screen", () => {
 		).toBeInTheDocument();
 	});
 
+	it("uses a true history back (a POP, not a fresh navigation) when arrived at via in-app navigation, so the list's scroll position can be restored", async () => {
+		const list = makeGroceryList();
+		saveGroceryList(loadGroceryLists(), list);
+		const { router } = await renderApp("/grocery");
+		const user = userEvent.setup();
+		const historyBackSpy = vi.spyOn(router.history, "back");
+
+		await user.click(screen.getByText(list.name));
+		await user.click(
+			await screen.findByRole("button", { name: "Back to grocery lists" }),
+		);
+
+		expect(historyBackSpy).toHaveBeenCalledTimes(1);
+		expect(
+			await screen.findByRole("heading", { name: "Grocery Lists" }),
+		).toBeInTheDocument();
+	});
+
 	it("deletes the list and navigates back to the grocery lists screen after confirming", async () => {
 		const list = makeGroceryList();
 		saveGroceryList(loadGroceryLists(), list);

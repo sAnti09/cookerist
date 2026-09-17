@@ -17,6 +17,7 @@ import { DifficultyBadge } from "#/components/ui/difficulty-badge";
 import { IconButton } from "#/components/ui/icon-button";
 import { useAppData } from "#/lib/app-data-context";
 import { formatCaloriesPerServing, formatEstimatedTime } from "#/lib/recipe";
+import { useGoBack } from "#/lib/use-go-back";
 import { cn } from "#/lib/utils";
 
 type RecipeDetailSearch = {
@@ -46,6 +47,7 @@ function RecipeDetailScreen() {
 	const { recipeId } = Route.useParams();
 	const search = Route.useSearch();
 	const navigate = useNavigate();
+	const goBack = useGoBack();
 	const {
 		recipes,
 		deleteRecipe,
@@ -59,11 +61,16 @@ function RecipeDetailScreen() {
 	const recipe = recipes.find((r) => r.id === recipeId);
 
 	function handleBack() {
-		if (search.from === "meal-plan" && search.planId) {
-			navigate({ to: "/meal-plan/$planId", params: { planId: search.planId } });
-			return;
-		}
-		navigate({ to: "/recipes" });
+		goBack(() => {
+			if (search.from === "meal-plan" && search.planId) {
+				navigate({
+					to: "/meal-plan/$planId",
+					params: { planId: search.planId },
+				});
+				return;
+			}
+			navigate({ to: "/recipes" });
+		});
 	}
 
 	if (!recipe) {

@@ -16,6 +16,7 @@ import {
 } from "#/lib/meal-plan";
 import type { Recipe } from "#/lib/recipe";
 import { useBuildMealPlan } from "#/lib/use-build-meal-plan";
+import { useGoBack } from "#/lib/use-go-back";
 
 export const Route = createFileRoute("/_tabs/meal-plan_/$planId")({
 	component: MealPlanDetailScreen,
@@ -45,6 +46,7 @@ const NOT_FOUND_PLAN: MealPlan = {
 function MealPlanDetailScreen() {
 	const { planId } = Route.useParams();
 	const navigate = useNavigate();
+	const goBack = useGoBack();
 	const {
 		mealPlans,
 		recipes,
@@ -155,7 +157,7 @@ function MealPlanDetailScreen() {
 			<div className="sticky top-0 z-10 flex items-center gap-2 border-line border-b bg-bg px-4 py-3.5">
 				<IconButton
 					aria-label="Back to meal plans"
-					onClick={() => navigate({ to: "/meal-plan" })}
+					onClick={() => goBack(() => navigate({ to: "/meal-plan" }))}
 				>
 					<ChevronLeft className="size-[18px]" aria-hidden="true" />
 				</IconButton>
