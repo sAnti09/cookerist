@@ -1,10 +1,14 @@
 import type { LucideIcon } from "lucide-react";
 import {
+	CalendarRange,
+	Camera,
 	ChefHat,
+	ListChecks,
 	Lock,
 	ShoppingCart,
 	Smartphone,
 	Sparkles,
+	Wand2,
 	WifiOff,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -24,19 +28,43 @@ function buildFeatures(onResetData: () => void): Feature[] {
 			icon: Sparkles,
 			title: "AI-powered recipes",
 			description:
-				"Describe any dish in plain language and get a full recipe back — measured ingredients and clear steps, generated for you.",
+				"Describe any dish in plain language and get a full recipe back — measured ingredients and clear steps, scaled instantly to however many servings you need.",
+		},
+		{
+			icon: Camera,
+			title: "Snap a photo to cook it",
+			description:
+				"Not sure what a dish is called? Take or upload a photo and Cookerist identifies it and builds the recipe for you.",
+		},
+		{
+			icon: Wand2,
+			title: "Refine any recipe",
+			description:
+				"Ask for a change — spicier, dairy-free, swap an ingredient — and get back a revised recipe with the differences highlighted before you accept it.",
 		},
 		{
 			icon: ChefHat,
 			title: "Cook mode",
 			description:
-				"A focused, full-screen walkthrough of your steps while you cook, so you never lose your place.",
+				"A focused, full-screen walkthrough of your steps while you cook, with built-in timers for each one, so you never lose your place.",
+		},
+		{
+			icon: CalendarRange,
+			title: "Plan your week",
+			description:
+				"Generate a full week of meals at once — breakfast, lunch, and dinner — then swap in any dish you'd rather cook instead.",
 		},
 		{
 			icon: ShoppingCart,
 			title: "Smart grocery lists",
 			description:
-				"Pull ingredients from several recipes into one list — matching quantities merge automatically.",
+				"Pull ingredients from several recipes into one list, organized by grocery-store aisle — matching quantities merge automatically.",
+		},
+		{
+			icon: ListChecks,
+			title: "Guided shopping mode",
+			description:
+				"A hands-free, checklist-style view for the store, so checking things off while you shop is as easy as checking them off at home.",
 		},
 		{
 			icon: WifiOff,
