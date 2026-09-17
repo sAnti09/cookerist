@@ -208,6 +208,39 @@ export function resizeSlotsForDays(
 	);
 }
 
+export type MealPlanDateRangeChange = {
+	startDate: string;
+	endDate: string;
+	slots: MealSlotConfig[];
+};
+
+// Applies a newly picked (startDate, endDate) to the wizard's grid: clamps
+// the span to MAX_PLAN_DAYS (keeping startDate fixed and pulling endDate
+// back in, same as the date-range picker's own tap-order clamp) and resizes
+// the slot grid to match. Pulled out as a pure function — separate from the
+// date-range picker's own UI — specifically so this clamping logic has a
+// fast, direct unit test path: driving it through an actual popover
+// interaction in a full-app test is unreliable (see
+// meal-plan-date-range-picker.test.tsx and _tabs.meal-plan_.new.test.tsx for
+// what each level actually covers instead).
+export function applyMealPlanDateRange(
+	currentSlots: MealSlotConfig[],
+	nextStart: string,
+	nextEnd: string,
+): MealPlanDateRangeChange {
+	const nextDays = enumerateDays(nextStart, nextEnd);
+	const boundedDays =
+		nextDays.length > MAX_PLAN_DAYS
+			? nextDays.slice(0, MAX_PLAN_DAYS)
+			: nextDays;
+	const boundedEnd = boundedDays[boundedDays.length - 1] ?? nextEnd;
+	return {
+		startDate: nextStart,
+		endDate: boundedEnd,
+		slots: resizeSlotsForDays(currentSlots, boundedDays),
+	};
+}
+
 // Tap-cycles a single cell: off → 1 dish → 2 dishes (MAX_DISH_COUNT_PER_SLOT)
 // → off.
 export function cycleSlot(slot: MealSlotConfig): MealSlotConfig {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	applyMealPlanDateRange,
 	cycleSlot,
 	DEFAULT_ENABLED_MEAL_TYPES,
 	defaultSlots,
@@ -10,6 +11,7 @@ import {
 	groupMealPlanEntriesByDay,
 	isEntryServingsEdited,
 	MAX_DISH_COUNT_PER_SLOT,
+	MAX_PLAN_DAYS,
 	type MealPlanEntry,
 	type MealSlotConfig,
 	resizeSlotsForDays,
@@ -84,6 +86,56 @@ describe("resizeSlotsForDays", () => {
 
 		expect(resized.every((slot) => slot.day === "2026-09-16")).toBe(true);
 		expect(resized).toHaveLength(5);
+	});
+});
+
+describe("applyMealPlanDateRange", () => {
+	it("resizes the slot grid to exactly match the picked range", () => {
+		const current = defaultSlots(["2026-09-15"]);
+
+		const change = applyMealPlanDateRange(current, "2026-09-20", "2026-09-22");
+
+		expect(change.startDate).toBe("2026-09-20");
+		expect(change.endDate).toBe("2026-09-22");
+		expect(change.slots).toHaveLength(15); // 3 days * 5 meal types
+		expect(new Set(change.slots.map((slot) => slot.day))).toEqual(
+			new Set(["2026-09-20", "2026-09-21", "2026-09-22"]),
+		);
+	});
+
+	it("accepts a single-day range unchanged", () => {
+		const change = applyMealPlanDateRange([], "2026-09-20", "2026-09-20");
+
+		expect(change.startDate).toBe("2026-09-20");
+		expect(change.endDate).toBe("2026-09-20");
+		expect(change.slots).toHaveLength(5); // 1 day * 5 meal types
+	});
+
+	it("caps the range at MAX_PLAN_DAYS, keeping startDate fixed and pulling endDate back in", () => {
+		const farEnd = enumerateDays("2026-09-01", "2026-09-30")[MAX_PLAN_DAYS + 5];
+		if (!farEnd) throw new Error("test setup: expected a far-end date");
+
+		const change = applyMealPlanDateRange([], "2026-09-01", farEnd);
+
+		expect(change.startDate).toBe("2026-09-01");
+		expect(enumerateDays(change.startDate, change.endDate)).toHaveLength(
+			MAX_PLAN_DAYS,
+		);
+	});
+
+	it("preserves existing per-day toggles for days that stay in range", () => {
+		const current = toggleSlotInList(
+			defaultSlots(["2026-09-15", "2026-09-16"]),
+			"2026-09-15",
+			"morning_snack",
+		);
+
+		const change = applyMealPlanDateRange(current, "2026-09-15", "2026-09-16");
+
+		const snack = change.slots.find(
+			(slot) => slot.day === "2026-09-15" && slot.mealType === "morning_snack",
+		);
+		expect(snack?.enabled).toBe(true);
 	});
 });
 

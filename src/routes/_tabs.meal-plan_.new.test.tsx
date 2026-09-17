@@ -1,15 +1,13 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MAX_PLAN_DAYS, toIsoDate } from "#/lib/meal-plan";
+import {
+	DEFAULT_PLAN_DAYS,
+	formatMealPlanDateRange,
+	toIsoDate,
+} from "#/lib/meal-plan";
 import { generateMealPlanDraft } from "#/server/meal-plan";
 import { renderApp } from "#/test-utils/render-app";
-
-function addDaysIso(days: number): string {
-	const date = new Date();
-	date.setDate(date.getDate() + days);
-	return toIsoDate(date);
-}
 
 vi.mock("#/server/generate-recipe", () => ({
 	generateRecipe: vi.fn(),
@@ -132,52 +130,32 @@ describe("New meal plan wizard", () => {
 		).toBe(true);
 	});
 
-	it("extends the end date to match when the start date moves past it", async () => {
+	// The date-range picker's own tap-to-select/clamp/chronological-order
+	// behavior is covered at two other, faster and more reliable levels
+	// instead of here:
+	//  - meal-plan-date-range-picker.test.tsx drives the actual popover
+	//    interaction (open, tap start, tap end, clamp) against the component
+	//    in isolation.
+	//  - meal-plan.test.ts unit-tests applyMealPlanDateRange, the pure
+	//    function that turns a picked (start, end) into the clamped
+	//    startDate/endDate/slot-grid the wizard actually renders.
+	// Driving the same popover-open-then-tap-a-day flow through this route's
+	// full app render (real router + tab layout) hung indefinitely under
+	// jsdom in a way that didn't reproduce in either of those two narrower
+	// contexts — floating-ui's positioning loop never settling once nested
+	// this deep, as best as could be diagnosed. This test only checks that
+	// the wizard renders the picker with the right default range, without
+	// opening it.
+	it("shows the default date range on the picker trigger", async () => {
 		await renderApp("/meal-plan/new");
-		const farStart = addDaysIso(30);
 
-		fireEvent.change(screen.getByLabelText("Plan start date"), {
-			target: { value: farStart },
-		});
-
-		expect(screen.getByLabelText("Plan end date")).toHaveValue(farStart);
-		expect(screen.getByText(/^1 day ·/)).toBeInTheDocument();
-	});
-
-	it("caps the range at MAX_PLAN_DAYS when the start date moves far enough back", async () => {
-		await renderApp("/meal-plan/new");
-		const farPastStart = addDaysIso(-30);
-
-		fireEvent.change(screen.getByLabelText("Plan start date"), {
-			target: { value: farPastStart },
-		});
+		const today = toIsoDate(new Date());
+		const end = new Date(`${today}T00:00:00`);
+		end.setDate(end.getDate() + DEFAULT_PLAN_DAYS - 1);
+		const expectedLabel = formatMealPlanDateRange(today, toIsoDate(end));
 
 		expect(
-			screen.getByText(new RegExp(`^${MAX_PLAN_DAYS} days ·`)),
-		).toBeInTheDocument();
-	});
-
-	it("ignores an end date set before the start date", async () => {
-		await renderApp("/meal-plan/new");
-		const before = addDaysIso(-1);
-
-		fireEvent.change(screen.getByLabelText("Plan end date"), {
-			target: { value: before },
-		});
-
-		expect(screen.getByText(/^7 days ·/)).toBeInTheDocument();
-	});
-
-	it("caps the range at MAX_PLAN_DAYS when the end date moves far enough forward", async () => {
-		await renderApp("/meal-plan/new");
-		const farEnd = addDaysIso(30);
-
-		fireEvent.change(screen.getByLabelText("Plan end date"), {
-			target: { value: farEnd },
-		});
-
-		expect(
-			screen.getByText(new RegExp(`^${MAX_PLAN_DAYS} days ·`)),
+			screen.getByRole("button", { name: expectedLabel }),
 		).toBeInTheDocument();
 	});
 

@@ -1,9 +1,11 @@
 import { useMutation } from "@tanstack/react-query";
 import { Flame } from "lucide-react";
 import { useEffect, useState } from "react";
+import { MealPlanDateRangePicker } from "#/components/meal-plan-date-range-picker";
 import { Button } from "#/components/ui/button";
 import { Textarea } from "#/components/ui/textarea";
 import {
+	applyMealPlanDateRange,
 	countPlanDays,
 	DEFAULT_MEAL_PLAN_SERVINGS,
 	DEFAULT_PLAN_DAYS,
@@ -90,40 +92,11 @@ export function MealPlanWizardForm({
 	// function's closure over startDate/endDate, so this re-check is what
 	// actually narrows their type to `string` here (not just a runtime
 	// safety net).
-	function handleStartDateChange(next: string) {
-		if (startDate === null || endDate === null) return;
-		const clampedEnd =
-			new Date(`${endDate}T00:00:00`).getTime() <
-			new Date(`${next}T00:00:00`).getTime()
-				? next
-				: endDate;
-		const nextDays = enumerateDays(next, clampedEnd);
-		const boundedDays =
-			nextDays.length > MAX_PLAN_DAYS
-				? nextDays.slice(0, MAX_PLAN_DAYS)
-				: nextDays;
-		const boundedEnd = boundedDays[boundedDays.length - 1] ?? next;
-		setStartDate(next);
-		setEndDate(boundedEnd);
-		setSlots((current) => resizeSlotsForDays(current, boundedDays));
-	}
-
-	function handleEndDateChange(next: string) {
-		if (startDate === null || endDate === null) return;
-		if (
-			new Date(`${next}T00:00:00`).getTime() <
-			new Date(`${startDate}T00:00:00`).getTime()
-		) {
-			return;
-		}
-		const nextDays = enumerateDays(startDate, next);
-		const boundedDays =
-			nextDays.length > MAX_PLAN_DAYS
-				? nextDays.slice(0, MAX_PLAN_DAYS)
-				: nextDays;
-		const boundedEnd = boundedDays[boundedDays.length - 1] ?? next;
-		setEndDate(boundedEnd);
-		setSlots((current) => resizeSlotsForDays(current, boundedDays));
+	function handleRangeChange(nextStart: string, nextEnd: string) {
+		const change = applyMealPlanDateRange(slots, nextStart, nextEnd);
+		setStartDate(change.startDate);
+		setEndDate(change.endDate);
+		setSlots(change.slots);
 	}
 
 	function handleToggleCell(day: string, mealType: MealSlotConfig["mealType"]) {
@@ -201,26 +174,11 @@ export function MealPlanWizardForm({
 				<p className="mb-2 font-semibold text-xs text-ink-dim uppercase tracking-wide">
 					Date range
 				</p>
-				<div className="flex items-center gap-2">
-					<input
-						type="date"
-						value={startDate}
-						onChange={(event) => handleStartDateChange(event.target.value)}
-						aria-label="Plan start date"
-						className="card min-w-0 flex-1 rounded-full bg-surface px-4 py-2.5 text-sm outline-none"
-					/>
-					<span className="text-ink-dim text-sm" aria-hidden="true">
-						→
-					</span>
-					<input
-						type="date"
-						value={endDate}
-						min={startDate}
-						onChange={(event) => handleEndDateChange(event.target.value)}
-						aria-label="Plan end date"
-						className="card min-w-0 flex-1 rounded-full bg-surface px-4 py-2.5 text-sm outline-none"
-					/>
-				</div>
+				<MealPlanDateRangePicker
+					startDate={startDate}
+					endDate={endDate}
+					onChange={handleRangeChange}
+				/>
 				<p className="mt-2 text-ink-dim text-xs">
 					{dayCount} {dayCount === 1 ? "day" : "days"} · up to {MAX_PLAN_DAYS}{" "}
 					days per plan
@@ -310,7 +268,13 @@ export function MealPlanWizardForm({
 						))}
 					</div>
 				</div>
-				<p className="mt-2 text-ink-dim text-xs leading-relaxed">
+				<p className="mt-2 text-ink-dim text-[11px] leading-relaxed">
+					{MEAL_TYPES.map(
+						(mealType) =>
+							`${MEAL_TYPE_ABBREVIATIONS[mealType]} = ${MEAL_TYPE_LABELS[mealType]}`,
+					).join(" · ")}
+				</p>
+				<p className="mt-1 text-ink-dim text-xs leading-relaxed">
 					Tap a cell to cycle it off → 1 dish → 2 dishes → off. Tap a column
 					header to toggle that meal for every day.
 				</p>
