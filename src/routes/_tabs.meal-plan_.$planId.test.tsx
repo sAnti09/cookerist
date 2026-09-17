@@ -56,8 +56,9 @@ function makePlan(overrides: Partial<MealPlan> = {}): MealPlan {
 	};
 }
 
+// Deltas here (150px) are past SWIPE_THRESHOLD_PX (110) in meal-plan-entry-row.tsx.
 function swipeLeft(element: Element) {
-	fireEvent.touchStart(element, { touches: [{ clientX: 200, clientY: 0 }] });
+	fireEvent.touchStart(element, { touches: [{ clientX: 250, clientY: 0 }] });
 	fireEvent.touchEnd(element, {
 		changedTouches: [{ clientX: 100, clientY: 0 }],
 	});
@@ -66,7 +67,7 @@ function swipeLeft(element: Element) {
 function swipeRight(element: Element) {
 	fireEvent.touchStart(element, { touches: [{ clientX: 100, clientY: 0 }] });
 	fireEvent.touchEnd(element, {
-		changedTouches: [{ clientX: 200, clientY: 0 }],
+		changedTouches: [{ clientX: 250, clientY: 0 }],
 	});
 }
 

@@ -16,11 +16,14 @@ import { cn } from "#/lib/utils";
 // dragging right past it opens the change-recipe dialog. There's no
 // intermediate "revealed, tap to trigger" state — releasing past the
 // threshold runs the action immediately, and the card always springs back
-// to rest either way.
-const SWIPE_THRESHOLD_PX = 50;
-// How far the card can visually slide while dragging (a bit past the
-// trigger threshold, so the Change/Delete hint has room to peek out before
-// the gesture commits) — matches the hint panels' own width below.
+// to rest either way. Set well past DRAG_CLAMP_PX (the card's own visual
+// travel limit) on purpose: the Change/Delete hint is already fully
+// revealed by the time the card maxes out, and the extra finger travel
+// beyond that — with no further visual feedback — is what makes committing
+// feel deliberate rather than accidental.
+const SWIPE_THRESHOLD_PX = 110;
+// How far the card can visually slide while dragging — matches the hint
+// panels' own width below.
 const DRAG_CLAMP_PX = 72;
 
 export function MealPlanEntryRow({
@@ -160,7 +163,17 @@ export function MealPlanEntryRow({
 				onTouchEnd={handleTouchEnd}
 				onTouchCancel={handleTouchCancel}
 				onClick={handleClick}
-				className="card block bg-card p-3.5 text-ink no-underline transition-transform duration-200"
+				// translate-x-0 never actually moves anything (the drag/rest
+				// position is always driven by the separate `transform` property
+				// via linkRef, not `translate`) — it's here purely so the card has
+				// a non-"none" translate value from the very first paint, which
+				// per the CSS stacking-context rules gives it its own stacking
+				// context. Without that, this plain static-flow element would
+				// paint *behind* the absolutely-positioned hint panels above
+				// (position:absolute always paints above static siblings,
+				// regardless of DOM order) until the first touch interaction set
+				// an inline `transform` and created one implicitly.
+				className="card block translate-x-0 bg-card p-3.5 text-ink no-underline transition-transform duration-200"
 			>
 				<div className="flex items-start justify-between gap-2">
 					<span className="font-bold text-[10px] text-ink-dim uppercase tracking-wide">
