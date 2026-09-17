@@ -19,12 +19,26 @@ import { useAppData } from "#/lib/app-data-context";
 import { formatCaloriesPerServing, formatEstimatedTime } from "#/lib/recipe";
 import { cn } from "#/lib/utils";
 
+type RecipeDetailSearch = {
+	// Set when this route was opened from a meal-plan entry row (see
+	// meal-plan-entry-row.tsx) so the back button can return there instead of
+	// always landing on the recipes list — the only "came from" tracking
+	// anywhere in this app, added specifically for this case.
+	from?: "meal-plan";
+	planId?: string;
+};
+
 export const Route = createFileRoute("/_tabs/recipes_/$recipeId")({
+	validateSearch: (search: Record<string, unknown>): RecipeDetailSearch => ({
+		from: search.from === "meal-plan" ? "meal-plan" : undefined,
+		planId: typeof search.planId === "string" ? search.planId : undefined,
+	}),
 	component: RecipeDetailScreen,
 });
 
 function RecipeDetailScreen() {
 	const { recipeId } = Route.useParams();
+	const search = Route.useSearch();
 	const navigate = useNavigate();
 	const {
 		recipes,
@@ -37,6 +51,14 @@ function RecipeDetailScreen() {
 	const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
 	const [cookModeOpen, setCookModeOpen] = useState(false);
 	const recipe = recipes.find((r) => r.id === recipeId);
+
+	function handleBack() {
+		if (search.from === "meal-plan" && search.planId) {
+			navigate({ to: "/meal-plan/$planId", params: { planId: search.planId } });
+			return;
+		}
+		navigate({ to: "/recipes" });
+	}
 
 	if (!recipe) {
 		return (
@@ -57,10 +79,7 @@ function RecipeDetailScreen() {
 	return (
 		<div>
 			<div className="sticky top-0 z-10 flex items-center gap-2 border-line border-b bg-bg px-4 py-3.5">
-				<IconButton
-					aria-label="Back to recipes"
-					onClick={() => navigate({ to: "/recipes" })}
-				>
+				<IconButton aria-label="Back to recipes" onClick={handleBack}>
 					<ChevronLeft className="size-[18px]" aria-hidden="true" />
 				</IconButton>
 				<div className="display-title flex-1 truncate text-[15px] font-semibold">

@@ -194,6 +194,7 @@ function MealPlanDetailScreen() {
 							recipes={recipes}
 							onUpdatePlan={updateMealPlan}
 							onUpdateRecipes={updateRecipes}
+							onCreateRecipe={createRecipe}
 							onAdjustPlan={handleAdjustPlan}
 							onBuildGroceryList={handleBuildGroceryList}
 						/>

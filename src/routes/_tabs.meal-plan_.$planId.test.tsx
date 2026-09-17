@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MealPlan, MealPlanEntry } from "#/lib/meal-plan";
@@ -54,6 +54,13 @@ function makePlan(overrides: Partial<MealPlan> = {}): MealPlan {
 		refineInstructions: [],
 		...overrides,
 	};
+}
+
+function swipeLeft(element: Element) {
+	fireEvent.touchStart(element, { touches: [{ clientX: 200, clientY: 0 }] });
+	fireEvent.touchEnd(element, {
+		changedTouches: [{ clientX: 100, clientY: 0 }],
+	});
 }
 
 function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
@@ -432,6 +439,218 @@ describe("Meal plan detail screen — ready", () => {
 		expect(stored).toHaveLength(1);
 		expect(stored[0].status).toBe("ready");
 		expect(stored[0].entries[0].recipeId).toBe("recipe-1");
+	});
+});
+
+describe("Meal plan detail screen — ready — entry swipe actions", () => {
+	function readyPlan(): MealPlan {
+		return makePlan({
+			status: "ready",
+			builtBefore: true,
+			entries: [makeEntry({ status: "ready", recipeId: "recipe-1" })],
+		});
+	}
+
+	it("navigates back to the meal plan (not the recipes list) from a recipe opened via the plan", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		await user.click(screen.getByText("Overnight Oats"));
+		await user.click(
+			await screen.findByRole("button", { name: /Back to recipes/i }),
+		);
+
+		expect(
+			await screen.findByText("Servings for this plan"),
+		).toBeInTheDocument();
+	});
+
+	it("ignores a short or mostly-vertical touch gesture (not a deliberate swipe)", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const entry = screen.getByTestId("meal-plan-entry-e1");
+
+		fireEvent.touchStart(entry, { touches: [{ clientX: 100, clientY: 0 }] });
+		fireEvent.touchEnd(entry, {
+			changedTouches: [{ clientX: 110, clientY: 0 }],
+		});
+		expect(
+			screen.queryByRole("button", { name: "Change recipe for Breakfast" }),
+		).not.toBeInTheDocument();
+
+		fireEvent.touchStart(entry, { touches: [{ clientX: 100, clientY: 0 }] });
+		fireEvent.touchEnd(entry, {
+			changedTouches: [{ clientX: 40, clientY: 120 }],
+		});
+		expect(
+			screen.queryByRole("button", { name: "Change recipe for Breakfast" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("suppresses the click right after a swipe, then closes (without navigating) on a later tap while revealed", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const entry = screen.getByTestId("meal-plan-entry-e1");
+
+		swipeLeft(entry);
+		expect(
+			screen.getByRole("button", { name: "Change recipe for Breakfast" }),
+		).toBeInTheDocument();
+
+		fireEvent.click(entry);
+		expect(
+			screen.getByRole("button", { name: "Change recipe for Breakfast" }),
+		).toBeInTheDocument();
+		expect(screen.getByText("Servings for this plan")).toBeInTheDocument();
+
+		fireEvent.click(entry);
+		expect(
+			screen.queryByRole("button", { name: "Change recipe for Breakfast" }),
+		).not.toBeInTheDocument();
+		expect(screen.getByText("Servings for this plan")).toBeInTheDocument();
+	});
+
+	it("keeps the entry when the delete confirmation is cancelled", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		swipeLeft(screen.getByTestId("meal-plan-entry-e1"));
+		await user.click(
+			screen.getByRole("button", {
+				name: "Remove Overnight Oats from the meal plan",
+			}),
+		);
+		await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+		expect(screen.getByText("Overnight Oats")).toBeInTheDocument();
+	});
+
+	it("closes the change-recipe dialog without changing anything", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		swipeLeft(screen.getByTestId("meal-plan-entry-e1"));
+		await user.click(
+			screen.getByRole("button", { name: "Change recipe for Breakfast" }),
+		);
+		await user.click(screen.getByRole("button", { name: "Close" }));
+
+		expect(
+			screen.queryByRole("dialog", { name: "Change recipe" }),
+		).not.toBeInTheDocument();
+		expect(screen.getByText("Overnight Oats")).toBeInTheDocument();
+	});
+
+	it("reveals delete/change actions on swipe and removes the entry after confirming delete", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		swipeLeft(screen.getByTestId("meal-plan-entry-e1"));
+		await user.click(
+			screen.getByRole("button", {
+				name: "Remove Overnight Oats from the meal plan",
+			}),
+		);
+		await user.click(screen.getByRole("button", { name: "Remove" }));
+
+		expect(screen.queryByText("Overnight Oats")).not.toBeInTheDocument();
+		expect(
+			screen.getByText(/no dishes left in this plan/i),
+		).toBeInTheDocument();
+		const stored = JSON.parse(
+			window.localStorage.getItem("cookerist:meal-plans") ?? "[]",
+		) as MealPlan[];
+		expect(stored[0].entries).toHaveLength(0);
+	});
+
+	it("swaps an entry to a different saved recipe via search, aligning its servings to the plan default", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveRecipe(
+			loadRecipes(),
+			makeRecipe({ id: "recipe-2", title: "Pancakes", currentServings: 2 }),
+		);
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		swipeLeft(screen.getByTestId("meal-plan-entry-e1"));
+		await user.click(
+			screen.getByRole("button", { name: "Change recipe for Breakfast" }),
+		);
+		await user.type(
+			screen.getByLabelText("Search recipes to swap in"),
+			"Pancakes",
+		);
+		await user.click(screen.getByRole("button", { name: "Pancakes" }));
+
+		expect(await screen.findByText("Pancakes")).toBeInTheDocument();
+		expect(screen.queryByText("Overnight Oats")).not.toBeInTheDocument();
+		const stored = JSON.parse(
+			window.localStorage.getItem("cookerist:meal-plans") ?? "[]",
+		) as MealPlan[];
+		expect(stored[0].entries[0]).toMatchObject({
+			recipeId: "recipe-2",
+			reused: true,
+		});
+		const storedRecipes = JSON.parse(
+			window.localStorage.getItem("cookerist:recipes") ?? "[]",
+		) as Recipe[];
+		expect(
+			storedRecipes.find((recipe) => recipe.id === "recipe-2")?.currentServings,
+		).toBe(4);
+	});
+
+	it("generates a brand-new recipe for an entry via a prompt", async () => {
+		generateRecipeMock.mockResolvedValueOnce({
+			type: "success",
+			recipe: {
+				title: "Tofu Scramble",
+				overview: "Turmeric-spiced tofu with peppers.",
+				baseServings: 2,
+				difficulty: "quick_and_easy",
+				estimatedMinutes: 15,
+				caloriesPerServing: 300,
+				ingredients: [],
+				steps: [],
+			},
+			truncated: false,
+		});
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		swipeLeft(screen.getByTestId("meal-plan-entry-e1"));
+		await user.click(
+			screen.getByRole("button", { name: "Change recipe for Breakfast" }),
+		);
+		await user.click(screen.getByRole("button", { name: "Generate new" }));
+		await user.type(
+			screen.getByLabelText("Describe a replacement dish"),
+			"tofu scramble",
+		);
+		await user.click(screen.getByRole("button", { name: "Generate" }));
+
+		expect(await screen.findByText("Tofu Scramble")).toBeInTheDocument();
+		expect(screen.queryByText("Overnight Oats")).not.toBeInTheDocument();
+		const storedRecipes = JSON.parse(
+			window.localStorage.getItem("cookerist:recipes") ?? "[]",
+		) as Recipe[];
+		expect(storedRecipes).toHaveLength(2);
+		expect(
+			storedRecipes.find((recipe) => recipe.title === "Tofu Scramble")
+				?.currentServings,
+		).toBe(4);
 	});
 });
 
