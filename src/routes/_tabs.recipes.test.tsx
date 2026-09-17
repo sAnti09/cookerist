@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadRecipes, saveRecipe, toStoredRecipe } from "#/lib/recipes-storage";
@@ -80,6 +80,22 @@ async function submitPrompt(prompt: string) {
 	const user = userEvent.setup();
 	await user.type(screen.getByLabelText("Describe a dish"), prompt);
 	await user.click(screen.getByRole("button", { name: "Get recipe" }));
+}
+
+// Deltas here (150px) are past SWIPE_THRESHOLD_PX (110) in
+// use-swipe-row-actions.ts.
+function swipeLeft(element: Element) {
+	fireEvent.touchStart(element, { touches: [{ clientX: 250, clientY: 0 }] });
+	fireEvent.touchEnd(element, {
+		changedTouches: [{ clientX: 100, clientY: 0 }],
+	});
+}
+
+function swipeRight(element: Element) {
+	fireEvent.touchStart(element, { touches: [{ clientX: 100, clientY: 0 }] });
+	fireEvent.touchEnd(element, {
+		changedTouches: [{ clientX: 250, clientY: 0 }],
+	});
 }
 
 async function selectPhoto(file: File) {
@@ -434,6 +450,79 @@ describe("Recipes screen", () => {
 			expect(
 				screen.queryByRole("button", { name: "Clear filters" }),
 			).not.toBeInTheDocument();
+		});
+	});
+
+	describe("swipe actions", () => {
+		it("swiping left on a recipe row opens the delete confirmation, and confirming removes it", async () => {
+			seedRecipe({ title: "Garlic Shrimp Pasta" });
+			await renderApp("/recipes");
+			const user = userEvent.setup();
+			const row = screen.getByText("Garlic Shrimp Pasta").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeLeft(row);
+
+			expect(
+				await screen.findByRole("alertdialog", {
+					name: "Delete this recipe?",
+				}),
+			).toBeInTheDocument();
+			await user.click(screen.getByRole("button", { name: "Delete" }));
+
+			expect(screen.queryByText("Garlic Shrimp Pasta")).not.toBeInTheDocument();
+			const stored = JSON.parse(
+				window.localStorage.getItem("cookerist:recipes") ?? "[]",
+			);
+			expect(stored).toHaveLength(0);
+		});
+
+		it("cancelling the swipe-left delete confirmation keeps the recipe", async () => {
+			seedRecipe({ title: "Garlic Shrimp Pasta" });
+			await renderApp("/recipes");
+			const user = userEvent.setup();
+			const row = screen.getByText("Garlic Shrimp Pasta").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeLeft(row);
+			await screen.findByRole("alertdialog", { name: "Delete this recipe?" });
+			await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+			expect(screen.getByText("Garlic Shrimp Pasta")).toBeInTheDocument();
+		});
+
+		it("swiping right on a recipe row with steps opens Cook Mode directly", async () => {
+			seedRecipe({ title: "Garlic Shrimp Pasta" });
+			await renderApp("/recipes");
+			const row = screen.getByText("Garlic Shrimp Pasta").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeRight(row);
+
+			expect(
+				await screen.findByLabelText("Exit cook mode"),
+			).toBeInTheDocument();
+		});
+
+		it("swiping right on a recipe row with no steps does nothing", async () => {
+			saveRecipe(
+				loadRecipes(),
+				toStoredRecipe("a prompt", {
+					...validRecipe,
+					title: "No Steps Dish",
+					steps: [],
+				}),
+			);
+			await renderApp("/recipes");
+			const row = screen.getByText("No Steps Dish").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeRight(row);
+
+			expect(screen.queryByLabelText("Exit cook mode")).not.toBeInTheDocument();
+			expect(
+				screen.getByRole("heading", { name: "Recipes" }),
+			).toBeInTheDocument();
 		});
 	});
 

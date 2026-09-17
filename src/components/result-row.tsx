@@ -1,5 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { Clock, Flame, Image as ImageIcon, Star } from "lucide-react";
+import {
+	ChefHat,
+	Clock,
+	Flame,
+	Image as ImageIcon,
+	Star,
+	Trash2,
+} from "lucide-react";
 import { Button } from "#/components/ui/button";
 import { DifficultyBadge } from "#/components/ui/difficulty-badge";
 import { isImageFile } from "#/lib/image-capture";
@@ -8,6 +15,7 @@ import {
 	formatEstimatedTime,
 	type Recipe,
 } from "#/lib/recipe";
+import { useSwipeRowActions } from "#/lib/use-swipe-row-actions";
 
 export type PendingRow = {
 	localId: string;
@@ -104,50 +112,86 @@ export function PendingResultRow({
 
 // Collapsed-only row — tapping navigates to the recipe's full-screen detail
 // page (/recipes/$recipeId) instead of expanding in place. Per the
-// nav-overhaul mockup, the row itself carries no action icons anymore
-// (favorite/modify/delete all moved to the detail page's header); the
-// favorite star here is a read-only status badge, shown only when the
-// recipe is actually favorited.
-export function RecipeResultRow({ recipe }: { recipe: Recipe }) {
+// nav-overhaul mockup, the row itself carries no *tappable* action icons
+// (favorite/modify all moved to the detail page's header); the favorite star
+// here is a read-only status badge, shown only when the recipe is actually
+// favorited. Delete and (when the recipe has steps to cook) Cook are instead
+// reached via swipe — see use-swipe-row-actions.ts — mirroring
+// meal-plan-entry-row.tsx's gesture. `onCook` is omitted entirely for a
+// recipe with no steps (nothing for "Start Cooking" to do), which also
+// disables the right-swipe drag itself rather than revealing a dead panel.
+export function RecipeResultRow({
+	recipe,
+	onDelete,
+	onCook,
+}: {
+	recipe: Recipe;
+	onDelete: () => void;
+	onCook?: () => void;
+}) {
 	const date = new Date(recipe.createdAt).toLocaleDateString(undefined, {
 		year: "numeric",
 		month: "short",
 		day: "numeric",
 	});
+	const swipe = useSwipeRowActions<HTMLAnchorElement>({
+		onSwipeLeft: onDelete,
+		onSwipeRight: onCook,
+	});
 
 	return (
-		<Link
-			to="/recipes/$recipeId"
-			params={{ recipeId: recipe.id }}
-			id={`recipe-${recipe.id}`}
-			data-testid={`recipe-row-${recipe.id}`}
-			className="card block scroll-mt-6 bg-card p-4 text-ink no-underline transition-colors hover:bg-bg2"
-		>
-			<h3 className="display-title text-lg text-ink">{recipe.title}</h3>
-			<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
-				<span>{date}</span>
-				{recipe.difficulty ? (
-					<DifficultyBadge difficulty={recipe.difficulty} />
-				) : null}
-				{recipe.estimatedMinutes != null ? (
-					<span className="inline-flex items-center gap-1 tabular-nums">
-						<Clock className="size-3" aria-hidden="true" />
-						{formatEstimatedTime(recipe.estimatedMinutes)}
-					</span>
-				) : null}
-				{recipe.caloriesPerServing != null ? (
-					<span className="inline-flex items-center gap-1 tabular-nums">
-						<Flame className="size-3" aria-hidden="true" />
-						{formatCaloriesPerServing(recipe.caloriesPerServing)}
-					</span>
-				) : null}
-				{recipe.favorite ? (
-					<Star
-						className="size-3 fill-accent text-accent"
-						aria-label="Favorited"
-					/>
-				) : null}
+		<div className="relative overflow-hidden rounded-[18px]">
+			{onCook ? (
+				<div
+					aria-hidden="true"
+					className="absolute inset-y-0 left-0 flex w-[72px] flex-col items-center justify-center gap-1 bg-accent text-[11px] font-semibold text-primary-foreground"
+				>
+					<ChefHat className="size-4" aria-hidden="true" />
+					Cook
+				</div>
+			) : null}
+			<div
+				aria-hidden="true"
+				className="absolute inset-y-0 right-0 flex w-[72px] flex-col items-center justify-center gap-1 bg-warn text-[11px] font-semibold text-warn-wash"
+			>
+				<Trash2 className="size-4" aria-hidden="true" />
+				Delete
 			</div>
-		</Link>
+			<Link
+				ref={swipe.ref}
+				to="/recipes/$recipeId"
+				params={{ recipeId: recipe.id }}
+				id={`recipe-${recipe.id}`}
+				data-testid={`recipe-row-${recipe.id}`}
+				{...swipe.handlers}
+				className="card block translate-x-0 scroll-mt-6 bg-card p-4 text-ink no-underline transition-transform duration-200"
+			>
+				<h3 className="display-title text-lg text-ink">{recipe.title}</h3>
+				<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
+					<span>{date}</span>
+					{recipe.difficulty ? (
+						<DifficultyBadge difficulty={recipe.difficulty} />
+					) : null}
+					{recipe.estimatedMinutes != null ? (
+						<span className="inline-flex items-center gap-1 tabular-nums">
+							<Clock className="size-3" aria-hidden="true" />
+							{formatEstimatedTime(recipe.estimatedMinutes)}
+						</span>
+					) : null}
+					{recipe.caloriesPerServing != null ? (
+						<span className="inline-flex items-center gap-1 tabular-nums">
+							<Flame className="size-3" aria-hidden="true" />
+							{formatCaloriesPerServing(recipe.caloriesPerServing)}
+						</span>
+					) : null}
+					{recipe.favorite ? (
+						<Star
+							className="size-3 fill-accent text-accent"
+							aria-label="Favorited"
+						/>
+					) : null}
+				</div>
+			</Link>
+		</div>
 	);
 }

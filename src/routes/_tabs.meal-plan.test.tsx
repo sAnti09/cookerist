@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MealPlan } from "#/lib/meal-plan";
@@ -42,6 +42,22 @@ function makePlan(overrides: Partial<MealPlan> = {}): MealPlan {
 		refineInstructions: [],
 		...overrides,
 	};
+}
+
+// Deltas here (150px) are past SWIPE_THRESHOLD_PX (110) in
+// use-swipe-row-actions.ts.
+function swipeLeft(element: Element) {
+	fireEvent.touchStart(element, { touches: [{ clientX: 250, clientY: 0 }] });
+	fireEvent.touchEnd(element, {
+		changedTouches: [{ clientX: 100, clientY: 0 }],
+	});
+}
+
+function swipeRight(element: Element) {
+	fireEvent.touchStart(element, { touches: [{ clientX: 100, clientY: 0 }] });
+	fireEvent.touchEnd(element, {
+		changedTouches: [{ clientX: 250, clientY: 0 }],
+	});
 }
 
 describe("Meal Plan screen", () => {
@@ -166,5 +182,60 @@ describe("Meal Plan screen", () => {
 		await user.click(screen.getByText("Sep 15 – Sep 21"));
 
 		expect(await screen.findByText("Oats")).toBeInTheDocument();
+	});
+
+	describe("swipe actions", () => {
+		it("swiping left on a meal plan row opens the delete confirmation, and confirming removes it", async () => {
+			saveMealPlan(loadMealPlans(), makePlan());
+			await renderApp("/meal-plan");
+			const user = userEvent.setup();
+			const row = screen.getByText("Sep 15 – Sep 21").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeLeft(row);
+
+			expect(
+				await screen.findByRole("alertdialog", {
+					name: "Delete this meal plan?",
+				}),
+			).toBeInTheDocument();
+			await user.click(screen.getByRole("button", { name: "Delete" }));
+
+			expect(screen.queryByText("Sep 15 – Sep 21")).not.toBeInTheDocument();
+			const stored = JSON.parse(
+				window.localStorage.getItem("cookerist:meal-plans") ?? "[]",
+			);
+			expect(stored).toHaveLength(0);
+		});
+
+		it("cancelling the swipe-left delete confirmation keeps the meal plan", async () => {
+			saveMealPlan(loadMealPlans(), makePlan());
+			await renderApp("/meal-plan");
+			const user = userEvent.setup();
+			const row = screen.getByText("Sep 15 – Sep 21").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeLeft(row);
+			await screen.findByRole("alertdialog", {
+				name: "Delete this meal plan?",
+			});
+			await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+			expect(screen.getByText("Sep 15 – Sep 21")).toBeInTheDocument();
+		});
+
+		it("swiping right on a meal plan row does nothing (no secondary action)", async () => {
+			saveMealPlan(loadMealPlans(), makePlan());
+			await renderApp("/meal-plan");
+			const row = screen.getByText("Sep 15 – Sep 21").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeRight(row);
+
+			expect(
+				screen.getByRole("heading", { name: "Meal Plan" }),
+			).toBeInTheDocument();
+			expect(screen.getByText("Sep 15 – Sep 21")).toBeInTheDocument();
+		});
 	});
 });

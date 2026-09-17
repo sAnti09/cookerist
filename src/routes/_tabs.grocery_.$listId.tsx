@@ -9,12 +9,25 @@ import { useAppData } from "#/lib/app-data-context";
 import { getGroceryListProgress } from "#/lib/grocery-list";
 import { cn } from "#/lib/utils";
 
+type GroceryDetailSearch = {
+	// Set when this route was opened via a right-swipe "Shop" on a grocery
+	// list row (see grocery-list-row.tsx) so Shop Mode opens immediately
+	// instead of requiring a second tap on "Start Shopping" — only ever set
+	// for a list with items, since that's the only case the row offers the
+	// swipe at all.
+	autoStart?: "shop";
+};
+
 export const Route = createFileRoute("/_tabs/grocery_/$listId")({
+	validateSearch: (search: Record<string, unknown>): GroceryDetailSearch => ({
+		autoStart: search.autoStart === "shop" ? "shop" : undefined,
+	}),
 	component: GroceryDetailScreen,
 });
 
 function GroceryDetailScreen() {
 	const { listId } = Route.useParams();
+	const search = Route.useSearch();
 	const navigate = useNavigate();
 	const {
 		groceryLists,
@@ -25,7 +38,9 @@ function GroceryDetailScreen() {
 		openEditGroceryList,
 	} = useAppData();
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
-	const [groceryModeOpen, setGroceryModeOpen] = useState(false);
+	const [groceryModeOpen, setGroceryModeOpen] = useState(
+		search.autoStart === "shop",
+	);
 	const list = groceryLists.find((l) => l.id === listId);
 
 	if (!list) {

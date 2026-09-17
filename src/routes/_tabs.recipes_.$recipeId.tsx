@@ -26,12 +26,18 @@ type RecipeDetailSearch = {
 	// anywhere in this app, added specifically for this case.
 	from?: "meal-plan";
 	planId?: string;
+	// Set when this route was opened via a right-swipe "Cook" on a recipe row
+	// (see result-row.tsx) so Cook Mode opens immediately instead of
+	// requiring a second tap on "Start Cooking" — only ever set for a recipe
+	// with steps, since that's the only case the row offers the swipe at all.
+	autoStart?: "cook";
 };
 
 export const Route = createFileRoute("/_tabs/recipes_/$recipeId")({
 	validateSearch: (search: Record<string, unknown>): RecipeDetailSearch => ({
 		from: search.from === "meal-plan" ? "meal-plan" : undefined,
 		planId: typeof search.planId === "string" ? search.planId : undefined,
+		autoStart: search.autoStart === "cook" ? "cook" : undefined,
 	}),
 	component: RecipeDetailScreen,
 });
@@ -49,7 +55,7 @@ function RecipeDetailScreen() {
 	} = useAppData();
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
-	const [cookModeOpen, setCookModeOpen] = useState(false);
+	const [cookModeOpen, setCookModeOpen] = useState(search.autoStart === "cook");
 	const recipe = recipes.find((r) => r.id === recipeId);
 
 	function handleBack() {

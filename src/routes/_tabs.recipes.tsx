@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FeatureSection } from "#/components/feature-section";
 import { OfflineBanner } from "#/components/offline-banner";
@@ -41,7 +41,8 @@ const PAGE_SIZE = 10;
 
 function RecipesScreen() {
 	const isOnline = useOnlineStatus();
-	const { recipes, createRecipe } = useAppData();
+	const navigate = useNavigate();
+	const { recipes, createRecipe, deleteRecipe } = useAppData();
 	const [pending, setPending] = useState<PendingRow[]>([]);
 	const [promptValue, setPromptValue] = useState("");
 	const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -51,6 +52,7 @@ function RecipesScreen() {
 	);
 	const [favoritesOnly, setFavoritesOnly] = useState(false);
 	const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+	const [deletingRecipeId, setDeletingRecipeId] = useState<string | null>(null);
 	const sentinelRef = useRef<HTMLDivElement | null>(null);
 	const isInitialFilterMount = useRef(true);
 	const mutation = useMutation({
@@ -347,11 +349,23 @@ function RecipesScreen() {
 						No recipes match your filters.
 					</p>
 				) : (
-					filteredRecipes
-						.slice(0, visibleCount)
-						.map((recipe) => (
-							<RecipeResultRow key={recipe.id} recipe={recipe} />
-						))
+					filteredRecipes.slice(0, visibleCount).map((recipe) => (
+						<RecipeResultRow
+							key={recipe.id}
+							recipe={recipe}
+							onDelete={() => setDeletingRecipeId(recipe.id)}
+							onCook={
+								recipe.steps.length > 0
+									? () =>
+											navigate({
+												to: "/recipes/$recipeId",
+												params: { recipeId: recipe.id },
+												search: { autoStart: "cook" },
+											})
+									: undefined
+							}
+						/>
+					))
 				)}
 				{hasMore ? <div ref={sentinelRef} aria-hidden="true" /> : null}
 			</div>
@@ -392,6 +406,22 @@ function RecipesScreen() {
 					handleResetAllData();
 				}}
 				onCancel={() => setResetConfirmOpen(false)}
+			/>
+			<ConfirmDialog
+				open={deletingRecipeId != null}
+				title="Delete this recipe?"
+				description={
+					deletingRecipeId
+						? `"${recipes.find((r) => r.id === deletingRecipeId)?.title}" will be permanently removed.`
+						: undefined
+				}
+				confirmLabel="Delete"
+				cancelLabel="Cancel"
+				onConfirm={() => {
+					if (deletingRecipeId) deleteRecipe(deletingRecipeId);
+					setDeletingRecipeId(null);
+				}}
+				onCancel={() => setDeletingRecipeId(null)}
 			/>
 		</div>
 	);

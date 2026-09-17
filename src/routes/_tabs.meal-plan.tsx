@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { MealPlanRow } from "#/components/meal-plan-row";
+import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { SearchInput } from "#/components/ui/search-input";
 import { ThemeToggle } from "#/components/ui/theme-toggle";
 import { useAppData } from "#/lib/app-data-context";
@@ -12,8 +13,9 @@ export const Route = createFileRoute("/_tabs/meal-plan")({
 });
 
 function MealPlanScreen() {
-	const { mealPlans } = useAppData();
+	const { mealPlans, deleteMealPlan } = useAppData();
 	const [search, setSearch] = useState("");
+	const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
 	const filteredPlans = useMemo(
 		() => filterMealPlans(mealPlans, search),
 		[mealPlans, search],
@@ -50,7 +52,13 @@ function MealPlanScreen() {
 						No meal plans match "{search.trim()}".
 					</p>
 				) : (
-					filteredPlans.map((plan) => <MealPlanRow key={plan.id} plan={plan} />)
+					filteredPlans.map((plan) => (
+						<MealPlanRow
+							key={plan.id}
+							plan={plan}
+							onDelete={() => setDeletingPlanId(plan.id)}
+						/>
+					))
 				)}
 			</div>
 
@@ -61,6 +69,19 @@ function MealPlanScreen() {
 			>
 				<Plus className="size-[22px]" aria-hidden="true" />
 			</Link>
+
+			<ConfirmDialog
+				open={deletingPlanId != null}
+				title="Delete this meal plan?"
+				description="This meal plan will be permanently removed. Any recipes it built stay in your Recipes list."
+				confirmLabel="Delete"
+				cancelLabel="Cancel"
+				onConfirm={() => {
+					if (deletingPlanId) deleteMealPlan(deletingPlanId);
+					setDeletingPlanId(null);
+				}}
+				onCancel={() => setDeletingPlanId(null)}
+			/>
 		</div>
 	);
 }

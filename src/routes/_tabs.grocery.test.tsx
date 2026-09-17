@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroceryList } from "#/lib/grocery-list";
@@ -35,6 +35,22 @@ function makeGroceryList(overrides: Partial<GroceryList> = {}): GroceryList {
 		expanded: false,
 		...overrides,
 	};
+}
+
+// Deltas here (150px) are past SWIPE_THRESHOLD_PX (110) in
+// use-swipe-row-actions.ts.
+function swipeLeft(element: Element) {
+	fireEvent.touchStart(element, { touches: [{ clientX: 250, clientY: 0 }] });
+	fireEvent.touchEnd(element, {
+		changedTouches: [{ clientX: 100, clientY: 0 }],
+	});
+}
+
+function swipeRight(element: Element) {
+	fireEvent.touchStart(element, { touches: [{ clientX: 100, clientY: 0 }] });
+	fireEvent.touchEnd(element, {
+		changedTouches: [{ clientX: 250, clientY: 0 }],
+	});
 }
 
 describe("Grocery screen", () => {
@@ -168,5 +184,84 @@ describe("Grocery screen", () => {
 		);
 		expect(stored).toHaveLength(1);
 		expect(stored[0].name).toMatch(/for 1 recipe$/);
+	});
+
+	describe("swipe actions", () => {
+		it("swiping left on a grocery list row opens the delete confirmation, and confirming removes it", async () => {
+			saveGroceryList(
+				loadGroceryLists(),
+				makeGroceryList({ name: "Weeknight Groceries" }),
+			);
+			await renderApp("/grocery");
+			const user = userEvent.setup();
+			const row = screen.getByText("Weeknight Groceries").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeLeft(row);
+
+			expect(
+				await screen.findByRole("alertdialog", {
+					name: "Delete this grocery list?",
+				}),
+			).toBeInTheDocument();
+			await user.click(screen.getByRole("button", { name: "Delete" }));
+
+			expect(screen.queryByText("Weeknight Groceries")).not.toBeInTheDocument();
+			const stored = JSON.parse(
+				window.localStorage.getItem("cookerist:grocery-lists") ?? "[]",
+			);
+			expect(stored).toHaveLength(0);
+		});
+
+		it("cancelling the swipe-left delete confirmation keeps the grocery list", async () => {
+			saveGroceryList(
+				loadGroceryLists(),
+				makeGroceryList({ name: "Weeknight Groceries" }),
+			);
+			await renderApp("/grocery");
+			const user = userEvent.setup();
+			const row = screen.getByText("Weeknight Groceries").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeLeft(row);
+			await screen.findByRole("alertdialog", {
+				name: "Delete this grocery list?",
+			});
+			await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+			expect(screen.getByText("Weeknight Groceries")).toBeInTheDocument();
+		});
+
+		it("swiping right on a grocery list row with items opens Shop mode directly", async () => {
+			saveGroceryList(
+				loadGroceryLists(),
+				makeGroceryList({ name: "Weeknight Groceries" }),
+			);
+			await renderApp("/grocery");
+			const row = screen.getByText("Weeknight Groceries").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeRight(row);
+
+			expect(
+				await screen.findByLabelText("Exit grocery mode"),
+			).toBeInTheDocument();
+		});
+
+		it("swiping right on an empty grocery list row does nothing", async () => {
+			saveGroceryList(
+				loadGroceryLists(),
+				makeGroceryList({ name: "Empty List", items: [] }),
+			);
+			await renderApp("/grocery");
+			const row = screen.getByText("Empty List").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeRight(row);
+
+			expect(
+				screen.queryByLabelText("Exit grocery mode"),
+			).not.toBeInTheDocument();
+		});
 	});
 });

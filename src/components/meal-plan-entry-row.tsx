@@ -1,30 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { RefreshCcw, Trash2 } from "lucide-react";
-import type {
-	MouseEvent as ReactMouseEvent,
-	TouchEvent as ReactTouchEvent,
-} from "react";
-import { useRef } from "react";
 import { MEAL_TYPE_LABELS, type MealPlanEntry } from "#/lib/meal-plan";
 import type { Recipe } from "#/lib/recipe";
+import { useSwipeRowActions } from "#/lib/use-swipe-row-actions";
 import { cn } from "#/lib/utils";
-
-// Same threshold/axis-dominance approach as cook-mode.tsx's swipe-to-navigate
-// gesture decides whether a gesture counts as a deliberate swipe at all.
-// Dragging left past this and releasing deletes the entry (still via the
-// same confirmation dialog a tap on a Delete button would have opened);
-// dragging right past it opens the change-recipe dialog. There's no
-// intermediate "revealed, tap to trigger" state — releasing past the
-// threshold runs the action immediately, and the card always springs back
-// to rest either way. Set well past DRAG_CLAMP_PX (the card's own visual
-// travel limit) on purpose: the Change/Delete hint is already fully
-// revealed by the time the card maxes out, and the extra finger travel
-// beyond that — with no further visual feedback — is what makes committing
-// feel deliberate rather than accidental.
-const SWIPE_THRESHOLD_PX = 110;
-// How far the card can visually slide while dragging — matches the hint
-// panels' own width below.
-const DRAG_CLAMP_PX = 72;
 
 export function MealPlanEntryRow({
 	entry,
@@ -41,100 +20,10 @@ export function MealPlanEntryRow({
 	onDelete: () => void;
 	onChangeRecipe: () => void;
 }) {
-	const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-	// Whether the in-progress gesture has committed to being a horizontal
-	// drag (as opposed to a vertical scroll) — decided once, on the first
-	// touchmove that moves far enough to tell the two apart.
-	const isDraggingRef = useRef(false);
-	// The card's own DOM node, mutated directly (bypassing React state/
-	// render) while dragging — see the fix in the sibling commit for why:
-	// touchmove/touchend are prioritized differently by React's scheduler,
-	// so driving the live offset through useState risked a stale drag frame
-	// landing after touchend had already reset things. Direct DOM writes are
-	// synchronous and can't race with anything.
-	const linkRef = useRef<HTMLAnchorElement>(null);
-	// Set on a recognized swipe's touchend so the synthetic click most
-	// browsers fire right after doesn't also trigger the Link's navigation.
-	const suppressClickRef = useRef(false);
-
-	function settleToClosed() {
-		const el = linkRef.current;
-		if (!el) return;
-		el.style.transitionDuration = ""; // restore the duration-200 class's timing
-		el.style.transform = "translateX(0px)";
-	}
-
-	function handleTouchStart(event: ReactTouchEvent<HTMLAnchorElement>) {
-		const touch = event.touches[0];
-		touchStartRef.current = touch
-			? { x: touch.clientX, y: touch.clientY }
-			: null;
-		isDraggingRef.current = false;
-	}
-
-	function handleTouchMove(event: ReactTouchEvent<HTMLAnchorElement>) {
-		const start = touchStartRef.current;
-		const touch = event.touches[0];
-		if (!start || !touch) return;
-
-		const deltaX = touch.clientX - start.x;
-		const deltaY = touch.clientY - start.y;
-		if (!isDraggingRef.current) {
-			if (Math.abs(deltaX) < Math.abs(deltaY)) return; // a scroll, not a swipe
-			isDraggingRef.current = true;
-		}
-		const next = Math.max(-DRAG_CLAMP_PX, Math.min(DRAG_CLAMP_PX, deltaX));
-		const el = linkRef.current;
-		if (el) {
-			// Follows the finger 1:1 with no easing; settling back onto the
-			// duration-200 class on release (or cancel) is what animates the
-			// spring back to rest.
-			el.style.transitionDuration = "0s";
-			el.style.transform = `translateX(${next}px)`;
-		}
-	}
-
-	function handleTouchEnd(event: ReactTouchEvent<HTMLAnchorElement>) {
-		const start = touchStartRef.current;
-		touchStartRef.current = null;
-		const wasDragging = isDraggingRef.current;
-		isDraggingRef.current = false;
-
-		// The card only ever moves away from rest via a real drag — a plain
-		// tap (isDraggingRef never set) has nothing to spring back from.
-		const touch = event.changedTouches[0];
-		if (!start || !touch) {
-			if (wasDragging) settleToClosed();
-			return;
-		}
-
-		const deltaX = touch.clientX - start.x;
-		const deltaY = touch.clientY - start.y;
-		const isSwipe =
-			Math.abs(deltaX) >= SWIPE_THRESHOLD_PX &&
-			Math.abs(deltaX) >= Math.abs(deltaY);
-
-		if (wasDragging) settleToClosed();
-		if (!isSwipe) return;
-
-		suppressClickRef.current = true;
-		if (deltaX < 0) onDelete();
-		else onChangeRecipe();
-	}
-
-	function handleTouchCancel() {
-		touchStartRef.current = null;
-		if (isDraggingRef.current) settleToClosed();
-		isDraggingRef.current = false;
-	}
-
-	// A swipe that just triggered Delete/Change suppresses the one
-	// navigation-triggering click the browser fires right after touchend.
-	function handleClick(event: ReactMouseEvent<HTMLAnchorElement>) {
-		if (!suppressClickRef.current) return;
-		event.preventDefault();
-		suppressClickRef.current = false;
-	}
+	const swipe = useSwipeRowActions<HTMLAnchorElement>({
+		onSwipeLeft: onDelete,
+		onSwipeRight: onChangeRecipe,
+	});
 
 	return (
 		<div className="relative overflow-hidden rounded-[18px]">
@@ -153,19 +42,15 @@ export function MealPlanEntryRow({
 				Delete
 			</div>
 			<Link
-				ref={linkRef}
+				ref={swipe.ref}
 				to="/recipes/$recipeId"
 				params={{ recipeId: recipe.id }}
 				search={{ from: "meal-plan", planId }}
 				data-testid={`meal-plan-entry-${entry.id}`}
-				onTouchStart={handleTouchStart}
-				onTouchMove={handleTouchMove}
-				onTouchEnd={handleTouchEnd}
-				onTouchCancel={handleTouchCancel}
-				onClick={handleClick}
+				{...swipe.handlers}
 				// translate-x-0 never actually moves anything (the drag/rest
 				// position is always driven by the separate `transform` property
-				// via linkRef, not `translate`) — it's here purely so the card has
+				// via swipe.ref, not `translate`) — it's here purely so the card has
 				// a non-"none" translate value from the very first paint, which
 				// per the CSS stacking-context rules gives it its own stacking
 				// context. Without that, this plain static-flow element would

@@ -1,7 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { GroceryListRow } from "#/components/grocery-list-row";
+import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { SearchInput } from "#/components/ui/search-input";
 import { ThemeToggle } from "#/components/ui/theme-toggle";
 import { useAppData } from "#/lib/app-data-context";
@@ -12,8 +13,11 @@ export const Route = createFileRoute("/_tabs/grocery")({
 });
 
 function GroceryScreen() {
-	const { groceryLists, openCreateGroceryList } = useAppData();
+	const navigate = useNavigate();
+	const { groceryLists, openCreateGroceryList, deleteGroceryList } =
+		useAppData();
 	const [search, setSearch] = useState("");
+	const [deletingListId, setDeletingListId] = useState<string | null>(null);
 	const filteredLists = useMemo(
 		() => filterGroceryLists(groceryLists, search),
 		[groceryLists, search],
@@ -51,7 +55,21 @@ function GroceryScreen() {
 					</p>
 				) : (
 					filteredLists.map((list) => (
-						<GroceryListRow key={list.id} list={list} />
+						<GroceryListRow
+							key={list.id}
+							list={list}
+							onDelete={() => setDeletingListId(list.id)}
+							onShop={
+								list.items.length > 0
+									? () =>
+											navigate({
+												to: "/grocery/$listId",
+												params: { listId: list.id },
+												search: { autoStart: "shop" },
+											})
+									: undefined
+							}
+						/>
 					))
 				)}
 			</div>
@@ -64,6 +82,23 @@ function GroceryScreen() {
 			>
 				<Plus className="size-[22px]" aria-hidden="true" />
 			</button>
+
+			<ConfirmDialog
+				open={deletingListId != null}
+				title="Delete this grocery list?"
+				description={
+					deletingListId
+						? `"${groceryLists.find((l) => l.id === deletingListId)?.name}" will be permanently removed.`
+						: undefined
+				}
+				confirmLabel="Delete"
+				cancelLabel="Cancel"
+				onConfirm={() => {
+					if (deletingListId) deleteGroceryList(deletingListId);
+					setDeletingListId(null);
+				}}
+				onCancel={() => setDeletingListId(null)}
+			/>
 		</div>
 	);
 }
