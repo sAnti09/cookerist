@@ -38,6 +38,12 @@ export type GroceryList = {
 	recipeIds: string[];
 	items: GroceryListItem[];
 	expanded: boolean;
+	// Keys (see suggestGroceryMerges/suggestionKey in suggest-grocery-merges.ts)
+	// of merge suggestions the user has explicitly said "not the same" to, so
+	// the same pair of item names doesn't keep re-prompting on this list.
+	// Absent/undefined on a list saved before this field existed — treated as
+	// no dismissals.
+	dismissedMergeSuggestionKeys?: string[];
 };
 
 export const GROCERY_LIST_NAME_MAX_LENGTH = 255;

@@ -578,8 +578,46 @@ describe("GroceryListDetail", () => {
 		});
 	});
 
-	it("dismisses a merge suggestion and does not re-show it for the same pair", async () => {
+	it("persists a dismissed merge suggestion onto the list and does not re-show it for the same pair", async () => {
 		const user = userEvent.setup();
+		const itemsForDismiss: GroceryList["items"] = [
+			{
+				id: "item-1",
+				text: "yellow onion",
+				quantity: 500,
+				unit: "g",
+				checked: false,
+				source: "recipe",
+			},
+			{
+				id: "item-2",
+				text: "onion",
+				quantity: 300,
+				unit: "g",
+				checked: false,
+				source: "recipe",
+			},
+		];
+		const { onUpdate, rerenderWithList } = renderDetail({
+			items: itemsForDismiss,
+		});
+
+		await user.click(screen.getByRole("button", { name: "Not the same" }));
+
+		expect(onUpdate).toHaveBeenCalledTimes(1);
+		const updated = onUpdate.mock.calls[0][0] as GroceryList;
+		expect(updated.dismissedMergeSuggestionKeys).toEqual([
+			"onion::yellow onion",
+		]);
+
+		rerenderWithList(updated);
+
+		expect(
+			screen.queryByText(/might be the same item/),
+		).not.toBeInTheDocument();
+	});
+
+	it("does not re-show a merge suggestion already dismissed on a prior visit to this list", () => {
 		renderDetail({
 			items: [
 				{
@@ -599,9 +637,8 @@ describe("GroceryListDetail", () => {
 					source: "recipe",
 				},
 			],
+			dismissedMergeSuggestionKeys: ["onion::yellow onion"],
 		});
-
-		await user.click(screen.getByRole("button", { name: "Not the same" }));
 
 		expect(
 			screen.queryByText(/might be the same item/),

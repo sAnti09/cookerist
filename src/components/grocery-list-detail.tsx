@@ -80,12 +80,6 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 	onUpdateRecipes,
 }: GroceryListDetailProps) {
 	const [search, setSearch] = useState("");
-	// This detail view is now a stable route (no more collapse/expand
-	// remount cycle), so a dismissal can just live here instead of being
-	// lifted to an outlasting parent.
-	const [dismissedSuggestionKeys, setDismissedSuggestionKeys] = useState<
-		Set<string>
-	>(new Set());
 
 	function handleToggleItem(id: string) {
 		const result = toggleGroceryListItem(list, recipes, id);
@@ -106,6 +100,16 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 			checked,
 		);
 		if (affectedRecipes.length > 0) onUpdateRecipes(affectedRecipes);
+	}
+
+	function handleDismissSuggestion(suggestion: GroceryMergeSuggestion) {
+		const key = suggestionKey(suggestion);
+		const dismissed = list.dismissedMergeSuggestionKeys ?? [];
+		if (dismissed.includes(key)) return;
+		onUpdate({
+			...list,
+			dismissedMergeSuggestionKeys: [...dismissed, key],
+		});
 	}
 
 	function handleMergeSuggestion(suggestion: GroceryMergeSuggestion) {
@@ -159,8 +163,10 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 		() => suggestGroceryMerges(list.items),
 		[list.items],
 	);
+	const dismissedSuggestionKeys = list.dismissedMergeSuggestionKeys ?? [];
 	const visibleSuggestion = mergeSuggestions.find(
-		(suggestion) => !dismissedSuggestionKeys.has(suggestionKey(suggestion)),
+		(suggestion) =>
+			!dismissedSuggestionKeys.includes(suggestionKey(suggestion)),
 	);
 	// Groups the "From recipes" section by grocery-store category (see
 	// grocery-category.ts) — recipeItems is already checked-last+alphabetical
@@ -203,11 +209,7 @@ export const GroceryListDetail = memo(function GroceryListDetail({
 						<div className="flex shrink-0 gap-2">
 							<Button
 								variant="secondary"
-								onClick={() =>
-									setDismissedSuggestionKeys((keys) =>
-										new Set(keys).add(suggestionKey(visibleSuggestion)),
-									)
-								}
+								onClick={() => handleDismissSuggestion(visibleSuggestion)}
 							>
 								Not the same
 							</Button>
