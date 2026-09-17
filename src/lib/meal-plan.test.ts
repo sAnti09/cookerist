@@ -4,6 +4,7 @@ import {
 	cycleSlot,
 	DEFAULT_ENABLED_MEAL_TYPES,
 	defaultSlots,
+	diffMealPlanEntries,
 	enabledSlots,
 	enumerateDays,
 	filterMealPlanDaysBySearch,
@@ -11,11 +12,13 @@ import {
 	formatMealPlanDay,
 	groceryListSignature,
 	groupMealPlanEntriesByDay,
+	groupMealPlanEntryDiffsByDay,
 	isEntryServingsEdited,
 	isGroceryListStale,
 	MAX_DISH_COUNT_PER_SLOT,
 	MAX_PLAN_DAYS,
 	type MealPlan,
+	type MealPlanDraftLikeEntry,
 	type MealPlanEntry,
 	type MealSlotConfig,
 	resizeSlotsForDays,
@@ -342,6 +345,111 @@ describe("groupMealPlanEntriesByDay", () => {
 			"dinner-0",
 			"dinner-1",
 		]);
+	});
+});
+
+function makeDraftLikeEntry(
+	overrides: Partial<MealPlanDraftLikeEntry> = {},
+): MealPlanDraftLikeEntry {
+	return {
+		day: "2026-09-15",
+		mealType: "dinner",
+		slotIndex: 0,
+		title: "Veggie Stir-Fry",
+		overview: "Crisp vegetables in a garlic-ginger sauce.",
+		...overrides,
+	};
+}
+
+describe("diffMealPlanEntries", () => {
+	it("marks a same-slot entry with identical title/overview as unchanged", () => {
+		const entry = makeDraftLikeEntry();
+
+		const diffs = diffMealPlanEntries([entry], [entry]);
+
+		expect(diffs).toEqual([{ ...entry, status: "unchanged" }]);
+	});
+
+	it("marks a same-slot entry with a different title or overview as edited, keeping the before values", () => {
+		const before = makeDraftLikeEntry({ title: "Overnight Oats" });
+		const after = makeDraftLikeEntry({ title: "Tofu Scramble" });
+
+		const diffs = diffMealPlanEntries([before], [after]);
+
+		expect(diffs).toEqual([
+			{
+				...after,
+				status: "edited",
+				previousTitle: "Overnight Oats",
+				previousOverview: after.overview,
+			},
+		]);
+	});
+
+	it("marks a slot present only in the next list as inserted", () => {
+		const inserted = makeDraftLikeEntry({ slotIndex: 1 });
+
+		const diffs = diffMealPlanEntries([], [inserted]);
+
+		expect(diffs).toEqual([{ ...inserted, status: "inserted" }]);
+	});
+
+	it("marks a slot present only in the previous list as removed", () => {
+		const removed = makeDraftLikeEntry({ slotIndex: 1 });
+
+		const diffs = diffMealPlanEntries([removed], []);
+
+		expect(diffs).toEqual([{ ...removed, status: "removed" }]);
+	});
+
+	it("classifies every slot independently across a mixed before/after pair", () => {
+		const unchanged = makeDraftLikeEntry({
+			mealType: "breakfast",
+			title: "Same Dish",
+		});
+		const editedBefore = makeDraftLikeEntry({
+			mealType: "lunch",
+			title: "Old Lunch",
+		});
+		const editedAfter = makeDraftLikeEntry({
+			mealType: "lunch",
+			title: "New Lunch",
+		});
+		const removed = makeDraftLikeEntry({ mealType: "dinner" });
+		const inserted = makeDraftLikeEntry({ mealType: "afternoon_snack" });
+
+		const diffs = diffMealPlanEntries(
+			[unchanged, editedBefore, removed],
+			[unchanged, editedAfter, inserted],
+		);
+
+		const byMealType = new Map(diffs.map((d) => [d.mealType, d.status]));
+		expect(byMealType.get("breakfast")).toBe("unchanged");
+		expect(byMealType.get("lunch")).toBe("edited");
+		expect(byMealType.get("dinner")).toBe("removed");
+		expect(byMealType.get("afternoon_snack")).toBe("inserted");
+	});
+});
+
+describe("groupMealPlanEntryDiffsByDay", () => {
+	it("groups by day and orders by meal type then slotIndex, including a removed entry in its original slot", () => {
+		const diffs = diffMealPlanEntries(
+			[
+				makeDraftLikeEntry({ day: "2026-09-16", mealType: "dinner" }),
+				makeDraftLikeEntry({ day: "2026-09-15", mealType: "lunch" }),
+			],
+			[makeDraftLikeEntry({ day: "2026-09-15", mealType: "breakfast" })],
+		);
+
+		const days = groupMealPlanEntryDiffsByDay(diffs);
+
+		expect(days.map((d) => d.day)).toEqual(["2026-09-15", "2026-09-16"]);
+		expect(
+			days.find((d) => d.day === "2026-09-15")?.entries.map((e) => e.status),
+		).toEqual(["inserted", "removed"]);
+		expect(
+			days.find((d) => d.day === "2026-09-16")?.entries.map((e) => e.status),
+		).toEqual(["removed"]);
 	});
 });
 

@@ -432,3 +432,110 @@ export function groupMealPlanEntriesByDay(
 			}),
 		}));
 }
+
+export type MealPlanEntryDiffStatus =
+	| "unchanged"
+	| "edited"
+	| "inserted"
+	| "removed";
+
+// Structurally identical to groq/schema.ts's MealPlanDraftEntry (day,
+// mealType, slotIndex, title, overview) — declared locally instead of
+// imported from there to avoid a circular import (schema.ts imports
+// MEAL_TYPES from this module). Callers can pass a MealPlanDraftEntry
+// directly; TS structural typing accepts it.
+export type MealPlanDraftLikeEntry = {
+	day: string;
+	mealType: MealType;
+	slotIndex: number;
+	title: string;
+	overview: string;
+};
+
+export type MealPlanEntryDiff = MealPlanDraftLikeEntry & {
+	status: MealPlanEntryDiffStatus;
+	// Set only when status is "edited" — the pre-refine title/overview, so
+	// the draft screen can render a struck-through before value next to the
+	// new one.
+	previousTitle?: string;
+	previousOverview?: string;
+};
+
+function mealPlanSlotKey(entry: {
+	day: string;
+	mealType: MealType;
+	slotIndex: number;
+}): string {
+	return `${entry.day}|${entry.mealType}|${entry.slotIndex}`;
+}
+
+// Compares a refine call's before/after entry lists to classify every slot
+// as carried over unchanged, edited in place, newly inserted, or dropped —
+// drives the draft screen's diff-indicator styling once a refine completes.
+// Matches slots by (day, mealType, slotIndex) rather than entry id: ids are
+// regenerated fresh on every refine (see meal-plan-draft.tsx), so the slot
+// triple Groq echoes back is the only stable correlation key across a
+// refine round.
+export function diffMealPlanEntries(
+	previous: MealPlanDraftLikeEntry[],
+	next: MealPlanDraftLikeEntry[],
+): MealPlanEntryDiff[] {
+	const previousByKey = new Map(
+		previous.map((entry) => [mealPlanSlotKey(entry), entry]),
+	);
+	const nextKeys = new Set(next.map((entry) => mealPlanSlotKey(entry)));
+
+	const diffs: MealPlanEntryDiff[] = next.map((entry) => {
+		const before = previousByKey.get(mealPlanSlotKey(entry));
+		if (!before) return { ...entry, status: "inserted" };
+		if (before.title !== entry.title || before.overview !== entry.overview) {
+			return {
+				...entry,
+				status: "edited",
+				previousTitle: before.title,
+				previousOverview: before.overview,
+			};
+		}
+		return { ...entry, status: "unchanged" };
+	});
+
+	for (const entry of previous) {
+		if (!nextKeys.has(mealPlanSlotKey(entry))) {
+			diffs.push({ ...entry, status: "removed" });
+		}
+	}
+
+	return diffs;
+}
+
+export type MealPlanEntryDiffDay = {
+	day: string;
+	entries: MealPlanEntryDiff[];
+};
+
+// Same day/meal-type/slotIndex ordering as groupMealPlanEntriesByDay, for
+// the diff-indicator variant of the draft list — a removed entry (absent
+// from `next`) still sorts into its original slot position among its day's
+// other entries.
+export function groupMealPlanEntryDiffsByDay(
+	diffs: MealPlanEntryDiff[],
+): MealPlanEntryDiffDay[] {
+	const byDay = new Map<string, MealPlanEntryDiff[]>();
+	for (const diff of diffs) {
+		const list = byDay.get(diff.day);
+		if (list) list.push(diff);
+		else byDay.set(diff.day, [diff]);
+	}
+	const mealTypeOrder = new Map(MEAL_TYPES.map((type, index) => [type, index]));
+	return Array.from(byDay.entries())
+		.sort(([a], [b]) => a.localeCompare(b))
+		.map(([day, dayDiffs]) => ({
+			day,
+			entries: [...dayDiffs].sort((a, b) => {
+				const typeDiff =
+					(mealTypeOrder.get(a.mealType) ?? 0) -
+					(mealTypeOrder.get(b.mealType) ?? 0);
+				return typeDiff !== 0 ? typeDiff : a.slotIndex - b.slotIndex;
+			}),
+		}));
+}

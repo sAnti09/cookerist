@@ -151,7 +151,7 @@ describe("Meal plan detail screen — draft", () => {
 		expect(screen.getByText("Overnight Oats")).toBeInTheDocument();
 	});
 
-	it("refines the draft and replaces the entries", async () => {
+	it("refines the draft, replaces the entries, and shows a struck-through before value for an edited slot", async () => {
 		refineMealPlanDraftMock.mockResolvedValueOnce({
 			type: "success",
 			entries: [
@@ -175,7 +175,61 @@ describe("Meal plan detail screen — draft", () => {
 		await user.click(screen.getByRole("button", { name: "Refine plan" }));
 
 		expect(await screen.findByText("Tofu Scramble")).toBeInTheDocument();
-		expect(screen.queryByText("Overnight Oats")).not.toBeInTheDocument();
+		expect(screen.getByText("Edited · Breakfast")).toBeInTheDocument();
+		// Same day/mealType/slotIndex as the pre-refine entry, different title
+		// — the draft screen's diff indicator keeps the old value visible,
+		// struck through, next to the new one, rather than dropping it.
+		const before = screen.getByText("Overnight Oats");
+		expect(before).toBeInTheDocument();
+		expect(before).toHaveClass("line-through");
+	});
+
+	it("diffs a second refine round against the original entries, not the round before it", async () => {
+		refineMealPlanDraftMock
+			.mockResolvedValueOnce({
+				type: "success",
+				entries: [
+					{
+						day: "2026-09-15",
+						mealType: "breakfast",
+						slotIndex: 0,
+						title: "Tofu Scramble",
+						overview: "Turmeric-spiced tofu with peppers.",
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				type: "success",
+				entries: [
+					{
+						day: "2026-09-15",
+						mealType: "breakfast",
+						slotIndex: 0,
+						title: "Chickpea Scramble",
+						overview: "Spiced chickpeas with turmeric and peppers.",
+					},
+				],
+			});
+		saveMealPlan(loadMealPlans(), makePlan());
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+		const input = screen.getByLabelText("Describe a change to this plan");
+		const submit = screen.getByRole("button", { name: "Refine plan" });
+
+		await user.type(input, "make it vegan");
+		await user.click(submit);
+		await screen.findByText("Tofu Scramble");
+
+		await user.type(input, "swap the tofu for chickpeas");
+		await user.click(submit);
+
+		expect(await screen.findByText("Chickpea Scramble")).toBeInTheDocument();
+		// The diff on this second round should still be measured against the
+		// plan's true original entry ("Overnight Oats"), not the
+		// first round's intermediate result ("Tofu Scramble") — the latter
+		// should no longer appear anywhere once the second refine lands.
+		expect(screen.getByText("Overnight Oats")).toHaveClass("line-through");
+		expect(screen.queryByText("Tofu Scramble")).not.toBeInTheDocument();
 	});
 
 	it("passes the plan's original description along with a refine instruction", async () => {
@@ -420,6 +474,21 @@ describe("Meal plan detail screen — ready", () => {
 			screen.queryByRole("button", { name: "Discard" }),
 		).not.toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+	});
+
+	it("shows an adjusted plan's untouched entries with the default style, not as suggestions", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		await user.click(screen.getByRole("button", { name: "Adjust plan" }));
+
+		// Nothing has been refined yet — these are the plan's own existing
+		// entries, not new suggestions, so no "Suggested" badge should show.
+		expect(await screen.findByText("Overnight Oats")).toBeInTheDocument();
+		expect(screen.queryByText(/Suggested/)).not.toBeInTheDocument();
+		expect(screen.getByText("Breakfast")).toBeInTheDocument();
 	});
 
 	it("enables Approve & build once a refine actually changes the adjusted plan", async () => {

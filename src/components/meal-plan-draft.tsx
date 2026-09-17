@@ -4,10 +4,14 @@ import { useState } from "react";
 import { Button } from "#/components/ui/button";
 import type { MealPlanDraftEntry } from "#/lib/groq/schema";
 import {
+	diffMealPlanEntries,
 	formatMealPlanDay,
 	groupMealPlanEntriesByDay,
+	groupMealPlanEntryDiffsByDay,
 	MEAL_TYPE_LABELS,
 	type MealPlan,
+	type MealPlanEntryDiff,
+	type MealPlanEntryDiffDay,
 } from "#/lib/meal-plan";
 import { getUserTimezone } from "#/lib/user-region";
 import { refineMealPlanDraft } from "#/server/meal-plan";
@@ -23,6 +27,79 @@ function toDraftEntries(plan: MealPlan): MealPlanDraftEntry[] {
 		title: entry.suggestedTitle,
 		overview: entry.suggestedOverview,
 	}));
+}
+
+// Renders one entry in the draft list, styled per its diff status against
+// the original entries this draft session opened with (or, before any
+// refine has happened yet, every entry is treated as freshly "inserted" —
+// see MealPlanDraft below).
+function MealPlanDiffEntryCard({ entry }: { entry: MealPlanEntryDiff }) {
+	const label = MEAL_TYPE_LABELS[entry.mealType];
+
+	if (entry.status === "unchanged") {
+		return (
+			<div className="rounded-[18px] border border-line bg-surface p-3.5">
+				<span className="font-bold text-[10px] text-ink-dim uppercase tracking-wide">
+					{label}
+				</span>
+				<p className="mt-1 font-semibold text-ink text-sm">{entry.title}</p>
+				<p className="mt-0.5 text-ink-dim text-xs">{entry.overview}</p>
+			</div>
+		);
+	}
+
+	if (entry.status === "removed") {
+		return (
+			<div className="rounded-[18px] border border-warn/35 bg-warn-wash p-3.5">
+				<span className="font-bold text-[10px] text-warn uppercase tracking-wide">
+					Deleted · {label}
+				</span>
+				<p className="mt-1 font-semibold text-sm text-warn line-through">
+					{entry.title}
+				</p>
+				<p className="mt-0.5 text-warn/70 text-xs line-through">
+					{entry.overview}
+				</p>
+			</div>
+		);
+	}
+
+	// "edited" and "inserted" share this card shape — only the badge label
+	// and (for "edited") a before → after line differ. Same neutral
+	// background/border as the "unchanged" card (per the app's own card
+	// rule: cards are separated by a border + shadow, never a contrasting
+	// fill) — the accent color lives only in the label text.
+	const titleChanged =
+		entry.status === "edited" && entry.previousTitle !== entry.title;
+	const overviewChanged =
+		entry.status === "edited" && entry.previousOverview !== entry.overview;
+	return (
+		<div className="rounded-[18px] border border-line bg-surface p-3.5">
+			<span className="font-bold text-[10px] text-accent uppercase tracking-wide">
+				{entry.status === "edited" ? "Edited" : "Suggested"} · {label}
+			</span>
+			{titleChanged ? (
+				<p className="mt-1 text-sm">
+					<span className="text-ink-dim text-xs line-through">
+						{entry.previousTitle}
+					</span>{" "}
+					→ <span className="font-semibold text-ink">{entry.title}</span>
+				</p>
+			) : (
+				<p className="mt-1 font-semibold text-ink text-sm">{entry.title}</p>
+			)}
+			{overviewChanged ? (
+				<p className="mt-0.5 text-xs">
+					<span className="text-ink-dim line-through">
+						{entry.previousOverview}
+					</span>{" "}
+					→ <span className="text-ink-dim">{entry.overview}</span>
+				</p>
+			) : (
+				<p className="mt-0.5 text-ink-dim text-xs">{entry.overview}</p>
+			)}
+		</div>
+	);
 }
 
 export function MealPlanDraft({
@@ -44,6 +121,23 @@ export function MealPlanDraft({
 	// already-built plan's "Adjust plan"). Only matters for the latter: see
 	// approveDisabled below.
 	const [hasRefined, setHasRefined] = useState(false);
+	// The entries as they stood the moment this draft session opened —
+	// captured once via the lazy initializer, never updated again — so every
+	// refine round's diff is always measured against the original plan (a
+	// brand-new plan's first suggestions, or an already-built plan's
+	// pre-adjustment entries), not just the round before it. That way a
+	// slot edited twice in a row still shows one before → after span from
+	// the true original, and a slot edited then reverted back to its
+	// original value correctly reads as unchanged rather than "edited".
+	const [baselineEntries] = useState<MealPlanDraftEntry[]>(() =>
+		toDraftEntries(plan),
+	);
+	// Set once the first refine of this draft session completes — the diff
+	// of the baseline above against the latest refine result, grouped by
+	// day. Null before any refine has happened, in which case every entry
+	// just renders as freshly "inserted" (see displayDays below) — there's
+	// nothing to diff the original entries against yet.
+	const [diffDays, setDiffDays] = useState<MealPlanEntryDiffDay[] | null>(null);
 	const mutation = useMutation({
 		mutationFn: (input: {
 			currentEntries: MealPlanDraftEntry[];
@@ -52,7 +146,6 @@ export function MealPlanDraft({
 			timezone?: string;
 		}) => refineMealPlanDraft({ data: input }),
 	});
-	const days = groupMealPlanEntriesByDay(plan.entries);
 
 	function handleRefine() {
 		const trimmed = instruction.trim();
@@ -84,6 +177,11 @@ export function MealPlanDraft({
 						})),
 						refineInstructions: [...plan.refineInstructions, trimmed],
 					});
+					setDiffDays(
+						groupMealPlanEntryDiffsByDay(
+							diffMealPlanEntries(baselineEntries, result.entries),
+						),
+					);
 					setInstruction("");
 					setHasRefined(true);
 				},
@@ -91,6 +189,28 @@ export function MealPlanDraft({
 			},
 		);
 	}
+
+	// Before any refine in this session, an already-built plan's "Adjust
+	// plan" re-entry starts from its existing entries, not new suggestions —
+	// so it should read as the default/unchanged style from the first paint
+	// (there's nothing to highlight until a refine actually changes
+	// something). A brand-new plan's first review has no such prior state,
+	// so its initial entries are genuinely new and keep the "Suggested"
+	// treatment.
+	const initialEntryStatus = plan.builtBefore ? "unchanged" : "inserted";
+	const displayDays: MealPlanEntryDiffDay[] =
+		diffDays ??
+		groupMealPlanEntriesByDay(plan.entries).map(({ day, entries }) => ({
+			day,
+			entries: entries.map((entry) => ({
+				day: entry.day,
+				mealType: entry.mealType,
+				slotIndex: entry.slotIndex,
+				title: entry.suggestedTitle,
+				overview: entry.suggestedOverview,
+				status: initialEntryStatus,
+			})),
+		}));
 
 	// Re-approving an already-built plan without changing anything would just
 	// waste a rebuild — require at least one successful refine first. A
@@ -105,27 +225,17 @@ export function MealPlanDraft({
 			) : null}
 
 			<div className="flex flex-col gap-5">
-				{days.map(({ day, entries }) => (
+				{displayDays.map(({ day, entries }) => (
 					<div key={day}>
 						<p className="mb-2 font-semibold text-ink-dim text-xs">
 							{formatMealPlanDay(day)}
 						</p>
 						<div className="flex flex-col gap-2">
 							{entries.map((entry) => (
-								<div
-									key={entry.id}
-									className="rounded-[18px] border border-accent/35 bg-accent/[0.06] p-3.5"
-								>
-									<span className="font-bold text-[10px] text-accent uppercase tracking-wide">
-										Suggested · {MEAL_TYPE_LABELS[entry.mealType]}
-									</span>
-									<p className="mt-1 font-semibold text-ink text-sm">
-										{entry.suggestedTitle}
-									</p>
-									<p className="mt-0.5 text-ink-dim text-xs">
-										{entry.suggestedOverview}
-									</p>
-								</div>
+								<MealPlanDiffEntryCard
+									key={`${entry.day}|${entry.mealType}|${entry.slotIndex}`}
+									entry={entry}
+								/>
 							))}
 						</div>
 					</div>
