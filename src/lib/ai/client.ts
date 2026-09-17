@@ -82,22 +82,22 @@ export function getAiClient(provider: AiProvider = getActiveProvider()): Groq {
 // providers actually escapes Groq's own rate limits instead of silently
 // landing back on Groq's capacity via OpenRouter's cross-provider load
 // balancing (OpenRouter lists Groq as one of several hosts for gpt-oss).
-// `sort: "price"` makes OpenRouter deterministically try the single cheapest
-// provider first (with automatic failover to the next-cheapest on error),
-// instead of its default weighted-random balancing (mostly cheap, but
-// occasionally a pricier provider "for redundancy") or `sort: "latency"`
-// (always the fastest, which for this model is Cerebras — 4-5x the
-// completion-token price of the cheapest tier). Cost matters more than
-// wall-clock speed once meal-plan building isn't just for one paying user
-// (a planned free public rollout) — `sort: "price"` is also strictly better
-// than the default here: it avoids the default's occasional pricier pick
-// AND the inconsistent per-call speed that caused (some OpenRouter-routed
-// dishes taking 20-50s vs. under 10s for others, before this was added).
+// `sort: "latency"` overrides OpenRouter's default price-weighted balancing
+// with fastest-provider-first — for this model that's Cerebras, at roughly
+// 4-5x the completion-token price of the cheapest tier (AkashML/CoreWeave/
+// DeepInfra). Tried `sort: "price"` briefly to cut cost ahead of a planned
+// free public rollout, but the cheap tier's per-call latency (20-145s+,
+// confirmed via a live traced meal-plan build) proved unbearable on a
+// mobile PWA specifically — iOS aggressively suspends an installed PWA's
+// in-flight fetch on screen-lock/backgrounding, and a call that long gives
+// that a wide window to land, surfacing as "Load failed" with no automatic
+// recovery. Latency wins over cost here until that failure mode has its own
+// fix (e.g. an automatic retry on a failed dish, or a build-time wake lock).
 function providerExtras(provider: AiProvider): {
-	provider?: { ignore: string[]; sort: "price" };
+	provider?: { ignore: string[]; sort: "latency" };
 } {
 	return provider === "openrouter"
-		? { provider: { ignore: ["groq"], sort: "price" } }
+		? { provider: { ignore: ["groq"], sort: "latency" } }
 		: {};
 }
 

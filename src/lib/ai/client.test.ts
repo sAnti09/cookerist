@@ -141,7 +141,7 @@ describe("chatCompletion", () => {
 		expect(openrouterPostMock).not.toHaveBeenCalled();
 	});
 
-	it("excludes groq as an OpenRouter upstream and sorts by price when OpenRouter is the active provider", async () => {
+	it("excludes groq as an OpenRouter upstream and sorts by latency when OpenRouter is the active provider", async () => {
 		process.env.AI_PROVIDER = "openrouter";
 		openrouterPostMock.mockResolvedValueOnce({ choices: [] });
 
@@ -159,7 +159,7 @@ describe("chatCompletion", () => {
 			expect.objectContaining({
 				body: expect.objectContaining({
 					model: "openai/gpt-oss-120b",
-					provider: { ignore: ["groq"], sort: "price" },
+					provider: { ignore: ["groq"], sort: "latency" },
 				}),
 			}),
 		);
@@ -183,7 +183,7 @@ describe("chatCompletion", () => {
 			expect.objectContaining({
 				body: expect.objectContaining({
 					model: "openai/gpt-oss-120b",
-					provider: { ignore: ["groq"], sort: "price" },
+					provider: { ignore: ["groq"], sort: "latency" },
 				}),
 			}),
 		);
