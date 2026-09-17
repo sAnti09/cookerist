@@ -34,7 +34,6 @@ export function MealPlanReady({
 }) {
 	const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
 	const days = groupMealPlanEntriesByDay(plan.entries);
-	const [revealedEntryId, setRevealedEntryId] = useState<string | null>(null);
 	const [deleteEntryId, setDeleteEntryId] = useState<string | null>(null);
 	const [changingEntryId, setChangingEntryId] = useState<string | null>(null);
 
@@ -156,10 +155,6 @@ export function MealPlanReady({
 											recipe={recipe}
 											edited={edited}
 											planId={plan.id}
-											revealed={revealedEntryId === entry.id}
-											onRevealChange={(revealed) =>
-												setRevealedEntryId(revealed ? entry.id : null)
-											}
 											onDelete={() => setDeleteEntryId(entry.id)}
 											onChangeRecipe={() => setChangingEntryId(entry.id)}
 										/>

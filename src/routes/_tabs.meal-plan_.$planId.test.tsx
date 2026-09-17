@@ -63,6 +63,13 @@ function swipeLeft(element: Element) {
 	});
 }
 
+function swipeRight(element: Element) {
+	fireEvent.touchStart(element, { touches: [{ clientX: 100, clientY: 0 }] });
+	fireEvent.touchEnd(element, {
+		changedTouches: [{ clientX: 200, clientY: 0 }],
+	});
+}
+
 function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
 	return {
 		id: "recipe-1",
@@ -478,7 +485,12 @@ describe("Meal plan detail screen — ready — entry swipe actions", () => {
 			changedTouches: [{ clientX: 110, clientY: 0 }],
 		});
 		expect(
-			screen.queryByRole("button", { name: "Change recipe for Breakfast" }),
+			screen.queryByRole("alertdialog", {
+				name: "Remove this dish from the plan?",
+			}),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("dialog", { name: "Change recipe" }),
 		).not.toBeInTheDocument();
 
 		fireEvent.touchStart(entry, { touches: [{ clientX: 100, clientY: 0 }] });
@@ -486,7 +498,9 @@ describe("Meal plan detail screen — ready — entry swipe actions", () => {
 			changedTouches: [{ clientX: 40, clientY: 120 }],
 		});
 		expect(
-			screen.queryByRole("button", { name: "Change recipe for Breakfast" }),
+			screen.queryByRole("alertdialog", {
+				name: "Remove this dish from the plan?",
+			}),
 		).not.toBeInTheDocument();
 	});
 
@@ -507,11 +521,13 @@ describe("Meal plan detail screen — ready — entry swipe actions", () => {
 		// the same inline transform as the drag itself, not an empty style.
 		expect(entry.style.transform).toBe("translateX(0px)");
 		expect(
-			screen.queryByRole("button", { name: "Change recipe for Breakfast" }),
+			screen.queryByRole("alertdialog", {
+				name: "Remove this dish from the plan?",
+			}),
 		).not.toBeInTheDocument();
 	});
 
-	it("clamps the live drag offset to the reveal width", async () => {
+	it("clamps the live drag offset to the drag limit", async () => {
 		saveRecipe(loadRecipes(), makeRecipe());
 		saveMealPlan(loadMealPlans(), readyPlan());
 		await renderApp("/meal-plan/plan-1");
@@ -519,31 +535,11 @@ describe("Meal plan detail screen — ready — entry swipe actions", () => {
 
 		fireEvent.touchStart(entry, { touches: [{ clientX: 300, clientY: 0 }] });
 		fireEvent.touchMove(entry, { touches: [{ clientX: 0, clientY: 0 }] });
-		expect(entry.style.transform).toBe("translateX(-144px)");
-		fireEvent.touchEnd(entry, { changedTouches: [{ clientX: 0, clientY: 0 }] });
-	});
-
-	it("drags from the already-revealed position when swiping right to close", async () => {
-		saveRecipe(loadRecipes(), makeRecipe());
-		saveMealPlan(loadMealPlans(), readyPlan());
-		await renderApp("/meal-plan/plan-1");
-		const entry = screen.getByTestId("meal-plan-entry-e1");
-
-		swipeLeft(entry);
-		expect(
-			screen.getByRole("button", { name: "Change recipe for Breakfast" }),
-		).toBeInTheDocument();
-
-		fireEvent.touchStart(entry, { touches: [{ clientX: 100, clientY: 0 }] });
-		fireEvent.touchMove(entry, { touches: [{ clientX: 140, clientY: 0 }] });
-		expect(entry.style.transform).toBe("translateX(-104px)");
-		fireEvent.touchEnd(entry, {
-			changedTouches: [{ clientX: 200, clientY: 0 }],
-		});
-
-		expect(
-			screen.queryByRole("button", { name: "Change recipe for Breakfast" }),
-		).not.toBeInTheDocument();
+		expect(entry.style.transform).toBe("translateX(-72px)");
+		// Cancel rather than end the touch — releasing here would also cross
+		// the (lower) swipe threshold and trigger delete, which isn't what
+		// this test is about.
+		fireEvent.touchCancel(entry);
 	});
 
 	it("ignores a mostly-vertical touchmove (leaves the resting position untouched)", async () => {
@@ -556,7 +552,7 @@ describe("Meal plan detail screen — ready — entry swipe actions", () => {
 		fireEvent.touchMove(entry, {
 			touches: [{ clientX: 180, clientY: 100 }],
 		});
-		expect(entry.style.transform).toBe("translateX(0px)");
+		expect(entry.style.transform).toBe("");
 		fireEvent.touchEnd(entry, {
 			changedTouches: [{ clientX: 180, clientY: 100 }],
 		});
@@ -569,8 +565,8 @@ describe("Meal plan detail screen — ready — entry swipe actions", () => {
 		const entry = screen.getByTestId("meal-plan-entry-e1");
 
 		fireEvent.touchStart(entry, { touches: [{ clientX: 200, clientY: 0 }] });
-		fireEvent.touchMove(entry, { touches: [{ clientX: 100, clientY: 0 }] });
-		expect(entry.style.transform).toBe("translateX(-100px)");
+		fireEvent.touchMove(entry, { touches: [{ clientX: 150, clientY: 0 }] });
+		expect(entry.style.transform).toBe("translateX(-50px)");
 
 		fireEvent.touchEnd(entry, { changedTouches: [] });
 		expect(entry.style.transform).toBe("translateX(0px)");
@@ -583,14 +579,51 @@ describe("Meal plan detail screen — ready — entry swipe actions", () => {
 		const entry = screen.getByTestId("meal-plan-entry-e1");
 
 		fireEvent.touchStart(entry, { touches: [{ clientX: 200, clientY: 0 }] });
-		fireEvent.touchMove(entry, { touches: [{ clientX: 100, clientY: 0 }] });
-		expect(entry.style.transform).toBe("translateX(-100px)");
+		fireEvent.touchMove(entry, { touches: [{ clientX: 150, clientY: 0 }] });
+		expect(entry.style.transform).toBe("translateX(-50px)");
 
 		fireEvent.touchCancel(entry);
 		expect(entry.style.transform).toBe("translateX(0px)");
 	});
 
-	it("suppresses the click right after a swipe, then closes (without navigating) on a later tap while revealed", async () => {
+	it("no-ops on edge-case touch sequences with nothing to settle", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const entry = screen.getByTestId("meal-plan-entry-e1");
+
+		// touchstart with no touch point at all.
+		fireEvent.touchStart(entry, { touches: [] });
+		expect(entry.style.transform).toBe("");
+
+		// A second touchmove within the same drag, once already dragging.
+		fireEvent.touchStart(entry, { touches: [{ clientX: 200, clientY: 0 }] });
+		fireEvent.touchMove(entry, { touches: [{ clientX: 180, clientY: 0 }] });
+		fireEvent.touchMove(entry, { touches: [{ clientX: 160, clientY: 0 }] });
+		expect(entry.style.transform).toBe("translateX(-40px)");
+		fireEvent.touchCancel(entry);
+
+		// touchend with no changed touches and no drag in progress — nothing
+		// to settle, and no delta to evaluate as a swipe either.
+		fireEvent.touchStart(entry, { touches: [{ clientX: 200, clientY: 0 }] });
+		fireEvent.touchEnd(entry, { changedTouches: [] });
+		expect(
+			screen.queryByRole("alertdialog", {
+				name: "Remove this dish from the plan?",
+			}),
+		).not.toBeInTheDocument();
+
+		// touchcancel with no drag in progress.
+		fireEvent.touchStart(entry, { touches: [{ clientX: 200, clientY: 0 }] });
+		fireEvent.touchCancel(entry);
+		expect(
+			screen.queryByRole("alertdialog", {
+				name: "Remove this dish from the plan?",
+			}),
+		).not.toBeInTheDocument();
+	});
+
+	it("suppresses navigation on the click immediately following a triggering swipe", async () => {
 		saveRecipe(loadRecipes(), makeRecipe());
 		saveMealPlan(loadMealPlans(), readyPlan());
 		await renderApp("/meal-plan/plan-1");
@@ -598,70 +631,43 @@ describe("Meal plan detail screen — ready — entry swipe actions", () => {
 
 		swipeLeft(entry);
 		expect(
-			screen.getByRole("button", { name: "Change recipe for Breakfast" }),
+			await screen.findByRole("alertdialog", {
+				name: "Remove this dish from the plan?",
+			}),
 		).toBeInTheDocument();
 
 		fireEvent.click(entry);
-		expect(
-			screen.getByRole("button", { name: "Change recipe for Breakfast" }),
-		).toBeInTheDocument();
-		expect(screen.getByText("Servings for this plan")).toBeInTheDocument();
 
-		fireEvent.click(entry);
-		expect(
-			screen.queryByRole("button", { name: "Change recipe for Breakfast" }),
-		).not.toBeInTheDocument();
+		// Still on the meal plan (the swipe's own synthetic click didn't
+		// navigate to the recipe), and the confirmation is still open.
 		expect(screen.getByText("Servings for this plan")).toBeInTheDocument();
+		expect(
+			screen.getByRole("alertdialog", {
+				name: "Remove this dish from the plan?",
+			}),
+		).toBeInTheDocument();
 	});
 
-	it("keeps the entry when the delete confirmation is cancelled", async () => {
+	it("swiping left past the threshold opens the delete confirmation, and keeps the entry if cancelled", async () => {
 		saveRecipe(loadRecipes(), makeRecipe());
 		saveMealPlan(loadMealPlans(), readyPlan());
 		await renderApp("/meal-plan/plan-1");
 		const user = userEvent.setup();
 
 		swipeLeft(screen.getByTestId("meal-plan-entry-e1"));
-		await user.click(
-			screen.getByRole("button", {
-				name: "Remove Overnight Oats from the meal plan",
-			}),
-		);
-		await user.click(screen.getByRole("button", { name: "Cancel" }));
+		await user.click(await screen.findByRole("button", { name: "Cancel" }));
 
 		expect(screen.getByText("Overnight Oats")).toBeInTheDocument();
 	});
 
-	it("closes the change-recipe dialog without changing anything", async () => {
+	it("swiping left past the threshold and confirming removes the entry", async () => {
 		saveRecipe(loadRecipes(), makeRecipe());
 		saveMealPlan(loadMealPlans(), readyPlan());
 		await renderApp("/meal-plan/plan-1");
 		const user = userEvent.setup();
 
 		swipeLeft(screen.getByTestId("meal-plan-entry-e1"));
-		await user.click(
-			screen.getByRole("button", { name: "Change recipe for Breakfast" }),
-		);
-		await user.click(screen.getByRole("button", { name: "Close" }));
-
-		expect(
-			screen.queryByRole("dialog", { name: "Change recipe" }),
-		).not.toBeInTheDocument();
-		expect(screen.getByText("Overnight Oats")).toBeInTheDocument();
-	});
-
-	it("reveals delete/change actions on swipe and removes the entry after confirming delete", async () => {
-		saveRecipe(loadRecipes(), makeRecipe());
-		saveMealPlan(loadMealPlans(), readyPlan());
-		await renderApp("/meal-plan/plan-1");
-		const user = userEvent.setup();
-
-		swipeLeft(screen.getByTestId("meal-plan-entry-e1"));
-		await user.click(
-			screen.getByRole("button", {
-				name: "Remove Overnight Oats from the meal plan",
-			}),
-		);
-		await user.click(screen.getByRole("button", { name: "Remove" }));
+		await user.click(await screen.findByRole("button", { name: "Remove" }));
 
 		expect(screen.queryByText("Overnight Oats")).not.toBeInTheDocument();
 		expect(
@@ -671,6 +677,21 @@ describe("Meal plan detail screen — ready — entry swipe actions", () => {
 			window.localStorage.getItem("cookerist:meal-plans") ?? "[]",
 		) as MealPlan[];
 		expect(stored[0].entries).toHaveLength(0);
+	});
+
+	it("swiping right past the threshold opens the change-recipe dialog, which can be closed without changing anything", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveMealPlan(loadMealPlans(), readyPlan());
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		swipeRight(screen.getByTestId("meal-plan-entry-e1"));
+		await user.click(await screen.findByRole("button", { name: "Close" }));
+
+		expect(
+			screen.queryByRole("dialog", { name: "Change recipe" }),
+		).not.toBeInTheDocument();
+		expect(screen.getByText("Overnight Oats")).toBeInTheDocument();
 	});
 
 	it("swaps an entry to a different saved recipe via search, aligning its servings to the plan default", async () => {
@@ -683,12 +704,9 @@ describe("Meal plan detail screen — ready — entry swipe actions", () => {
 		await renderApp("/meal-plan/plan-1");
 		const user = userEvent.setup();
 
-		swipeLeft(screen.getByTestId("meal-plan-entry-e1"));
-		await user.click(
-			screen.getByRole("button", { name: "Change recipe for Breakfast" }),
-		);
+		swipeRight(screen.getByTestId("meal-plan-entry-e1"));
 		await user.type(
-			screen.getByLabelText("Search recipes to swap in"),
+			await screen.findByLabelText("Search recipes to swap in"),
 			"Pancakes",
 		);
 		await user.click(screen.getByRole("button", { name: "Pancakes" }));
@@ -730,11 +748,10 @@ describe("Meal plan detail screen — ready — entry swipe actions", () => {
 		await renderApp("/meal-plan/plan-1");
 		const user = userEvent.setup();
 
-		swipeLeft(screen.getByTestId("meal-plan-entry-e1"));
+		swipeRight(screen.getByTestId("meal-plan-entry-e1"));
 		await user.click(
-			screen.getByRole("button", { name: "Change recipe for Breakfast" }),
+			await screen.findByRole("button", { name: "Generate new" }),
 		);
-		await user.click(screen.getByRole("button", { name: "Generate new" }));
 		await user.type(
 			screen.getByLabelText("Describe a replacement dish"),
 			"tofu scramble",
