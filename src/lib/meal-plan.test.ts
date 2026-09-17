@@ -6,12 +6,16 @@ import {
 	defaultSlots,
 	enabledSlots,
 	enumerateDays,
+	filterMealPlanDaysBySearch,
 	formatMealPlanDateRange,
 	formatMealPlanDay,
+	groceryListSignature,
 	groupMealPlanEntriesByDay,
 	isEntryServingsEdited,
+	isGroceryListStale,
 	MAX_DISH_COUNT_PER_SLOT,
 	MAX_PLAN_DAYS,
+	type MealPlan,
 	type MealPlanEntry,
 	type MealSlotConfig,
 	resizeSlotsForDays,
@@ -20,6 +24,7 @@ import {
 	toggleSlotInList,
 	totalDishCount,
 } from "./meal-plan";
+import type { Recipe } from "./recipe";
 
 function makeEntry(overrides: Partial<MealPlanEntry> = {}): MealPlanEntry {
 	return {
@@ -30,6 +35,38 @@ function makeEntry(overrides: Partial<MealPlanEntry> = {}): MealPlanEntry {
 		status: "suggested",
 		suggestedTitle: "Veggie Stir-Fry",
 		suggestedOverview: "Crisp vegetables in a garlic-ginger sauce.",
+		...overrides,
+	};
+}
+
+function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
+	return {
+		id: crypto.randomUUID(),
+		createdAt: new Date().toISOString(),
+		prompt: "a dish",
+		title: "Veggie Stir-Fry",
+		overview: "overview",
+		baseServings: 4,
+		currentServings: 4,
+		ingredients: [],
+		steps: [],
+		expanded: false,
+		favorite: false,
+		...overrides,
+	};
+}
+
+function makePlan(overrides: Partial<MealPlan> = {}): MealPlan {
+	return {
+		id: crypto.randomUUID(),
+		createdAt: new Date().toISOString(),
+		startDate: "2026-09-15",
+		endDate: "2026-09-15",
+		description: "",
+		defaultServings: 4,
+		status: "ready",
+		entries: [makeEntry()],
+		refineInstructions: [],
 		...overrides,
 	};
 }
@@ -305,6 +342,113 @@ describe("groupMealPlanEntriesByDay", () => {
 			"dinner-0",
 			"dinner-1",
 		]);
+	});
+});
+
+describe("groceryListSignature / isGroceryListStale", () => {
+	const chickenRecipe = makeRecipe({ id: "r1", currentServings: 4 });
+	const tofuRecipe = makeRecipe({ id: "r2", currentServings: 2 });
+	const recipeById = new Map([
+		[chickenRecipe.id, chickenRecipe],
+		[tofuRecipe.id, tofuRecipe],
+	]);
+
+	it("produces one sorted recipeId@servings token per resolved entry", () => {
+		const entries = [
+			makeEntry({ id: "e1", recipeId: tofuRecipe.id }),
+			makeEntry({ id: "e2", recipeId: chickenRecipe.id }),
+			makeEntry({ id: "e3", recipeId: undefined }),
+		];
+
+		expect(groceryListSignature(entries, recipeById)).toEqual(["r1@4", "r2@2"]);
+	});
+
+	it("is not stale when no grocery list has been built yet", () => {
+		const plan = makePlan({ groceryListId: undefined });
+		expect(isGroceryListStale(plan, recipeById)).toBe(false);
+	});
+
+	it("is not stale when the snapshot predates this field", () => {
+		const plan = makePlan({
+			groceryListId: "list1",
+			groceryListSnapshot: undefined,
+		});
+		expect(isGroceryListStale(plan, recipeById)).toBe(false);
+	});
+
+	it("is not stale when entries still match the stored snapshot", () => {
+		const entries = [makeEntry({ recipeId: chickenRecipe.id })];
+		const plan = makePlan({
+			entries,
+			groceryListId: "list1",
+			groceryListSnapshot: groceryListSignature(entries, recipeById),
+		});
+		expect(isGroceryListStale(plan, recipeById)).toBe(false);
+	});
+
+	it("is stale once a dish is swapped for a different recipe", () => {
+		const plan = makePlan({
+			entries: [makeEntry({ recipeId: chickenRecipe.id })],
+			groceryListId: "list1",
+			groceryListSnapshot: [`${chickenRecipe.id}@4`],
+		});
+		const swapped = {
+			...plan,
+			entries: [makeEntry({ recipeId: tofuRecipe.id })],
+		};
+		expect(isGroceryListStale(swapped, recipeById)).toBe(true);
+	});
+
+	it("is stale once a linked recipe's servings change", () => {
+		const entries = [makeEntry({ recipeId: chickenRecipe.id })];
+		const plan = makePlan({
+			entries,
+			groceryListId: "list1",
+			groceryListSnapshot: groceryListSignature(entries, recipeById),
+		});
+		const rescaledRecipeById = new Map(recipeById);
+		rescaledRecipeById.set(chickenRecipe.id, {
+			...chickenRecipe,
+			currentServings: 8,
+		});
+		expect(isGroceryListStale(plan, rescaledRecipeById)).toBe(true);
+	});
+});
+
+describe("filterMealPlanDaysBySearch", () => {
+	const chickenRecipe = makeRecipe({ id: "r1", title: "Garlic Chicken" });
+	const tofuRecipe = makeRecipe({ id: "r2", title: "Crispy Tofu" });
+	const recipeById = new Map([
+		[chickenRecipe.id, chickenRecipe],
+		[tofuRecipe.id, tofuRecipe],
+	]);
+	const days = groupMealPlanEntriesByDay([
+		makeEntry({ day: "2026-09-15", recipeId: chickenRecipe.id }),
+		makeEntry({ day: "2026-09-16", recipeId: tofuRecipe.id }),
+	]);
+
+	it("returns every day unchanged when the query is blank", () => {
+		expect(filterMealPlanDaysBySearch(days, recipeById, "  ")).toEqual(days);
+	});
+
+	it("matches case-insensitively against the linked recipe's title", () => {
+		const result = filterMealPlanDaysBySearch(days, recipeById, "chicken");
+		expect(result.map((d) => d.day)).toEqual(["2026-09-15"]);
+	});
+
+	it("drops a day entirely once none of its entries match", () => {
+		const result = filterMealPlanDaysBySearch(days, recipeById, "tofu");
+		expect(result).toHaveLength(1);
+		expect(result[0].day).toBe("2026-09-16");
+	});
+
+	it("never matches an entry with no resolved recipe", () => {
+		const unresolvedDays = groupMealPlanEntriesByDay([
+			makeEntry({ day: "2026-09-17", recipeId: undefined }),
+		]);
+		expect(
+			filterMealPlanDaysBySearch(unresolvedDays, recipeById, "anything"),
+		).toEqual([]);
 	});
 });
 

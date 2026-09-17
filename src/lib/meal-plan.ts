@@ -1,3 +1,5 @@
+import type { Recipe } from "./recipe";
+
 // Declared as a const tuple (not a plain string-literal union) so it can
 // double as the source of truth for both the MealType type and the zod enum
 // in groq/schema.ts.
@@ -93,6 +95,14 @@ export type MealPlan = {
 	// the created GroceryList so the UI can offer "View grocery list"
 	// instead of re-offering to build one.
 	groceryListId?: string;
+	// Snapshot of the (recipeId, servings) pairs the linked grocery list was
+	// last built/refreshed from — see groceryListSignature/isGroceryListStale
+	// below. Set alongside groceryListId, and again whenever the Ready
+	// screen's "Update grocery list" action re-syncs the list. Undefined for
+	// a grocery list built before this field existed — isGroceryListStale
+	// treats that as "not stale" rather than guessing, since there's no
+	// baseline to compare against; the next build/refresh backfills it.
+	groceryListSnapshot?: string[];
 	// True once this plan has been through "building" at least once — lets
 	// the draft screen tell a brand-new plan's first review (Approve & build
 	// is always available; Discard deletes the plan outright, there's
@@ -110,6 +120,69 @@ export type MealPlan = {
 	// refine has since replaced; approving clears it.
 	preAdjustEntries?: MealPlanEntry[];
 };
+
+// One token per plan entry with a resolved recipe, capturing exactly what
+// affects a built grocery list's ingredient quantities: which recipe, and at
+// what serving size (a plan-wide or per-dish servings change rescales that
+// recipe's ingredients same as a fresh build would). Sorted so two token
+// lists compare correctly regardless of entry order.
+export function groceryListSignature(
+	entries: MealPlanEntry[],
+	recipeById: Map<string, Recipe>,
+): string[] {
+	const tokens: string[] = [];
+	for (const entry of entries) {
+		if (!entry.recipeId) continue;
+		const recipe = recipeById.get(entry.recipeId);
+		if (!recipe) continue;
+		tokens.push(`${entry.recipeId}@${recipe.currentServings}`);
+	}
+	return tokens.sort();
+}
+
+// True when the plan's current entries would produce a different grocery
+// list than the one last built/refreshed (a dish was swapped, added,
+// removed, or had its servings changed since) — drives the Ready screen's
+// "meal plan changed" banner. False when no grocery list has been built yet
+// (nothing to go stale) or groceryListSnapshot predates this field (no
+// baseline to compare against — see its own comment on MealPlan).
+export function isGroceryListStale(
+	plan: MealPlan,
+	recipeById: Map<string, Recipe>,
+): boolean {
+	if (!plan.groceryListId || !plan.groceryListSnapshot) return false;
+	const current = groceryListSignature(plan.entries, recipeById);
+	const snapshot = plan.groceryListSnapshot;
+	return (
+		current.length !== snapshot.length ||
+		current.some((token, index) => token !== snapshot[index])
+	);
+}
+
+// Filters a day-grouped entry list down to entries whose linked recipe title
+// matches the typed search text, dropping any day left with no matches —
+// lets the Ready screen answer "what date did I put that dish on again?".
+// Entries with no resolved recipe (not yet built) never match, matching
+// meal-plan-ready.tsx's own render skip for them.
+export function filterMealPlanDaysBySearch(
+	days: MealPlanDay[],
+	recipeById: Map<string, Recipe>,
+	query: string,
+): MealPlanDay[] {
+	const trimmed = query.trim().toLowerCase();
+	if (!trimmed) return days;
+	return days
+		.map((day) => ({
+			...day,
+			entries: day.entries.filter((entry) => {
+				const recipe = entry.recipeId
+					? recipeById.get(entry.recipeId)
+					: undefined;
+				return recipe ? recipe.title.toLowerCase().includes(trimmed) : false;
+			}),
+		}))
+		.filter((day) => day.entries.length > 0);
+}
 
 // Deliberately no per-entry `servings` field: an entry's servings *is* its
 // linked Recipe's `currentServings`. Whether a dish has been individually

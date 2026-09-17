@@ -5,11 +5,14 @@ import { MealPlanChangeRecipeDialog } from "#/components/meal-plan-change-recipe
 import { MealPlanEntryRow } from "#/components/meal-plan-entry-row";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { SearchInput } from "#/components/ui/search-input";
 import { ServingsStepper } from "#/components/ui/servings-stepper";
 import {
+	filterMealPlanDaysBySearch,
 	formatMealPlanDay,
 	groupMealPlanEntriesByDay,
 	isEntryServingsEdited,
+	isGroceryListStale,
 	MEAL_TYPE_LABELS,
 	type MealPlan,
 } from "#/lib/meal-plan";
@@ -23,6 +26,7 @@ export function MealPlanReady({
 	onCreateRecipe,
 	onAdjustPlan,
 	onBuildGroceryList,
+	onRefreshGroceryList,
 }: {
 	plan: MealPlan;
 	recipes: Recipe[];
@@ -31,11 +35,15 @@ export function MealPlanReady({
 	onCreateRecipe: (recipe: Recipe) => void;
 	onAdjustPlan: () => void;
 	onBuildGroceryList: () => void;
+	onRefreshGroceryList: () => void;
 }) {
 	const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
 	const days = groupMealPlanEntriesByDay(plan.entries);
+	const groceryListStale = isGroceryListStale(plan, recipeById);
 	const [deleteEntryId, setDeleteEntryId] = useState<string | null>(null);
 	const [changingEntryId, setChangingEntryId] = useState<string | null>(null);
+	const [search, setSearch] = useState("");
+	const visibleDays = filterMealPlanDaysBySearch(days, recipeById, search);
 
 	// Broadcasts a new plan-wide servings target to every entry's recipe,
 	// except ones that already diverge from the *previous* default (an
@@ -127,13 +135,38 @@ export function MealPlanReady({
 				/>
 			</div>
 
+			{groceryListStale ? (
+				<div className="mt-3.5 flex flex-col gap-2 rounded-[10px] border border-line bg-bg2 p-3 sm:flex-row sm:items-center sm:justify-between">
+					<p className="text-sm">
+						Meal plan changed since this grocery list was built.
+					</p>
+					<Button onClick={onRefreshGroceryList} className="shrink-0">
+						Update grocery list
+					</Button>
+				</div>
+			) : null}
+
+			{days.length > 0 ? (
+				<SearchInput
+					value={search}
+					onChange={setSearch}
+					placeholder="Search this plan's meals…"
+					aria-label="Search meal plan"
+					className="mt-3.5"
+				/>
+			) : null}
+
 			{days.length === 0 ? (
 				<p className="mt-5 card border-dashed bg-card p-6 text-center text-sm text-ink-dim">
 					No dishes left in this plan.
 				</p>
+			) : visibleDays.length === 0 ? (
+				<p className="mt-5 card border-dashed bg-card p-6 text-center text-sm text-ink-dim">
+					No dishes match "{search.trim()}".
+				</p>
 			) : (
 				<div className="mt-5 flex flex-col gap-5">
-					{days.map(({ day, entries }) => (
+					{visibleDays.map(({ day, entries }) => (
 						<div key={day}>
 							<p className="mb-2 font-semibold text-ink-dim text-xs">
 								{formatMealPlanDay(day)}

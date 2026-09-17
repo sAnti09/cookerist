@@ -6,12 +6,16 @@ import { MealPlanDraft } from "#/components/meal-plan-draft";
 import { MealPlanReady } from "#/components/meal-plan-ready";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { IconButton } from "#/components/ui/icon-button";
-import { aggregateGroceryItems } from "#/lib/aggregate-grocery-items";
+import {
+	aggregateGroceryItems,
+	carryOverCheckedState,
+} from "#/lib/aggregate-grocery-items";
 import { useAppData } from "#/lib/app-data-context";
 import type { GroceryList } from "#/lib/grocery-list";
 import {
 	DEFAULT_MEAL_PLAN_SERVINGS,
 	formatMealPlanDateRange,
+	groceryListSignature,
 	type MealPlan,
 } from "#/lib/meal-plan";
 import type { Recipe } from "#/lib/recipe";
@@ -50,12 +54,14 @@ function MealPlanDetailScreen() {
 	const {
 		mealPlans,
 		recipes,
+		groceryLists,
 		updateMealPlan,
 		deleteMealPlan,
 		createRecipe,
 		updateRecipe,
 		updateRecipes,
 		saveGroceryListForm,
+		updateGroceryList,
 	} = useAppData();
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const plan = mealPlans.find((p) => p.id === planId);
@@ -148,8 +154,53 @@ function MealPlanDetailScreen() {
 			expanded: false,
 		};
 		saveGroceryListForm(list);
-		updateMealPlan({ ...plan, groceryListId: list.id });
+		const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+		updateMealPlan({
+			...plan,
+			groceryListId: list.id,
+			groceryListSnapshot: groceryListSignature(plan.entries, recipeById),
+		});
 		navigate({ to: "/grocery/$listId", params: { listId: list.id } });
+	}
+
+	// Re-syncs an already-built grocery list against the plan's *current*
+	// entries — offered from the Ready screen's "meal plan changed" banner
+	// once isGroceryListStale flags a swap/add/remove/servings edit made
+	// since the list was last built. Preserves the list's own custom
+	// ingredients (never derived from the plan) and carries over checked
+	// state for anything unchanged, same as the grocery list's own manual
+	// Edit-and-save flow (grocery-list-create-form.tsx).
+	function handleRefreshGroceryList() {
+		if (!plan?.groceryListId) return;
+		const existingList = groceryLists.find(
+			(list) => list.id === plan.groceryListId,
+		);
+		if (!existingList) return;
+		const planRecipes = plan.entries
+			.map((entry) =>
+				entry.recipeId
+					? recipes.find((recipe) => recipe.id === entry.recipeId)
+					: undefined,
+			)
+			.filter((recipe): recipe is Recipe => Boolean(recipe));
+		const customIngredients = existingList.items
+			.filter((item) => item.source === "custom")
+			.map((item) => ({
+				text: item.text,
+				quantity: item.quantity,
+				unit: item.unit,
+			}));
+		const newItems = aggregateGroceryItems(planRecipes, customIngredients);
+		updateGroceryList({
+			...existingList,
+			recipeIds: planRecipes.map((recipe) => recipe.id),
+			items: carryOverCheckedState(existingList.items, newItems),
+		});
+		const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+		updateMealPlan({
+			...plan,
+			groceryListSnapshot: groceryListSignature(plan.entries, recipeById),
+		});
 	}
 
 	return (
@@ -199,6 +250,7 @@ function MealPlanDetailScreen() {
 							onCreateRecipe={createRecipe}
 							onAdjustPlan={handleAdjustPlan}
 							onBuildGroceryList={handleBuildGroceryList}
+							onRefreshGroceryList={handleRefreshGroceryList}
 						/>
 					)}
 				</div>

@@ -1,6 +1,8 @@
 import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { GroceryList } from "#/lib/grocery-list";
+import { loadGroceryLists, saveGroceryList } from "#/lib/grocery-storage";
 import type { MealPlan, MealPlanEntry } from "#/lib/meal-plan";
 import { loadMealPlans, saveMealPlan } from "#/lib/meal-plan-storage";
 import type { Recipe } from "#/lib/recipe";
@@ -84,6 +86,28 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
 		steps: [],
 		expanded: false,
 		favorite: false,
+		...overrides,
+	};
+}
+
+function makeGroceryList(overrides: Partial<GroceryList> = {}): GroceryList {
+	return {
+		id: "list-1",
+		createdAt: "2026-09-15T12:00:00.000Z",
+		name: "Sep 15 meal plan",
+		recipeIds: ["recipe-1"],
+		items: [
+			{
+				id: "item-1",
+				text: "oats",
+				quantity: 1,
+				unit: "cup",
+				checked: false,
+				source: "recipe",
+				origins: [{ recipeId: "recipe-1", ingredientId: "ing-1" }],
+			},
+		],
+		expanded: false,
 		...overrides,
 	};
 }
@@ -466,6 +490,78 @@ describe("Meal plan detail screen — ready", () => {
 		expect(stored).toHaveLength(1);
 		expect(stored[0].status).toBe("ready");
 		expect(stored[0].entries[0].recipeId).toBe("recipe-1");
+	});
+});
+
+describe("Meal plan detail screen — ready — stale grocery list", () => {
+	function readyPlan(overrides: Partial<MealPlan> = {}): MealPlan {
+		return makePlan({
+			status: "ready",
+			builtBefore: true,
+			entries: [makeEntry({ status: "ready", recipeId: "recipe-1" })],
+			...overrides,
+		});
+	}
+
+	it("shows no banner when the grocery list still matches the plan", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveGroceryList(loadGroceryLists(), makeGroceryList());
+		saveMealPlan(
+			loadMealPlans(),
+			readyPlan({
+				groceryListId: "list-1",
+				groceryListSnapshot: ["recipe-1@4"],
+			}),
+		);
+		await renderApp("/meal-plan/plan-1");
+
+		expect(await screen.findByText("Overnight Oats")).toBeInTheDocument();
+		expect(
+			screen.queryByText(/meal plan changed since this grocery list/i),
+		).not.toBeInTheDocument();
+	});
+
+	it("shows an Update banner once a swap makes the built list stale, and clears it after updating", async () => {
+		saveRecipe(loadRecipes(), makeRecipe());
+		saveRecipe(
+			loadRecipes(),
+			makeRecipe({ id: "recipe-2", title: "Pancakes", currentServings: 4 }),
+		);
+		saveGroceryList(loadGroceryLists(), makeGroceryList());
+		saveMealPlan(
+			loadMealPlans(),
+			// Snapshot reflects the ORIGINAL recipe-1 entry — current entries
+			// (set below) point at recipe-2 instead, so it's stale from the
+			// very first render, same as a swap made after the list was built.
+			readyPlan({
+				entries: [makeEntry({ status: "ready", recipeId: "recipe-2" })],
+				groceryListId: "list-1",
+				groceryListSnapshot: ["recipe-1@4"],
+			}),
+		);
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		expect(
+			await screen.findByText(/meal plan changed since this grocery list/i),
+		).toBeInTheDocument();
+
+		await user.click(
+			screen.getByRole("button", { name: "Update grocery list" }),
+		);
+
+		expect(
+			screen.queryByText(/meal plan changed since this grocery list/i),
+		).not.toBeInTheDocument();
+		const storedLists = JSON.parse(
+			window.localStorage.getItem("cookerist:grocery-lists") ?? "[]",
+		) as GroceryList[];
+		expect(storedLists).toHaveLength(1);
+		expect(storedLists[0].recipeIds).toEqual(["recipe-2"]);
+		const storedPlans = JSON.parse(
+			window.localStorage.getItem("cookerist:meal-plans") ?? "[]",
+		) as MealPlan[];
+		expect(storedPlans[0].groceryListSnapshot).toEqual(["recipe-2@4"]);
 	});
 });
 
