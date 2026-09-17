@@ -2,6 +2,8 @@
 // PWA still opens offline. Recipe generation itself always needs the
 // network (Groq calls go through POST server functions, which this worker
 // never intercepts).
+// Overwritten at build time (scripts/stamp-sw-version.mjs) with the current
+// git commit — this literal value only matters for local `vite dev`.
 const CACHE_VERSION = "cookerist-shell-v1";
 const APP_SHELL = [
 	"/",
