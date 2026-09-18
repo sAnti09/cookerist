@@ -20,7 +20,6 @@ import {
 } from "#/lib/meal-plan";
 import type { Recipe } from "#/lib/recipe";
 import { reapplyConfirmedMerges } from "#/lib/suggest-grocery-merges";
-import { isOwnedByThisDevice } from "#/lib/sync/ownership";
 import { useBuildMealPlan } from "#/lib/use-build-meal-plan";
 import { useGoBack } from "#/lib/use-go-back";
 import { cn } from "#/lib/utils";
@@ -73,7 +72,6 @@ function MealPlanDetailScreen() {
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const [sharing, setSharing] = useState(false);
 	const plan = mealPlans.find((p) => p.id === planId);
-	const isOwned = !plan || plan.sharedAt == null || isOwnedByThisDevice(plan);
 
 	async function handleShare() {
 		if (sharing) return;
@@ -255,9 +253,7 @@ function MealPlanDetailScreen() {
 					</IconButton>
 				) : null}
 				<IconButton
-					aria-label={
-						isOwned ? "Delete this meal plan" : "Remove this meal plan"
-					}
+					aria-label="Delete this meal plan"
 					onClick={() => setConfirmingDelete(true)}
 				>
 					<Trash2 className="size-4 text-ink-dim" />
@@ -299,13 +295,9 @@ function MealPlanDetailScreen() {
 
 			<ConfirmDialog
 				open={confirmingDelete}
-				title={isOwned ? "Delete this meal plan?" : "Remove this meal plan?"}
-				description={
-					isOwned
-						? "This meal plan will be permanently removed. Any recipes it built stay in your Recipes list."
-						: "This meal plan is shared by someone else — it'll only be removed from this device, not for them."
-				}
-				confirmLabel={isOwned ? "Delete" : "Remove"}
+				title="Delete this meal plan?"
+				description="This meal plan will be permanently removed. Any recipes it built stay in your Recipes list."
+				confirmLabel="Delete"
 				cancelLabel="Cancel"
 				onConfirm={() => {
 					setConfirmingDelete(false);

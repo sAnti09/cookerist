@@ -8,9 +8,11 @@ vi.mock("#/lib/identity/device", () => ({
 
 const pushEntitiesMock = vi.fn();
 const pullChangedSinceMock = vi.fn();
+const pushTombstoneMock = vi.fn();
 vi.mock("#/lib/sync/sync-client", () => ({
 	pushEntities: (...args: unknown[]) => pushEntitiesMock(...args),
 	pullChangedSince: (...args: unknown[]) => pullChangedSinceMock(...args),
+	pushTombstone: (...args: unknown[]) => pushTombstoneMock(...args),
 }));
 
 function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
@@ -38,8 +40,10 @@ beforeEach(() => {
 	getDeviceIdentityMock.mockReset();
 	pushEntitiesMock.mockReset();
 	pullChangedSinceMock.mockReset();
+	pushTombstoneMock.mockReset();
 	pushEntitiesMock.mockResolvedValue(undefined);
 	pullChangedSinceMock.mockResolvedValue([]);
+	pushTombstoneMock.mockResolvedValue(undefined);
 });
 
 describe("runSync", () => {
@@ -61,7 +65,6 @@ describe("runSync", () => {
 			makeRecipe({
 				id: "already-synced",
 				sharedAt: "2026-01-01T00:00:00.000Z",
-				ownerDeviceId: "device-1",
 			}),
 		);
 		saveRecipe(
@@ -69,7 +72,6 @@ describe("runSync", () => {
 				makeRecipe({
 					id: "already-synced",
 					sharedAt: "2026-01-01T00:00:00.000Z",
-					ownerDeviceId: "device-1",
 				}),
 			],
 			makeRecipe({ id: "never-synced-yet", sharedAt: null }),
@@ -87,31 +89,6 @@ describe("runSync", () => {
 		expect(pushedIds.sort()).toEqual(["already-synced", "never-synced-yet"]);
 		const stamped = result?.recipes?.find((r) => r.id === "never-synced-yet");
 		expect(stamped?.sharedAt).not.toBeNull();
-		expect(stamped?.ownerDeviceId).toBe("device-1");
-	});
-
-	it("excludes a detached entity from the push — the owner's delete stays final", async () => {
-		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-2" });
-		const { saveRecipe } = await import("#/lib/recipes-storage");
-		saveRecipe(
-			[],
-			makeRecipe({
-				id: "detached-earlier",
-				sharedAt: null,
-				ownerDeviceId: "device-1",
-			}),
-		);
-		const { runSync } = await import("./sync-engine");
-
-		await runSync();
-
-		const recipesPushCall = pushEntitiesMock.mock.calls.find(
-			(call) => call[0] === "recipes",
-		);
-		const pushedIds = (recipesPushCall?.[1] as Array<{ id: string }>).map(
-			(r) => r.id,
-		);
-		expect(pushedIds).not.toContain("detached-earlier");
 	});
 
 	it("pulls and merges BEFORE pushing, so a stale local copy never clobbers a newer remote write", async () => {
@@ -124,7 +101,6 @@ describe("runSync", () => {
 				title: "Stale local title",
 				updatedAt: "2026-01-01T00:00:00.000Z",
 				sharedAt: "2026-01-01T00:00:00.000Z",
-				ownerDeviceId: "device-1",
 			}),
 		);
 		const remote = makeRecipe({
@@ -132,7 +108,6 @@ describe("runSync", () => {
 			title: "Newer remote title",
 			updatedAt: "2026-01-05T00:00:00.000Z",
 			sharedAt: "2026-01-01T00:00:00.000Z",
-			ownerDeviceId: "device-1",
 		});
 		pullChangedSinceMock.mockImplementation(async (table: string) =>
 			table === "recipes"
@@ -224,16 +199,16 @@ describe("runSync", () => {
 		);
 	});
 
-	it("detaches (unshares) a local entity when the owner tombstoned it remotely", async () => {
+	// Every paired device is a symmetric co-owner (see CLAUDE.md's Ownership
+	// section) — a tombstone pulled from any device means the entity is gone
+	// everywhere, not merely unshared from this one, so it's removed from
+	// local storage entirely rather than kept as a private detached copy.
+	it("removes a local entity entirely when it was tombstoned remotely, persisting the removal", async () => {
 		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-2" });
-		const { saveRecipe } = await import("#/lib/recipes-storage");
+		const { saveRecipe, loadRecipes } = await import("#/lib/recipes-storage");
 		saveRecipe(
 			[],
-			makeRecipe({
-				id: "r1",
-				sharedAt: "2026-01-01T00:00:00.000Z",
-				ownerDeviceId: "device-1",
-			}),
+			makeRecipe({ id: "r1", sharedAt: "2026-01-01T00:00:00.000Z" }),
 		);
 		pullChangedSinceMock.mockImplementation(async (table: string) =>
 			table === "recipes"
@@ -251,9 +226,10 @@ describe("runSync", () => {
 
 		const result = await runSync();
 
-		const detached = result?.recipes?.find((r) => r.id === "r1");
-		expect(detached).toBeDefined();
-		expect(detached?.sharedAt).toBeNull();
+		expect(result?.recipes?.find((r) => r.id === "r1")).toBeUndefined();
+		// Not just absent from the returned in-memory array — actually gone
+		// from localStorage too, so it doesn't reappear on the next load.
+		expect(loadRecipes().find((r) => r.id === "r1")).toBeUndefined();
 	});
 
 	it("ignores a tombstone for an entity it never had locally", async () => {
@@ -313,7 +289,6 @@ describe("runSync", () => {
 			makeRecipe({
 				id: "r1",
 				sharedAt: "2026-01-01T00:00:00.000Z",
-				ownerDeviceId: "device-1",
 				updatedAt: "2026-01-01T00:00:00.000Z",
 			}),
 		);
@@ -338,7 +313,6 @@ describe("runSync", () => {
 			makeRecipe({
 				id: "r1",
 				sharedAt: "2026-01-01T00:00:00.000Z",
-				ownerDeviceId: "device-1",
 				updatedAt: "2026-01-01T00:00:00.000Z",
 			}),
 		);
@@ -370,7 +344,6 @@ describe("runSync", () => {
 			makeRecipe({
 				id: "r1",
 				sharedAt: "2026-01-01T00:00:00.000Z",
-				ownerDeviceId: "device-1",
 				updatedAt: "2026-01-01T00:00:00.000Z",
 			}),
 		);
@@ -410,7 +383,6 @@ describe("runSync", () => {
 			makeRecipe({
 				id: "r1",
 				sharedAt: "2026-01-01T00:00:00.000Z",
-				ownerDeviceId: "device-1",
 			}),
 		);
 		const { runSync } = await import("./sync-engine");
@@ -473,5 +445,69 @@ describe("runSync", () => {
 			expect.any(Error),
 		);
 		consoleErrorSpy.mockRestore();
+	});
+
+	describe("pending tombstone retry", () => {
+		it("retries a pending tombstone before pulling, and clears it once confirmed", async () => {
+			getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+			const { addPendingTombstone, getPendingTombstones } = await import(
+				"#/lib/sync/pending-tombstones"
+			);
+			addPendingTombstone("recipes", "r1");
+			const { runSync } = await import("./sync-engine");
+
+			await runSync();
+
+			expect(pushTombstoneMock).toHaveBeenCalledWith("recipes", "r1");
+			expect(getPendingTombstones("recipes")).toEqual([]);
+		});
+
+		it("leaves a pending tombstone in place for the next cycle when the retry still fails", async () => {
+			getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+			pushTombstoneMock.mockRejectedValue(new Error("still not landed"));
+			const { addPendingTombstone, getPendingTombstones } = await import(
+				"#/lib/sync/pending-tombstones"
+			);
+			addPendingTombstone("recipes", "r1");
+			const consoleErrorSpy = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => {});
+			const { runSync } = await import("./sync-engine");
+
+			await runSync();
+
+			expect(getPendingTombstones("recipes")).toEqual(["r1"]);
+			consoleErrorSpy.mockRestore();
+		});
+
+		it("does not resurrect an entity locally while its own tombstone retry is still failing", async () => {
+			getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+			pushTombstoneMock.mockRejectedValue(new Error("still not landed"));
+			const { addPendingTombstone } = await import(
+				"#/lib/sync/pending-tombstones"
+			);
+			addPendingTombstone("recipes", "r1");
+			pullChangedSinceMock.mockImplementation(async (table: string) =>
+				table === "recipes"
+					? [
+							{
+								id: "r1",
+								data: makeRecipe({ id: "r1" }),
+								updated_at: "2026-01-02T00:00:00.000Z",
+								deleted_at: null,
+							},
+						]
+					: [],
+			);
+			const consoleErrorSpy = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => {});
+			const { runSync } = await import("./sync-engine");
+
+			const result = await runSync();
+
+			expect(result?.recipes?.find((r) => r.id === "r1")).toBeUndefined();
+			consoleErrorSpy.mockRestore();
+		});
 	});
 });

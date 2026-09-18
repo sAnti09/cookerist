@@ -1238,7 +1238,9 @@ describe("Meal plan detail screen — delete", () => {
 		).toBeInTheDocument();
 	});
 
-	it("labels delete as Remove for a ready plan shared by another device", async () => {
+	// Every paired device is a symmetric co-owner (see CLAUDE.md's Ownership
+	// section) — delete is always "Delete," never a device-scoped "Remove."
+	it("labels delete as Delete for a ready shared plan", async () => {
 		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
 		saveMealPlan(
 			loadMealPlans(),
@@ -1246,25 +1248,6 @@ describe("Meal plan detail screen — delete", () => {
 				status: "ready",
 				entries: [makeEntry({ status: "ready", recipeId: "recipe-1" })],
 				sharedAt: "2026-09-15T12:00:00.000Z",
-				ownerDeviceId: "device-2",
-			}),
-		);
-		await renderApp("/meal-plan/plan-1");
-
-		expect(
-			screen.getByRole("button", { name: "Remove this meal plan" }),
-		).toBeInTheDocument();
-	});
-
-	it("still labels delete as Delete for a ready plan this device owns", async () => {
-		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
-		saveMealPlan(
-			loadMealPlans(),
-			makePlan({
-				status: "ready",
-				entries: [makeEntry({ status: "ready", recipeId: "recipe-1" })],
-				sharedAt: "2026-09-15T12:00:00.000Z",
-				ownerDeviceId: "device-1",
 			}),
 		);
 		await renderApp("/meal-plan/plan-1");

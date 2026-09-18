@@ -36,21 +36,35 @@ export async function pushEntities(
 	if (error) throw error;
 }
 
-// Soft-deletes a row this device owns (see src/lib/sync/ownership.ts) — RLS
-// still requires owner_id = auth.uid(), so this only ever succeeds for a row
-// actually owned by this device's account; deliberately not conditioned on
-// ownerDeviceId here (that's a client-side concept the DB doesn't know
-// about) since the caller (app-data-context.tsx) already gates on
-// isOwnedByThisDevice before ever calling this.
+// Soft-deletes a row belonging to this device's account — every paired
+// device under one account is a symmetric co-owner (see CLAUDE.md's
+// Ownership section), so RLS's owner_id = auth.uid() check is the only
+// authority check that applies; there's no per-device ownership concept on
+// the client side to also gate on.
+//
+// Explicitly verifies a row was actually touched via `.select("id")` on the
+// update: PostgREST returns `error: null` just as readily when the
+// `WHERE`/RLS predicate matches zero rows (a stale device JWT, or the row
+// simply hasn't reached Supabase yet via pushEntities) as when it succeeds —
+// without this check, a no-op update looked identical to a real tombstone,
+// so the caller happily deleted the entity locally while Supabase kept
+// serving it live to every paired device forever. Throwing here instead lets
+// the pending-tombstones retry loop (see sync-engine.ts) pick it back up.
 export async function pushTombstone(
 	table: SyncTable,
 	id: string,
 ): Promise<void> {
-	const { error } = await supabase
+	const { data, error } = await supabase
 		.from(table)
 		.update({ deleted_at: new Date().toISOString() })
-		.eq("id", id);
+		.eq("id", id)
+		.select("id");
 	if (error) throw error;
+	if (!data || data.length === 0) {
+		throw new Error(
+			`Tombstone push matched no row for ${table}/${id} (row missing or not owned by this account)`,
+		);
+	}
 }
 
 // Every row (including a tombstoned one — deleted_at is part of the select,

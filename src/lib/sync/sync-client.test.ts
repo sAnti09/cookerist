@@ -6,7 +6,8 @@ vi.mock("#/lib/identity/device", () => ({
 }));
 
 const upsertMock = vi.fn();
-const eqMock = vi.fn();
+const eqSelectMock = vi.fn();
+const eqMock = vi.fn(() => ({ select: eqSelectMock }));
 const updateMock = vi.fn(() => ({ eq: eqMock }));
 const gtMock = vi.fn();
 const selectMock = vi.fn(() => ({ gt: gtMock }));
@@ -23,13 +24,14 @@ beforeEach(() => {
 	vi.resetModules();
 	getDeviceIdentityMock.mockReset();
 	upsertMock.mockReset();
-	eqMock.mockReset();
+	eqSelectMock.mockReset();
+	eqMock.mockClear();
 	updateMock.mockClear();
 	gtMock.mockReset();
 	selectMock.mockClear();
 	fromMock.mockClear();
 	upsertMock.mockResolvedValue({ error: null });
-	eqMock.mockResolvedValue({ error: null });
+	eqSelectMock.mockResolvedValue({ data: [{ id: "r1" }], error: null });
 	gtMock.mockResolvedValue({ data: [], error: null });
 });
 
@@ -87,6 +89,28 @@ describe("pushTombstone", () => {
 			expect.objectContaining({ deleted_at: expect.any(String) }),
 		);
 		expect(eqMock).toHaveBeenCalledWith("id", "r1");
+		expect(eqSelectMock).toHaveBeenCalledWith("id");
+	});
+
+	it("throws when Supabase returns an error", async () => {
+		eqSelectMock.mockResolvedValue({ data: null, error: new Error("boom") });
+		const { pushTombstone } = await import("./sync-client");
+
+		await expect(pushTombstone("recipes", "r1")).rejects.toThrow("boom");
+	});
+
+	// PostgREST returns error: null just as readily when the update's WHERE/RLS
+	// predicate matches zero rows (stale JWT, or the row was never pushed to
+	// Supabase in the first place) as when it succeeds — without this check a
+	// no-op update looked identical to a real tombstone, so the caller deleted
+	// the entity locally while Supabase kept serving it to every paired device.
+	it("throws when the update matches no row, so a silent no-op isn't mistaken for success", async () => {
+		eqSelectMock.mockResolvedValue({ data: [], error: null });
+		const { pushTombstone } = await import("./sync-client");
+
+		await expect(pushTombstone("recipes", "r1")).rejects.toThrow(
+			"matched no row",
+		);
 	});
 });
 

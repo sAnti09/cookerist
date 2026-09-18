@@ -221,25 +221,12 @@ describe("Grocery detail screen", () => {
 		).toBeInTheDocument();
 	});
 
-	it("labels delete as Remove for a shared list owned by another device", async () => {
+	// Every paired device is a symmetric co-owner (see CLAUDE.md's Ownership
+	// section) — delete is always "Delete," never a device-scoped "Remove."
+	it("labels delete as Delete for a shared list", async () => {
 		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
 		const list = makeGroceryList({
 			sharedAt: "2026-01-15T12:00:00.000Z",
-			ownerDeviceId: "device-2",
-		});
-		saveGroceryList(loadGroceryLists(), list);
-		await renderApp(`/grocery/${list.id}`);
-
-		expect(
-			screen.getByRole("button", { name: `Remove ${list.name}` }),
-		).toBeInTheDocument();
-	});
-
-	it("still labels delete as Delete for a shared list this device owns", async () => {
-		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
-		const list = makeGroceryList({
-			sharedAt: "2026-01-15T12:00:00.000Z",
-			ownerDeviceId: "device-1",
 		});
 		saveGroceryList(loadGroceryLists(), list);
 		await renderApp(`/grocery/${list.id}`);

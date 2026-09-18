@@ -18,7 +18,6 @@ import { DifficultyBadge } from "#/components/ui/difficulty-badge";
 import { IconButton } from "#/components/ui/icon-button";
 import { useAppData } from "#/lib/app-data-context";
 import { formatCaloriesPerServing, formatEstimatedTime } from "#/lib/recipe";
-import { isOwnedByThisDevice } from "#/lib/sync/ownership";
 import { useGoBack } from "#/lib/use-go-back";
 import { cn } from "#/lib/utils";
 
@@ -64,12 +63,6 @@ function RecipeDetailScreen() {
 	const [cookModeOpen, setCookModeOpen] = useState(search.autoStart === "cook");
 	const [sharing, setSharing] = useState(false);
 	const recipe = recipes.find((r) => r.id === recipeId);
-	// Whether this recipe specifically has synced yet (relevant to delete vs.
-	// remove authority — see Ownership in CLAUDE.md) is a separate question
-	// from whether this device is syncing at all — the Share icon reflects
-	// the latter, since every recipe syncs automatically once true.
-	const isOwned =
-		!recipe || recipe.sharedAt == null || isOwnedByThisDevice(recipe);
 
 	async function handleShare() {
 		if (sharing) return;
@@ -160,9 +153,7 @@ function RecipeDetailScreen() {
 						/>
 					</IconButton>
 					<IconButton
-						aria-label={
-							isOwned ? `Delete ${recipe.title}` : `Remove ${recipe.title}`
-						}
+						aria-label={`Delete ${recipe.title}`}
 						onClick={() => setConfirmingDelete(true)}
 					>
 						<Trash2 className="size-4 text-ink-dim" />
@@ -207,13 +198,9 @@ function RecipeDetailScreen() {
 
 			<ConfirmDialog
 				open={confirmingDelete}
-				title={isOwned ? "Delete this recipe?" : "Remove this recipe?"}
-				description={
-					isOwned
-						? `"${recipe.title}" will be permanently removed.`
-						: `"${recipe.title}" is shared by someone else — it'll only be removed from this device, not for them.`
-				}
-				confirmLabel={isOwned ? "Delete" : "Remove"}
+				title="Delete this recipe?"
+				description={`"${recipe.title}" will be permanently removed.`}
+				confirmLabel="Delete"
 				cancelLabel="Cancel"
 				onConfirm={() => {
 					setConfirmingDelete(false);

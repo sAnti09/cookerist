@@ -37,7 +37,10 @@ import {
 	updateRecipe,
 	updateRecipes,
 } from "#/lib/recipes-storage";
-import { isOwnedByThisDevice } from "#/lib/sync/ownership";
+import {
+	addPendingTombstone,
+	removePendingTombstone,
+} from "#/lib/sync/pending-tombstones";
 import { pushTombstone, type SyncTable } from "#/lib/sync/sync-client";
 import { runSync } from "#/lib/sync/sync-engine";
 
@@ -263,18 +266,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		};
 	}, [triggerForegroundSync]);
 
-	// Shared entities need to check ownership (src/lib/sync/ownership.ts)
-	// before deleting: the owner's delete tombstones it everywhere (pushed to
-	// Supabase), anyone else's just removes their own copy ("leave" — see
-	// CLAUDE.md's "Sharing feature" roadmap item). Either way the local
-	// removal below is the same; only whether a tombstone gets pushed differs.
+	// Every paired device is a symmetric co-owner of a shared entity (see
+	// CLAUDE.md's "Sharing feature" / Ownership section) — any of them can
+	// fully delete it, and the delete cascades to the rest on their next sync.
+	// There's no "leave" concept for pairing anymore; that's reserved for a
+	// possible future "share one item with someone else's account" feature.
+	//
+	// The local entity is gone from storage the moment this returns, so it's
+	// no longer around to notice if the tombstone push failed (or silently
+	// matched zero rows — see pushTombstone's own comment) the way a failed
+	// content edit naturally would on the next sync cycle. addPendingTombstone
+	// records the delete-intent durably *before* attempting the push, so even
+	// a page close mid-request leaves something for sync-engine.ts's
+	// syncTable to retry; removePendingTombstone only fires once the push
+	// actually confirms the row was touched.
 	const handleDeleteRecipe = useCallback(
 		(id: string) => {
 			const recipe = recipes.find((r) => r.id === id);
-			if (recipe?.sharedAt != null && isOwnedByThisDevice(recipe)) {
-				pushTombstone("recipes", id).catch((error) => {
-					console.error("Failed to push recipe tombstone:", error);
-				});
+			if (recipe?.sharedAt != null) {
+				addPendingTombstone("recipes", id);
+				pushTombstone("recipes", id)
+					.then(() => removePendingTombstone("recipes", id))
+					.catch((error) => {
+						console.error("Failed to push recipe tombstone:", error);
+					});
 			}
 			setRecipes((current) => deleteRecipe(current, id));
 		},
@@ -322,10 +337,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const handleDeleteGroceryList = useCallback(
 		(id: string) => {
 			const list = groceryLists.find((l) => l.id === id);
-			if (list?.sharedAt != null && isOwnedByThisDevice(list)) {
-				pushTombstone("grocery_lists", id).catch((error) => {
-					console.error("Failed to push grocery list tombstone:", error);
-				});
+			if (list?.sharedAt != null) {
+				addPendingTombstone("grocery_lists", id);
+				pushTombstone("grocery_lists", id)
+					.then(() => removePendingTombstone("grocery_lists", id))
+					.catch((error) => {
+						console.error("Failed to push grocery list tombstone:", error);
+					});
 			}
 			setGroceryLists((current) => deleteGroceryList(current, id));
 		},
@@ -386,10 +404,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const handleDeleteMealPlan = useCallback(
 		(id: string) => {
 			const plan = mealPlans.find((p) => p.id === id);
-			if (plan?.sharedAt != null && isOwnedByThisDevice(plan)) {
-				pushTombstone("meal_plans", id).catch((error) => {
-					console.error("Failed to push meal plan tombstone:", error);
-				});
+			if (plan?.sharedAt != null) {
+				addPendingTombstone("meal_plans", id);
+				pushTombstone("meal_plans", id)
+					.then(() => removePendingTombstone("meal_plans", id))
+					.catch((error) => {
+						console.error("Failed to push meal plan tombstone:", error);
+					});
 			}
 			setMealPlans((current) => deleteMealPlan(current, id));
 		},

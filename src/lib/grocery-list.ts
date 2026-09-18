@@ -56,12 +56,9 @@ export type GroceryList = {
 	confirmedMergeKeys?: string[];
 	// See the equivalent fields on Recipe (recipe.ts) — same sync-engine
 	// contract (src/lib/sync/), just for a grocery list instead of a recipe.
-	// updatedAt/sharedAt are always present after loadGroceryLists()
-	// normalizes them; ownerDeviceId is genuinely optional (unset until
-	// first shared).
+	// Always present after loadGroceryLists() normalizes them.
 	updatedAt: string;
 	sharedAt: string | null;
-	ownerDeviceId?: string;
 };
 
 export const GROCERY_LIST_NAME_MAX_LENGTH = 255;

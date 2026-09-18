@@ -13,7 +13,6 @@ import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { IconButton } from "#/components/ui/icon-button";
 import { useAppData } from "#/lib/app-data-context";
 import { getGroceryListProgress } from "#/lib/grocery-list";
-import { isOwnedByThisDevice } from "#/lib/sync/ownership";
 import { useGoBack } from "#/lib/use-go-back";
 import { cn } from "#/lib/utils";
 
@@ -54,7 +53,6 @@ function GroceryDetailScreen() {
 	);
 	const [sharing, setSharing] = useState(false);
 	const list = groceryLists.find((l) => l.id === listId);
-	const isOwned = !list || list.sharedAt == null || isOwnedByThisDevice(list);
 
 	async function handleShare() {
 		if (sharing) return;
@@ -121,7 +119,7 @@ function GroceryDetailScreen() {
 						/>
 					</IconButton>
 					<IconButton
-						aria-label={isOwned ? `Delete ${list.name}` : `Remove ${list.name}`}
+						aria-label={`Delete ${list.name}`}
 						onClick={() => setConfirmingDelete(true)}
 					>
 						<Trash2 className="size-4 text-ink-dim" />
@@ -171,15 +169,9 @@ function GroceryDetailScreen() {
 
 			<ConfirmDialog
 				open={confirmingDelete}
-				title={
-					isOwned ? "Delete this grocery list?" : "Remove this grocery list?"
-				}
-				description={
-					isOwned
-						? `"${list.name}" will be permanently removed.`
-						: `"${list.name}" is shared by someone else — it'll only be removed from this device, not for them.`
-				}
-				confirmLabel={isOwned ? "Delete" : "Remove"}
+				title="Delete this grocery list?"
+				description={`"${list.name}" will be permanently removed.`}
+				confirmLabel="Delete"
 				cancelLabel="Cancel"
 				onConfirm={() => {
 					setConfirmingDelete(false);

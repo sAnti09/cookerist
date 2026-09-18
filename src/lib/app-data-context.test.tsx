@@ -216,13 +216,15 @@ describe("AppDataProvider delete handlers", () => {
 		expect(pushTombstoneMock).not.toHaveBeenCalled();
 	});
 
-	it("pushes a tombstone when deleting a recipe this device owns", async () => {
+	// Every paired device is a symmetric co-owner (see CLAUDE.md's Ownership
+	// section) — deleting a shared entity always pushes a tombstone,
+	// regardless of which device originally shared it.
+	it("pushes a tombstone when deleting a shared recipe", async () => {
 		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
 		saveRecipe(
 			[],
 			makeRecipe({
 				sharedAt: "2026-01-01T00:00:00.000Z",
-				ownerDeviceId: "device-1",
 			}),
 		);
 		const user = userEvent.setup();
@@ -236,34 +238,12 @@ describe("AppDataProvider delete handlers", () => {
 		);
 	});
 
-	it("removes (without a tombstone) a shared recipe owned by another device", async () => {
-		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
-		saveRecipe(
-			[],
-			makeRecipe({
-				sharedAt: "2026-01-01T00:00:00.000Z",
-				ownerDeviceId: "device-2",
-			}),
-		);
-		const user = userEvent.setup();
-		renderHarness();
-		await screen.findByTestId("recipe-count");
-
-		await user.click(screen.getByRole("button", { name: "delete-recipe" }));
-
-		await waitFor(() =>
-			expect(screen.getByTestId("recipe-count")).toHaveTextContent("0"),
-		);
-		expect(pushTombstoneMock).not.toHaveBeenCalled();
-	});
-
-	it("pushes a tombstone when deleting an owned shared grocery list", async () => {
+	it("pushes a tombstone when deleting a shared grocery list", async () => {
 		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
 		saveGroceryList(
 			[],
 			makeGroceryList({
 				sharedAt: "2026-01-01T00:00:00.000Z",
-				ownerDeviceId: "device-1",
 			}),
 		);
 		const user = userEvent.setup();
@@ -277,34 +257,12 @@ describe("AppDataProvider delete handlers", () => {
 		);
 	});
 
-	it("removes a shared grocery list owned by another device without a tombstone", async () => {
-		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
-		saveGroceryList(
-			[],
-			makeGroceryList({
-				sharedAt: "2026-01-01T00:00:00.000Z",
-				ownerDeviceId: "device-2",
-			}),
-		);
-		const user = userEvent.setup();
-		renderHarness();
-		await screen.findByTestId("list-count");
-
-		await user.click(screen.getByRole("button", { name: "delete-list" }));
-
-		await waitFor(() =>
-			expect(screen.getByTestId("list-count")).toHaveTextContent("0"),
-		);
-		expect(pushTombstoneMock).not.toHaveBeenCalled();
-	});
-
-	it("pushes a tombstone when deleting an owned shared meal plan", async () => {
+	it("pushes a tombstone when deleting a shared meal plan", async () => {
 		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
 		saveMealPlan(
 			[],
 			makeMealPlan({
 				sharedAt: "2026-01-01T00:00:00.000Z",
-				ownerDeviceId: "device-1",
 			}),
 		);
 		const user = userEvent.setup();
@@ -316,27 +274,6 @@ describe("AppDataProvider delete handlers", () => {
 		await waitFor(() =>
 			expect(pushTombstoneMock).toHaveBeenCalledWith("meal_plans", "p1"),
 		);
-	});
-
-	it("removes a shared meal plan owned by another device without a tombstone", async () => {
-		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
-		saveMealPlan(
-			[],
-			makeMealPlan({
-				sharedAt: "2026-01-01T00:00:00.000Z",
-				ownerDeviceId: "device-2",
-			}),
-		);
-		const user = userEvent.setup();
-		renderHarness();
-		await screen.findByTestId("plan-count");
-
-		await user.click(screen.getByRole("button", { name: "delete-plan" }));
-
-		await waitFor(() =>
-			expect(screen.getByTestId("plan-count")).toHaveTextContent("0"),
-		);
-		expect(pushTombstoneMock).not.toHaveBeenCalled();
 	});
 });
 

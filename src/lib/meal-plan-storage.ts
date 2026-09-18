@@ -52,6 +52,17 @@ export function deleteMealPlan(plans: MealPlan[], id: string): MealPlan[] {
 	return next;
 }
 
+// Bulk version of deleteMealPlan — used by the sync engine (src/lib/sync/) to
+// drop every locally-held plan a pull just found tombstoned upstream in one
+// persist() call, rather than one call per id.
+export function removeMealPlans(plans: MealPlan[], ids: string[]): MealPlan[] {
+	if (ids.length === 0) return plans;
+	const idSet = new Set(ids);
+	const next = plans.filter((plan) => !idSet.has(plan.id));
+	persist(next);
+	return next;
+}
+
 // Stamps `updatedAt` on every write below so the sync engine's
 // last-write-wins merge (src/lib/sync/) has an accurate clock for content
 // changes.

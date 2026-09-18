@@ -13,10 +13,7 @@ export const ADD_SYNC_METADATA_MIGRATION_ID = "add-sync-metadata";
 // it once, persist it, stop re-deriving on every load" reasoning as every
 // other migration here. Uses the plain replaceX() bulk writers (not
 // updateX(), which stamps updatedAt to "now") so backfilling doesn't itself
-// look like a fresh edit. `ownerDeviceId` is deliberately left unset: there's
-// no device to backfill it with, and it's stamped lazily the first time each
-// entity actually syncs (src/lib/sync/sync-engine.ts's stampForSync),
-// regardless of whether that entity predates this migration.
+// look like a fresh edit.
 //
 // Purely local and synchronous — no Groq call, nothing worth retrying — so
 // this follows the default "throws → still marked completed" rule (see

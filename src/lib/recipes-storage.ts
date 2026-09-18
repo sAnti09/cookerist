@@ -59,6 +59,17 @@ export function deleteRecipe(recipes: Recipe[], id: string): Recipe[] {
 	return next;
 }
 
+// Bulk version of deleteRecipe — used by the sync engine (src/lib/sync/) to
+// drop every locally-held recipe a pull just found tombstoned upstream in
+// one persist() call, rather than one call per id.
+export function removeRecipes(recipes: Recipe[], ids: string[]): Recipe[] {
+	if (ids.length === 0) return recipes;
+	const idSet = new Set(ids);
+	const next = recipes.filter((recipe) => !idSet.has(recipe.id));
+	persist(next);
+	return next;
+}
+
 // Stamps `updatedAt` on every write below (except setExpandedRecipe, which is
 // pure UI state — see recipe.ts) so the sync engine's last-write-wins merge
 // (src/lib/sync/) has an accurate clock for content changes.

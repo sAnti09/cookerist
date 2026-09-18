@@ -57,6 +57,20 @@ export function deleteGroceryList(
 	return next;
 }
 
+// Bulk version of deleteGroceryList — used by the sync engine (src/lib/sync/)
+// to drop every locally-held list a pull just found tombstoned upstream in
+// one persist() call, rather than one call per id.
+export function removeGroceryLists(
+	lists: GroceryList[],
+	ids: string[],
+): GroceryList[] {
+	if (ids.length === 0) return lists;
+	const idSet = new Set(ids);
+	const next = lists.filter((list) => !idSet.has(list.id));
+	persist(next);
+	return next;
+}
+
 // Stamps `updatedAt` on every write below (except setExpandedGroceryList,
 // which is pure UI state — see grocery-list.ts) so the sync engine's
 // last-write-wins merge (src/lib/sync/) has an accurate clock for content

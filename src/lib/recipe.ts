@@ -136,14 +136,13 @@ export type Recipe = {
 	// ISO timestamp once this recipe has been pushed to Supabase at least
 	// once; null means it's still local-only and the sync engine never
 	// touches it (see CLAUDE.md's "Sharing feature" roadmap item — a solo user
-	// who never shares anything should never get a row in Supabase).
+	// who never shares anything should never get a row in Supabase). Every
+	// device paired under the same identity is a symmetric co-owner once
+	// shared — any of them can fully delete it, which cascades to the rest
+	// (see src/lib/sync/sync-engine.ts). There's no per-device ownership
+	// concept here; that's reserved for a possible future "share one item
+	// with someone else's account" feature (see CLAUDE.md's Known limitations).
 	sharedAt: string | null;
-	// The device id (see src/lib/identity/device.ts) that first shared this
-	// recipe — only that device can delete it everywhere; every other paired
-	// device can only remove its own copy ("leave", not delete). Stamped
-	// lazily the first time this recipe is shared, never at creation time —
-	// see src/lib/sync/ownership.ts.
-	ownerDeviceId?: string;
 };
 
 export function formatEstimatedTime(minutes: number): string {

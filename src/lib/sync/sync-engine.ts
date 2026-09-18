@@ -1,13 +1,30 @@
 import type { GroceryList } from "#/lib/grocery-list";
-import { loadGroceryLists, upsertGroceryLists } from "#/lib/grocery-storage";
+import {
+	loadGroceryLists,
+	removeGroceryLists,
+	upsertGroceryLists,
+} from "#/lib/grocery-storage";
 import { getDeviceIdentity } from "#/lib/identity/device";
 import type { MealPlan } from "#/lib/meal-plan";
-import { loadMealPlans, upsertMealPlans } from "#/lib/meal-plan-storage";
+import {
+	loadMealPlans,
+	removeMealPlans,
+	upsertMealPlans,
+} from "#/lib/meal-plan-storage";
 import type { Recipe } from "#/lib/recipe";
-import { loadRecipes, upsertRecipes } from "#/lib/recipes-storage";
+import {
+	loadRecipes,
+	removeRecipes,
+	upsertRecipes,
+} from "#/lib/recipes-storage";
+import {
+	getPendingTombstones,
+	removePendingTombstone,
+} from "#/lib/sync/pending-tombstones";
 import {
 	pullChangedSince,
 	pushEntities,
+	pushTombstone,
 	type SyncRow,
 	type SyncTable,
 } from "#/lib/sync/sync-client";
@@ -39,32 +56,22 @@ type Syncable = {
 	id: string;
 	updatedAt: string;
 	sharedAt: string | null;
-	ownerDeviceId?: string;
 };
 
 // Every local entity syncs once this device has an identity — there's no
 // per-entity opt-in anymore (see CLAUDE.md's "Sharing feature" section for
 // why: an earlier per-item "Share" toggle plus a separate "sync everything"
 // action was confusing in practice and didn't match how people actually
-// think about syncing two of their own devices). `sharedAt`/`ownerDeviceId`
-// still exist as bookkeeping — first-push timestamp and delete-authority
-// owner (src/lib/sync/ownership.ts) — they're just stamped automatically
-// here instead of being a manual toggle.
-//
-// Only stamps an entity that's NEVER been synced (`ownerDeviceId` unset) —
-// checking `sharedAt` alone isn't enough, since a detached entity (the
-// owner tombstoned it upstream — see the pull/merge loop below) also has
-// `sharedAt: null` but keeps its original `ownerDeviceId`. Without this
-// distinction, the very next push after a detach would immediately
-// re-stamp and re-upload the entity this device was just told to stop
-// syncing, resurrecting something the owner deleted.
-function stampForSync<T extends Syncable>(entity: T, deviceId: string): T {
-	if (entity.sharedAt != null || entity.ownerDeviceId != null) return entity;
-	return {
-		...entity,
-		sharedAt: new Date().toISOString(),
-		ownerDeviceId: deviceId,
-	};
+// think about syncing two of their own devices). Every device paired under
+// the same account is a symmetric co-owner — there's no per-device
+// "owner"/"leave" distinction (that was an earlier design, reverted: it
+// conflated "my own second device" with "someone else's device," which are
+// meant to be the same trust level here — see CLAUDE.md's Ownership section).
+// `sharedAt` is the only bookkeeping field left, stamped automatically here
+// the first time an entity is ever synced.
+function stampForSync<T extends Syncable>(entity: T): T {
+	if (entity.sharedAt != null) return entity;
+	return { ...entity, sharedAt: new Date().toISOString() };
 }
 
 // Pulls+merges everything changed since the last successful pull FIRST,
@@ -83,9 +90,30 @@ async function syncTable<T extends Syncable>(
 	table: SyncTable,
 	load: () => T[],
 	upsert: (current: T[], incoming: T[]) => T[],
+	remove: (current: T[], ids: string[]) => T[],
 	merge: (local: T, remote: T) => T,
-	deviceId: string,
 ): Promise<T[]> {
+	// Retry any delete this device couldn't confirm as landed last cycle (see
+	// pending-tombstones.ts) before pulling — deliberately before, not after:
+	// a retry that succeeds here means the pull just below already sees
+	// deleted_at set, so the merge loop's normal removal handling covers it.
+	// A retry that still fails leaves the id in `stillPending`, which the
+	// merge loop consults to avoid resurrecting an entity this device already
+	// removed locally just because Supabase hasn't caught up yet.
+	const stillPending = new Set(getPendingTombstones(table));
+	for (const id of stillPending) {
+		try {
+			await pushTombstone(table, id);
+			removePendingTombstone(table, id);
+			stillPending.delete(id);
+		} catch (error) {
+			console.error(
+				`Retry of pending tombstone failed for ${table}/${id}:`,
+				error,
+			);
+		}
+	}
+
 	const since = getWatermark(table);
 	let rows: SyncRow[];
 	try {
@@ -102,19 +130,23 @@ async function syncTable<T extends Syncable>(
 		const byId = new Map(merged.map((entity) => [entity.id, entity]));
 		let maxUpdatedAt = since;
 		const resolved: T[] = [];
+		// Every paired device is a symmetric co-owner (see stampForSync above)
+		// — a tombstoned row means the entity is gone everywhere, not merely
+		// unshared from this device, so it's dropped from `merged` below
+		// rather than kept as a detached private copy.
+		const deletedIds = new Set<string>();
 		for (const row of rows) {
 			if (row.updated_at > maxUpdatedAt) maxUpdatedAt = row.updated_at;
 			const remote = row.data as unknown as T;
 			const localEntity = byId.get(remote.id);
 			if (row.deleted_at) {
-				// Owner deleted it out from under us — detach rather than remove,
-				// so whatever we have (including our own edits/checkmarks)
-				// survives as an ordinary private local entity. Nothing to do if
-				// we never had it.
-				if (!localEntity) continue;
-				resolved.push({ ...localEntity, sharedAt: null });
+				deletedIds.add(remote.id);
 				continue;
 			}
+			// This device already deleted this entity locally and its own
+			// tombstone retry above just failed again — don't let this pull
+			// resurrect it before the next retry gets a chance to land.
+			if (stillPending.has(remote.id)) continue;
 			resolved.push(
 				localEntity
 					? merge(localEntity, remote)
@@ -125,11 +157,14 @@ async function syncTable<T extends Syncable>(
 			);
 		}
 		merged = upsert(merged, resolved);
+		if (deletedIds.size > 0) {
+			merged = remove(merged, Array.from(deletedIds));
+		}
 		setWatermark(table, maxUpdatedAt);
 	}
 
 	try {
-		const stamped = merged.map((entity) => stampForSync(entity, deviceId));
+		const stamped = merged.map((entity) => stampForSync(entity));
 		// Entities newly stamped this cycle (first-ever share) always need
 		// pushing regardless of the watermark below — stamping doesn't bump
 		// `updatedAt`, so the watermark check alone would never catch them.
@@ -141,12 +176,8 @@ async function syncTable<T extends Syncable>(
 		if (newlyStampedIds.size > 0) {
 			merged = upsert(merged, stamped);
 		}
-		// Excludes a detached entity (sharedAt null, ownerDeviceId still set —
-		// see stampForSync above) from the push entirely, not just from
-		// re-stamping: once the owner has tombstoned it, this device has no
-		// business uploading its own copy of it ever again. Of the remaining
-		// shared entities, only pushes ones that changed locally since the
-		// last successful push (`updatedAt` past the push watermark) — without
+		// Only pushes a shared entity that changed locally since the last
+		// successful push (`updatedAt` past the push watermark) — without
 		// this, every sync cycle (mount, focus, every debounced edit) would
 		// re-upload the entire shared set even when nothing actually changed.
 		const pushWatermark = getPushWatermark(table);
@@ -203,8 +234,8 @@ export async function runSync(
 					"recipes",
 					loadRecipes,
 					upsertRecipes,
+					removeRecipes,
 					mergeRecipe,
-					identity.deviceId,
 				)
 			: undefined,
 		wanted.has("grocery_lists")
@@ -212,8 +243,8 @@ export async function runSync(
 					"grocery_lists",
 					loadGroceryLists,
 					upsertGroceryLists,
+					removeGroceryLists,
 					mergeGroceryList,
-					identity.deviceId,
 				)
 			: undefined,
 		wanted.has("meal_plans")
@@ -221,8 +252,8 @@ export async function runSync(
 					"meal_plans",
 					loadMealPlans,
 					upsertMealPlans,
+					removeMealPlans,
 					mergeMealPlan,
-					identity.deviceId,
 				)
 			: undefined,
 	]);

@@ -59,7 +59,6 @@ function seedRecipe(
 		title?: string;
 		favorite?: boolean;
 		sharedAt?: string | null;
-		ownerDeviceId?: string;
 	} = {},
 ) {
 	const recipe = toStoredRecipe("shrimp pasta for 2", {
@@ -70,7 +69,6 @@ function seedRecipe(
 		...recipe,
 		favorite: overrides.favorite ?? false,
 		sharedAt: overrides.sharedAt ?? null,
-		ownerDeviceId: overrides.ownerDeviceId,
 	});
 	return saved[0];
 }
@@ -271,24 +269,12 @@ describe("Recipe detail screen", () => {
 		).toBeInTheDocument();
 	});
 
-	it("labels delete as Remove for a shared recipe owned by another device", async () => {
+	// Every paired device is a symmetric co-owner (see CLAUDE.md's Ownership
+	// section) — delete is always "Delete," never a device-scoped "Remove."
+	it("labels delete as Delete for a shared recipe", async () => {
 		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
 		const recipe = seedRecipe({
 			sharedAt: "2026-01-01T00:00:00.000Z",
-			ownerDeviceId: "device-2",
-		});
-		await renderApp(`/recipes/${recipe.id}`);
-
-		expect(
-			screen.getByRole("button", { name: `Remove ${recipe.title}` }),
-		).toBeInTheDocument();
-	});
-
-	it("still labels delete as Delete for a shared recipe this device owns", async () => {
-		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
-		const recipe = seedRecipe({
-			sharedAt: "2026-01-01T00:00:00.000Z",
-			ownerDeviceId: "device-1",
 		});
 		await renderApp(`/recipes/${recipe.id}`);
 
