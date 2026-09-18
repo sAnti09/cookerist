@@ -18,3 +18,9 @@ __unconfig*
 .DS_Store
 coverage/
 .idea/
+
+# Vendored AI agent skill content (regenerate with `npx skills add <source>`)
+# and local Claude Code session state -- tooling, not project source.
+.agents/
+.claude/
+skills-lock.json
