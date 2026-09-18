@@ -117,6 +117,25 @@ describe("AccountDrawer", () => {
 		expect(await screen.findByText("Synced.")).toBeInTheDocument();
 	});
 
+	it("hides the 'Link this device' section once this device already has an identity", () => {
+		const first = render(<AccountDrawer open={true} onClose={vi.fn()} />);
+		expect(
+			screen.getByRole("button", { name: /link this device/i }),
+		).toBeInTheDocument();
+		first.unmount();
+
+		useAppDataMock.mockReturnValue({
+			hasDeviceIdentity: true,
+			createPairingCode: createPairingCodeMock,
+			linkDevice: linkDeviceMock,
+			syncNow: syncNowMock,
+		});
+		render(<AccountDrawer open={true} onClose={vi.fn()} />);
+		expect(
+			screen.queryByRole("button", { name: /link this device/i }),
+		).not.toBeInTheDocument();
+	});
+
 	it("calls onClose when the backdrop is clicked", async () => {
 		const user = userEvent.setup();
 		const onClose = vi.fn();

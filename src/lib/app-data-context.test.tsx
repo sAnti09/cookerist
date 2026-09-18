@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroceryList } from "#/lib/grocery-list";
 import { saveGroceryList } from "#/lib/grocery-storage";
 import type { MealPlan } from "#/lib/meal-plan";
@@ -10,10 +10,12 @@ import { saveRecipe } from "#/lib/recipes-storage";
 import { AppDataProvider, useAppData } from "./app-data-context";
 
 const getDeviceIdentityMock = vi.fn();
+const ensureDeviceIdentityMock = vi.fn();
 const createPairingCodeForThisDeviceMock = vi.fn();
 const linkDeviceWithPairingCodeMock = vi.fn();
 vi.mock("#/lib/identity/device", () => ({
 	getDeviceIdentity: () => getDeviceIdentityMock(),
+	ensureDeviceIdentity: () => ensureDeviceIdentityMock(),
 	createPairingCodeForThisDevice: (...args: unknown[]) =>
 		createPairingCodeForThisDeviceMock(...args),
 	linkDeviceWithPairingCode: (...args: unknown[]) =>
@@ -28,17 +30,6 @@ vi.mock("#/lib/sync/sync-client", () => ({
 const runSyncMock = vi.fn();
 vi.mock("#/lib/sync/sync-engine", () => ({
 	runSync: () => runSyncMock(),
-}));
-
-const shareRecipeMock = vi.fn();
-const shareGroceryListMock = vi.fn();
-const shareMealPlanMock = vi.fn();
-const shareAllLocalDataMock = vi.fn();
-vi.mock("#/lib/sync/share-actions", () => ({
-	shareRecipe: (...args: unknown[]) => shareRecipeMock(...args),
-	shareGroceryList: (...args: unknown[]) => shareGroceryListMock(...args),
-	shareMealPlan: (...args: unknown[]) => shareMealPlanMock(...args),
-	shareAllLocalData: (...args: unknown[]) => shareAllLocalDataMock(...args),
 }));
 
 function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
@@ -107,10 +98,9 @@ function Harness() {
 		deleteRecipe,
 		deleteGroceryList,
 		deleteMealPlan,
-		shareRecipe,
-		shareGroceryList,
-		shareMealPlan,
+		updateRecipe,
 		hasDeviceIdentity,
+		enableSync,
 		createPairingCode,
 		linkDevice,
 		syncNow,
@@ -133,14 +123,17 @@ function Harness() {
 			<button type="button" onClick={() => deleteMealPlan("p1")}>
 				delete-plan
 			</button>
-			<button type="button" onClick={() => shareRecipe("r1")}>
-				share-recipe
+			<button
+				type="button"
+				onClick={() => {
+					const recipe = recipes.find((r) => r.id === "r1");
+					if (recipe) updateRecipe({ ...recipe, favorite: !recipe.favorite });
+				}}
+			>
+				update-recipe
 			</button>
-			<button type="button" onClick={() => shareGroceryList("l1")}>
-				share-list
-			</button>
-			<button type="button" onClick={() => shareMealPlan("p1")}>
-				share-plan
+			<button type="button" onClick={() => enableSync()}>
+				enable-sync
 			</button>
 			<button type="button" onClick={() => createPairingCode()}>
 				gen-code
@@ -178,14 +171,11 @@ function renderHarness() {
 beforeEach(() => {
 	window.localStorage.clear();
 	getDeviceIdentityMock.mockReset();
+	ensureDeviceIdentityMock.mockReset();
 	createPairingCodeForThisDeviceMock.mockReset();
 	linkDeviceWithPairingCodeMock.mockReset();
 	pushTombstoneMock.mockReset();
 	runSyncMock.mockReset();
-	shareRecipeMock.mockReset();
-	shareGroceryListMock.mockReset();
-	shareMealPlanMock.mockReset();
-	shareAllLocalDataMock.mockReset();
 	getDeviceIdentityMock.mockReturnValue(null);
 	pushTombstoneMock.mockResolvedValue(undefined);
 	runSyncMock.mockResolvedValue(null);
@@ -330,11 +320,19 @@ describe("AppDataProvider delete handlers", () => {
 	});
 });
 
-describe("AppDataProvider share handlers", () => {
-	it("shares a recipe and applies the returned local data", async () => {
-		saveRecipe([], makeRecipe());
-		shareRecipeMock.mockResolvedValue({
-			recipes: [makeRecipe({ sharedAt: "2026-01-01T00:00:00.000Z" })],
+describe("AppDataProvider enableSync", () => {
+	it("ensures an identity exists and syncs, applying the result", async () => {
+		getDeviceIdentityMock.mockReturnValue(null);
+		// Mimic production: ensureDeviceIdentity() persists the identity to
+		// localStorage, so a subsequent getDeviceIdentity() call (inside
+		// syncNow()) reflects it immediately.
+		ensureDeviceIdentityMock.mockImplementation(async () => {
+			const identity = { deviceId: "device-1" };
+			getDeviceIdentityMock.mockReturnValue(identity);
+			return identity;
+		});
+		runSyncMock.mockResolvedValue({
+			recipes: [makeRecipe({ id: "from-sync" })],
 			groceryLists: [],
 			mealPlans: [],
 		});
@@ -342,46 +340,15 @@ describe("AppDataProvider share handlers", () => {
 		renderHarness();
 		await screen.findByTestId("recipe-count");
 
-		await user.click(screen.getByRole("button", { name: "share-recipe" }));
+		await user.click(screen.getByRole("button", { name: "enable-sync" }));
 
+		expect(ensureDeviceIdentityMock).toHaveBeenCalled();
 		await waitFor(() =>
-			expect(shareRecipeMock).toHaveBeenCalledWith(
-				expect.objectContaining({ recipes: expect.any(Array) }),
-				"r1",
-			),
+			expect(screen.getByTestId("has-identity")).toHaveTextContent("true"),
 		);
-	});
-
-	it("shares a grocery list and applies the returned local data", async () => {
-		saveGroceryList([], makeGroceryList());
-		shareGroceryListMock.mockResolvedValue({
-			recipes: [],
-			groceryLists: [makeGroceryList({ sharedAt: "2026-01-01T00:00:00.000Z" })],
-			mealPlans: [],
-		});
-		const user = userEvent.setup();
-		renderHarness();
-		await screen.findByTestId("list-count");
-
-		await user.click(screen.getByRole("button", { name: "share-list" }));
-
-		await waitFor(() => expect(shareGroceryListMock).toHaveBeenCalled());
-	});
-
-	it("shares a meal plan and applies the returned local data", async () => {
-		saveMealPlan([], makeMealPlan());
-		shareMealPlanMock.mockResolvedValue({
-			recipes: [],
-			groceryLists: [],
-			mealPlans: [makeMealPlan({ sharedAt: "2026-01-01T00:00:00.000Z" })],
-		});
-		const user = userEvent.setup();
-		renderHarness();
-		await screen.findByTestId("plan-count");
-
-		await user.click(screen.getByRole("button", { name: "share-plan" }));
-
-		await waitFor(() => expect(shareMealPlanMock).toHaveBeenCalled());
+		await waitFor(() =>
+			expect(screen.getByTestId("recipe-count")).toHaveTextContent("1"),
+		);
 	});
 });
 
@@ -403,13 +370,18 @@ describe("AppDataProvider pairing", () => {
 		);
 	});
 
-	it("links a device, marking identity true and applying merged local data", async () => {
+	it("links a device, marking identity true and syncing (pulling in whatever's already shared)", async () => {
 		linkDeviceWithPairingCodeMock.mockResolvedValue({
 			userId: "u1",
 			deviceId: "device-1",
 			deviceSecret: "secret",
 		});
-		shareAllLocalDataMock.mockResolvedValue({
+		// getDeviceIdentity() is what syncNow()/runSync() gate on — the device
+		// isn't "identified" as far as that mock is concerned until this
+		// resolves, matching production (linkDeviceWithPairingCode persists
+		// the identity before app-data-context calls syncNow()).
+		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+		runSyncMock.mockResolvedValue({
 			recipes: [makeRecipe({ id: "from-account" })],
 			groceryLists: [],
 			mealPlans: [],
@@ -423,7 +395,6 @@ describe("AppDataProvider pairing", () => {
 		await waitFor(() =>
 			expect(screen.getByTestId("has-identity")).toHaveTextContent("true"),
 		);
-		expect(shareAllLocalDataMock).toHaveBeenCalled();
 		await waitFor(() =>
 			expect(screen.getByTestId("recipe-count")).toHaveTextContent("1"),
 		);
@@ -492,5 +463,72 @@ describe("AppDataProvider sync", () => {
 		});
 
 		await waitFor(() => expect(runSyncMock).toHaveBeenCalledTimes(2));
+	});
+});
+
+describe("AppDataProvider content-mutation sync debouncing", () => {
+	beforeEach(() => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("debounces a sync after editing a recipe instead of syncing immediately", async () => {
+		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+		runSyncMock.mockResolvedValue(null);
+		saveRecipe([], makeRecipe());
+		const user = userEvent.setup({
+			advanceTimers: (ms) => vi.advanceTimersByTimeAsync(ms),
+		});
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+		// The mount-time immediate sync already ran once — wait for it so it
+		// doesn't get confused with the debounced one below.
+		await waitFor(() => expect(runSyncMock).toHaveBeenCalledTimes(1));
+
+		await user.click(screen.getByRole("button", { name: "update-recipe" }));
+
+		// Not synced yet — still debouncing.
+		expect(runSyncMock).toHaveBeenCalledTimes(1);
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(5000);
+		});
+
+		expect(runSyncMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("coalesces rapid successive edits into a single debounced sync", async () => {
+		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+		runSyncMock.mockResolvedValue(null);
+		saveRecipe([], makeRecipe());
+		const user = userEvent.setup({
+			advanceTimers: (ms) => vi.advanceTimersByTimeAsync(ms),
+		});
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+		await waitFor(() => expect(runSyncMock).toHaveBeenCalledTimes(1));
+
+		const updateButton = screen.getByRole("button", { name: "update-recipe" });
+		await user.click(updateButton);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(2000);
+		});
+		await user.click(updateButton);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(2000);
+		});
+		await user.click(updateButton);
+
+		// Still within the debounce window from the last click.
+		expect(runSyncMock).toHaveBeenCalledTimes(1);
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(5000);
+		});
+
+		expect(runSyncMock).toHaveBeenCalledTimes(2);
 	});
 });

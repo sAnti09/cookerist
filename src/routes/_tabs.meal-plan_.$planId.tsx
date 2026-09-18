@@ -67,19 +67,19 @@ function MealPlanDetailScreen() {
 		updateRecipes,
 		saveGroceryListForm,
 		updateGroceryList,
-		shareMealPlan,
+		hasDeviceIdentity,
+		enableSync,
 	} = useAppData();
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const [sharing, setSharing] = useState(false);
 	const plan = mealPlans.find((p) => p.id === planId);
-	const isShared = plan?.sharedAt != null;
-	const isOwned = !plan || !isShared || isOwnedByThisDevice(plan);
+	const isOwned = !plan || plan.sharedAt == null || isOwnedByThisDevice(plan);
 
 	async function handleShare() {
-		if (!plan || sharing) return;
+		if (sharing) return;
 		setSharing(true);
 		try {
-			await shareMealPlan(plan.id);
+			await enableSync();
 		} finally {
 			setSharing(false);
 		}
@@ -242,14 +242,15 @@ function MealPlanDetailScreen() {
 				</div>
 				{plan.status === "ready" ? (
 					<IconButton
-						aria-label={
-							isShared ? "This meal plan is shared" : "Share this meal plan"
-						}
+						aria-label={hasDeviceIdentity ? "Syncing" : "Start syncing"}
 						onClick={handleShare}
 						disabled={sharing}
 					>
 						<Share2
-							className={cn("size-4", isShared ? "text-sage" : "text-ink-dim")}
+							className={cn(
+								"size-4",
+								hasDeviceIdentity ? "text-sage" : "text-ink-dim",
+							)}
 						/>
 					</IconButton>
 				) : null}

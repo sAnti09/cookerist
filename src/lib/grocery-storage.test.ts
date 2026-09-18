@@ -6,6 +6,7 @@ import {
 	saveGroceryList,
 	setExpandedGroceryList,
 	updateGroceryList,
+	upsertGroceryLists,
 } from "./grocery-storage";
 
 function makeList(overrides: Partial<GroceryList> = {}): GroceryList {
@@ -207,5 +208,57 @@ describe("setExpandedGroceryList", () => {
 		const expandedThird = setExpandedGroceryList(expandedSecond, third.id);
 
 		expect(expandedThird.find((l) => l.id === first.id)).toBe(firstBefore);
+	});
+});
+
+describe("upsertGroceryLists", () => {
+	it("does nothing and returns the same array when there's nothing to upsert", () => {
+		const lists = saveGroceryList([], makeList());
+
+		const result = upsertGroceryLists(lists, []);
+
+		expect(result).toBe(lists);
+	});
+
+	it("inserts a new list not previously known locally", () => {
+		const existing = makeList({ id: "existing" });
+		const incoming = makeList({ id: "new-one" });
+
+		const result = upsertGroceryLists([existing], [incoming]);
+
+		expect(result.map((l) => l.id).sort()).toEqual(["existing", "new-one"]);
+	});
+
+	it("replaces an existing list by id", () => {
+		const original = makeList({ id: "l1", name: "Original" });
+		const updated = { ...original, name: "Updated" };
+
+		const result = upsertGroceryLists([original], [updated]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]?.name).toBe("Updated");
+	});
+
+	it("persists the merged result to localStorage", () => {
+		const list = makeList({ id: "l1" });
+
+		upsertGroceryLists([], [list]);
+
+		expect(loadGroceryLists().map((l) => l.id)).toEqual(["l1"]);
+	});
+
+	it("sorts the result newest-first by createdAt", () => {
+		const older = makeList({
+			id: "older",
+			createdAt: "2026-01-01T00:00:00.000Z",
+		});
+		const newer = makeList({
+			id: "newer",
+			createdAt: "2026-01-05T00:00:00.000Z",
+		});
+
+		const result = upsertGroceryLists([older], [newer]);
+
+		expect(result.map((l) => l.id)).toEqual(["newer", "older"]);
 	});
 });

@@ -9,6 +9,7 @@ import {
 	toStoredRecipe,
 	updateRecipe,
 	updateRecipes,
+	upsertRecipes,
 } from "./recipes-storage";
 
 const recipeInput: RecipeResponse = {
@@ -432,5 +433,65 @@ describe("toggleFavoriteRecipe", () => {
 		const recipes = saveRecipe([], recipe);
 
 		expect(toggleFavoriteRecipe(recipes, "not-a-real-id")).toEqual([recipe]);
+	});
+});
+
+describe("upsertRecipes", () => {
+	it("does nothing and returns the same array when there's nothing to upsert", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const recipes = saveRecipe([], recipe);
+
+		const result = upsertRecipes(recipes, []);
+
+		expect(result).toBe(recipes);
+	});
+
+	it("inserts a new recipe not previously known locally", () => {
+		const existing = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const incoming = {
+			...toStoredRecipe("garlic bread", recipeInput),
+			id: "new-one",
+		};
+
+		const result = upsertRecipes([existing], [incoming]);
+
+		expect(result.map((r) => r.id).sort()).toEqual(
+			[existing.id, "new-one"].sort(),
+		);
+	});
+
+	it("replaces an existing recipe by id", () => {
+		const original = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const updated = { ...original, title: "Updated Title" };
+
+		const result = upsertRecipes([original], [updated]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]?.title).toBe("Updated Title");
+	});
+
+	it("persists the merged result to localStorage", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+
+		upsertRecipes([], [recipe]);
+
+		expect(loadRecipes().map((r) => r.id)).toEqual([recipe.id]);
+	});
+
+	it("sorts the result newest-first by createdAt", () => {
+		const older = {
+			...toStoredRecipe("shrimp pasta for 2", recipeInput),
+			id: "older",
+			createdAt: "2026-01-01T00:00:00.000Z",
+		};
+		const newer = {
+			...toStoredRecipe("shrimp pasta for 2", recipeInput),
+			id: "newer",
+			createdAt: "2026-01-05T00:00:00.000Z",
+		};
+
+		const result = upsertRecipes([older], [newer]);
+
+		expect(result.map((r) => r.id)).toEqual(["newer", "older"]);
 	});
 });

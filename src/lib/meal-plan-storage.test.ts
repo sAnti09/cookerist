@@ -5,6 +5,7 @@ import {
 	loadMealPlans,
 	saveMealPlan,
 	updateMealPlan,
+	upsertMealPlans,
 } from "./meal-plan-storage";
 
 function makePlan(overrides: Partial<MealPlan> = {}): MealPlan {
@@ -144,5 +145,57 @@ describe("updateMealPlan", () => {
 		const result = updateMealPlan(plans, { ...first, status: "ready" });
 
 		expect(result.find((p) => p.id === second.id)).toBe(second);
+	});
+});
+
+describe("upsertMealPlans", () => {
+	it("does nothing and returns the same array when there's nothing to upsert", () => {
+		const plans = saveMealPlan([], makePlan());
+
+		const result = upsertMealPlans(plans, []);
+
+		expect(result).toBe(plans);
+	});
+
+	it("inserts a new plan not previously known locally", () => {
+		const existing = makePlan({ id: "existing" });
+		const incoming = makePlan({ id: "new-one" });
+
+		const result = upsertMealPlans([existing], [incoming]);
+
+		expect(result.map((p) => p.id).sort()).toEqual(["existing", "new-one"]);
+	});
+
+	it("replaces an existing plan by id", () => {
+		const original = makePlan({ id: "p1", description: "Original" });
+		const updated = { ...original, description: "Updated" };
+
+		const result = upsertMealPlans([original], [updated]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]?.description).toBe("Updated");
+	});
+
+	it("persists the merged result to localStorage", () => {
+		const plan = makePlan({ id: "p1" });
+
+		upsertMealPlans([], [plan]);
+
+		expect(loadMealPlans().map((p) => p.id)).toEqual(["p1"]);
+	});
+
+	it("sorts the result newest-first by createdAt", () => {
+		const older = makePlan({
+			id: "older",
+			createdAt: "2026-01-01T00:00:00.000Z",
+		});
+		const newer = makePlan({
+			id: "newer",
+			createdAt: "2026-01-05T00:00:00.000Z",
+		});
+
+		const result = upsertMealPlans([older], [newer]);
+
+		expect(result.map((p) => p.id)).toEqual(["newer", "older"]);
 	});
 });

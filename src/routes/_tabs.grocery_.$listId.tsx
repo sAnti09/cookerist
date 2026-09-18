@@ -45,7 +45,8 @@ function GroceryDetailScreen() {
 		updateGroceryList,
 		updateRecipes,
 		openEditGroceryList,
-		shareGroceryList,
+		hasDeviceIdentity,
+		enableSync,
 	} = useAppData();
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const [groceryModeOpen, setGroceryModeOpen] = useState(
@@ -53,14 +54,13 @@ function GroceryDetailScreen() {
 	);
 	const [sharing, setSharing] = useState(false);
 	const list = groceryLists.find((l) => l.id === listId);
-	const isShared = list?.sharedAt != null;
-	const isOwned = !list || !isShared || isOwnedByThisDevice(list);
+	const isOwned = !list || list.sharedAt == null || isOwnedByThisDevice(list);
 
 	async function handleShare() {
-		if (!list || sharing) return;
+		if (sharing) return;
 		setSharing(true);
 		try {
-			await shareGroceryList(list.id);
+			await enableSync();
 		} finally {
 			setSharing(false);
 		}
@@ -109,14 +109,15 @@ function GroceryDetailScreen() {
 						<Pencil className="size-4 text-ink-dim" aria-hidden="true" />
 					</IconButton>
 					<IconButton
-						aria-label={
-							isShared ? `${list.name} is shared` : `Share ${list.name}`
-						}
+						aria-label={hasDeviceIdentity ? "Syncing" : "Start syncing"}
 						onClick={handleShare}
 						disabled={sharing}
 					>
 						<Share2
-							className={cn("size-4", isShared ? "text-sage" : "text-ink-dim")}
+							className={cn(
+								"size-4",
+								hasDeviceIdentity ? "text-sage" : "text-ink-dim",
+							)}
 						/>
 					</IconButton>
 					<IconButton

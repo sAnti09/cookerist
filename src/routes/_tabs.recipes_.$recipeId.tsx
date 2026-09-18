@@ -56,21 +56,26 @@ function RecipeDetailScreen() {
 		toggleFavoriteRecipe,
 		updateRecipe,
 		createRecipe,
-		shareRecipe,
+		hasDeviceIdentity,
+		enableSync,
 	} = useAppData();
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
 	const [cookModeOpen, setCookModeOpen] = useState(search.autoStart === "cook");
 	const [sharing, setSharing] = useState(false);
 	const recipe = recipes.find((r) => r.id === recipeId);
-	const isShared = recipe?.sharedAt != null;
-	const isOwned = !recipe || !isShared || isOwnedByThisDevice(recipe);
+	// Whether this recipe specifically has synced yet (relevant to delete vs.
+	// remove authority — see Ownership in CLAUDE.md) is a separate question
+	// from whether this device is syncing at all — the Share icon reflects
+	// the latter, since every recipe syncs automatically once true.
+	const isOwned =
+		!recipe || recipe.sharedAt == null || isOwnedByThisDevice(recipe);
 
 	async function handleShare() {
-		if (!recipe || sharing) return;
+		if (sharing) return;
 		setSharing(true);
 		try {
-			await shareRecipe(recipe.id);
+			await enableSync();
 		} finally {
 			setSharing(false);
 		}
@@ -143,14 +148,15 @@ function RecipeDetailScreen() {
 						/>
 					</IconButton>
 					<IconButton
-						aria-label={
-							isShared ? `${recipe.title} is shared` : `Share ${recipe.title}`
-						}
+						aria-label={hasDeviceIdentity ? "Syncing" : "Start syncing"}
 						onClick={handleShare}
 						disabled={sharing}
 					>
 						<Share2
-							className={cn("size-4", isShared ? "text-sage" : "text-ink-dim")}
+							className={cn(
+								"size-4",
+								hasDeviceIdentity ? "text-sage" : "text-ink-dim",
+							)}
 						/>
 					</IconButton>
 					<IconButton

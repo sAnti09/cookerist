@@ -12,20 +12,24 @@ vi.mock("#/server/generate-recipe", () => ({
 }));
 
 const getDeviceIdentityMock = vi.fn();
+const ensureDeviceIdentityMock = vi.fn();
 vi.mock("#/lib/identity/device", () => ({
 	getDeviceIdentity: () => getDeviceIdentityMock(),
+	ensureDeviceIdentity: () => ensureDeviceIdentityMock(),
 }));
 
-const shareGroceryListMock = vi.fn();
-vi.mock("#/lib/sync/share-actions", () => ({
-	shareGroceryList: (...args: unknown[]) => shareGroceryListMock(...args),
+const runSyncMock = vi.fn();
+vi.mock("#/lib/sync/sync-engine", () => ({
+	runSync: () => runSyncMock(),
 }));
 
 beforeEach(() => {
 	window.localStorage.clear();
 	getDeviceIdentityMock.mockReset();
-	shareGroceryListMock.mockReset();
+	ensureDeviceIdentityMock.mockReset();
+	runSyncMock.mockReset();
 	getDeviceIdentityMock.mockReturnValue(null);
+	runSyncMock.mockResolvedValue(null);
 });
 
 function makeGroceryList(overrides: Partial<GroceryList> = {}): GroceryList {
@@ -197,24 +201,23 @@ describe("Grocery detail screen", () => {
 		expect(stored[0].id).toBe("list-1");
 	});
 
-	it("shares the list via its Share icon", async () => {
+	it("starts syncing via the list's sync icon", async () => {
 		const list = makeGroceryList();
 		saveGroceryList(loadGroceryLists(), list);
-		shareGroceryListMock.mockResolvedValue({
-			recipes: [],
-			groceryLists: [{ ...list, sharedAt: "2026-01-15T12:05:00.000Z" }],
-			mealPlans: [],
+		ensureDeviceIdentityMock.mockImplementation(async () => {
+			const identity = { deviceId: "device-1" };
+			getDeviceIdentityMock.mockReturnValue(identity);
+			return identity;
 		});
 		await renderApp(`/grocery/${list.id}`);
 		const user = userEvent.setup();
 
-		await user.click(
-			screen.getByRole("button", { name: `Share ${list.name}` }),
-		);
+		await user.click(screen.getByRole("button", { name: "Start syncing" }));
 
-		await waitFor(() => expect(shareGroceryListMock).toHaveBeenCalled());
+		await waitFor(() => expect(ensureDeviceIdentityMock).toHaveBeenCalled());
+		await waitFor(() => expect(runSyncMock).toHaveBeenCalled());
 		expect(
-			await screen.findByRole("button", { name: `${list.name} is shared` }),
+			await screen.findByRole("button", { name: "Syncing" }),
 		).toBeInTheDocument();
 	});
 

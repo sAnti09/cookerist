@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroceryList } from "#/lib/grocery-list";
@@ -22,13 +22,15 @@ vi.mock("#/server/meal-plan", () => ({
 }));
 
 const getDeviceIdentityMock = vi.fn();
+const ensureDeviceIdentityMock = vi.fn();
 vi.mock("#/lib/identity/device", () => ({
 	getDeviceIdentity: () => getDeviceIdentityMock(),
+	ensureDeviceIdentity: () => ensureDeviceIdentityMock(),
 }));
 
-const shareMealPlanMock = vi.fn();
-vi.mock("#/lib/sync/share-actions", () => ({
-	shareMealPlan: (...args: unknown[]) => shareMealPlanMock(...args),
+const runSyncMock = vi.fn();
+vi.mock("#/lib/sync/sync-engine", () => ({
+	runSync: () => runSyncMock(),
 }));
 
 const generateRecipeMock = vi.mocked(generateRecipe);
@@ -39,8 +41,10 @@ beforeEach(() => {
 	generateRecipeMock.mockReset();
 	refineMealPlanDraftMock.mockReset();
 	getDeviceIdentityMock.mockReset();
-	shareMealPlanMock.mockReset();
+	ensureDeviceIdentityMock.mockReset();
+	runSyncMock.mockReset();
 	getDeviceIdentityMock.mockReturnValue(null);
+	runSyncMock.mockResolvedValue(null);
 });
 
 function makeEntry(overrides: Partial<MealPlanEntry> = {}): MealPlanEntry {
@@ -1202,35 +1206,35 @@ describe("Meal plan detail screen — delete", () => {
 		).toEqual([]);
 	});
 
-	it("shows no Share icon while the plan is still a draft", async () => {
+	it("shows no sync icon while the plan is still a draft", async () => {
 		saveMealPlan(loadMealPlans(), makePlan({ status: "draft" }));
 		await renderApp("/meal-plan/plan-1");
 
 		expect(
-			screen.queryByRole("button", { name: "Share this meal plan" }),
+			screen.queryByRole("button", { name: "Start syncing" }),
 		).not.toBeInTheDocument();
 	});
 
-	it("shares a ready plan via its Share icon", async () => {
+	it("starts syncing a ready plan via its sync icon", async () => {
 		const plan = makePlan({
 			status: "ready",
 			entries: [makeEntry({ status: "ready", recipeId: "recipe-1" })],
 		});
 		saveMealPlan(loadMealPlans(), plan);
-		shareMealPlanMock.mockResolvedValue({
-			recipes: [],
-			groceryLists: [],
-			mealPlans: [{ ...plan, sharedAt: "2026-09-15T12:05:00.000Z" }],
+		ensureDeviceIdentityMock.mockImplementation(async () => {
+			const identity = { deviceId: "device-1" };
+			getDeviceIdentityMock.mockReturnValue(identity);
+			return identity;
 		});
 		await renderApp("/meal-plan/plan-1");
 		const user = userEvent.setup();
 
-		await user.click(
-			screen.getByRole("button", { name: "Share this meal plan" }),
-		);
+		await user.click(screen.getByRole("button", { name: "Start syncing" }));
 
+		await waitFor(() => expect(ensureDeviceIdentityMock).toHaveBeenCalled());
+		await waitFor(() => expect(runSyncMock).toHaveBeenCalled());
 		expect(
-			await screen.findByRole("button", { name: "This meal plan is shared" }),
+			await screen.findByRole("button", { name: "Syncing" }),
 		).toBeInTheDocument();
 	});
 

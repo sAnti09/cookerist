@@ -53,16 +53,53 @@ describe("runSync", () => {
 		expect(pushEntitiesMock).not.toHaveBeenCalled();
 	});
 
-	it("only pushes locally-shared entities, never local-only ones", async () => {
+	it("pushes every local entity, auto-stamping ones that have never synced before", async () => {
 		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
 		const { saveRecipe } = await import("#/lib/recipes-storage");
 		saveRecipe(
 			[],
-			makeRecipe({ id: "shared", sharedAt: "2026-01-01T00:00:00.000Z" }),
+			makeRecipe({
+				id: "already-synced",
+				sharedAt: "2026-01-01T00:00:00.000Z",
+				ownerDeviceId: "device-1",
+			}),
 		);
 		saveRecipe(
-			[makeRecipe({ id: "shared", sharedAt: "2026-01-01T00:00:00.000Z" })],
-			makeRecipe({ id: "local-only", sharedAt: null }),
+			[
+				makeRecipe({
+					id: "already-synced",
+					sharedAt: "2026-01-01T00:00:00.000Z",
+					ownerDeviceId: "device-1",
+				}),
+			],
+			makeRecipe({ id: "never-synced-yet", sharedAt: null }),
+		);
+		const { runSync } = await import("./sync-engine");
+
+		const result = await runSync();
+
+		const recipesPushCall = pushEntitiesMock.mock.calls.find(
+			(call) => call[0] === "recipes",
+		);
+		const pushedIds = (recipesPushCall?.[1] as Array<{ id: string }>).map(
+			(r) => r.id,
+		);
+		expect(pushedIds.sort()).toEqual(["already-synced", "never-synced-yet"]);
+		const stamped = result?.recipes.find((r) => r.id === "never-synced-yet");
+		expect(stamped?.sharedAt).not.toBeNull();
+		expect(stamped?.ownerDeviceId).toBe("device-1");
+	});
+
+	it("excludes a detached entity from the push — the owner's delete stays final", async () => {
+		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-2" });
+		const { saveRecipe } = await import("#/lib/recipes-storage");
+		saveRecipe(
+			[],
+			makeRecipe({
+				id: "detached-earlier",
+				sharedAt: null,
+				ownerDeviceId: "device-1",
+			}),
 		);
 		const { runSync } = await import("./sync-engine");
 
@@ -71,8 +108,57 @@ describe("runSync", () => {
 		const recipesPushCall = pushEntitiesMock.mock.calls.find(
 			(call) => call[0] === "recipes",
 		);
-		expect(recipesPushCall?.[1]).toHaveLength(1);
-		expect(recipesPushCall?.[1][0].id).toBe("shared");
+		const pushedIds = (recipesPushCall?.[1] as Array<{ id: string }>).map(
+			(r) => r.id,
+		);
+		expect(pushedIds).not.toContain("detached-earlier");
+	});
+
+	it("pulls and merges BEFORE pushing, so a stale local copy never clobbers a newer remote write", async () => {
+		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+		const { saveRecipe } = await import("#/lib/recipes-storage");
+		saveRecipe(
+			[],
+			makeRecipe({
+				id: "r1",
+				title: "Stale local title",
+				updatedAt: "2026-01-01T00:00:00.000Z",
+				sharedAt: "2026-01-01T00:00:00.000Z",
+				ownerDeviceId: "device-1",
+			}),
+		);
+		const remote = makeRecipe({
+			id: "r1",
+			title: "Newer remote title",
+			updatedAt: "2026-01-05T00:00:00.000Z",
+			sharedAt: "2026-01-01T00:00:00.000Z",
+			ownerDeviceId: "device-1",
+		});
+		pullChangedSinceMock.mockImplementation(async (table: string) =>
+			table === "recipes"
+				? [
+						{
+							id: "r1",
+							data: remote,
+							updated_at: "2026-01-05T00:00:00.000Z",
+							deleted_at: null,
+						},
+					]
+				: [],
+		);
+		const { runSync } = await import("./sync-engine");
+
+		await runSync();
+
+		const recipesPushCall = pushEntitiesMock.mock.calls.find(
+			(call) => call[0] === "recipes",
+		);
+		const pushedR1 = (
+			recipesPushCall?.[1] as Array<{ id: string; title: string }>
+		).find((r) => r.id === "r1");
+		// The push must carry the merged (newer remote) title, not the stale
+		// local one — proving the merge happened before this device pushed.
+		expect(pushedR1?.title).toBe("Newer remote title");
 	});
 
 	it("adopts a remote recipe not yet known locally, stamping sharedAt if missing", async () => {
@@ -191,5 +277,55 @@ describe("runSync", () => {
 		expect(
 			result?.recipes.find((r) => r.id === "never-had-it"),
 		).toBeUndefined();
+	});
+
+	it("skips the push entirely and returns local state unchanged when the pull fails", async () => {
+		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+		const { saveRecipe } = await import("#/lib/recipes-storage");
+		saveRecipe([], makeRecipe({ id: "r1" }));
+		pullChangedSinceMock.mockImplementation(async (table: string) =>
+			table === "recipes" ? Promise.reject(new Error("network down")) : [],
+		);
+		const consoleErrorSpy = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const { runSync } = await import("./sync-engine");
+
+		const result = await runSync();
+
+		expect(result?.recipes.map((r) => r.id)).toEqual(["r1"]);
+		const recipesPushCall = pushEntitiesMock.mock.calls.find(
+			(call) => call[0] === "recipes",
+		);
+		expect(recipesPushCall).toBeUndefined();
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			expect.stringContaining("Sync pull failed"),
+			expect.any(Error),
+		);
+		consoleErrorSpy.mockRestore();
+	});
+
+	it("logs and swallows a push failure rather than throwing", async () => {
+		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+		const { saveRecipe } = await import("#/lib/recipes-storage");
+		saveRecipe([], makeRecipe({ id: "r1" }));
+		pushEntitiesMock.mockImplementation(async (table: string) =>
+			table === "recipes"
+				? Promise.reject(new Error("upstream rejected"))
+				: undefined,
+		);
+		const consoleErrorSpy = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const { runSync } = await import("./sync-engine");
+
+		const result = await runSync();
+
+		expect(result?.recipes.map((r) => r.id)).toEqual(["r1"]);
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			expect.stringContaining("Sync push failed"),
+			expect.any(Error),
+		);
+		consoleErrorSpy.mockRestore();
 	});
 });

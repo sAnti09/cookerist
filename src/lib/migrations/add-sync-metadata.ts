@@ -15,8 +15,8 @@ export const ADD_SYNC_METADATA_MIGRATION_ID = "add-sync-metadata";
 // updateX(), which stamps updatedAt to "now") so backfilling doesn't itself
 // look like a fresh edit. `ownerDeviceId` is deliberately left unset: there's
 // no device to backfill it with, and it's stamped lazily the first time each
-// entity is actually shared (src/lib/sync/share-actions.ts), regardless of
-// whether that entity predates this migration.
+// entity actually syncs (src/lib/sync/sync-engine.ts's stampForSync),
+// regardless of whether that entity predates this migration.
 //
 // Purely local and synchronous — no Groq call, nothing worth retrying — so
 // this follows the default "throws → still marked completed" rule (see

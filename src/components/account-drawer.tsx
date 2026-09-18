@@ -12,10 +12,19 @@ type AccountDrawerProps = {
 // The account/pairing UI — a slide-in side panel rather than a settings
 // route or a 4th tab (per the user's own call, matching this codebase's
 // existing preference for an overlay over a new nav destination — see
-// cook-mode.tsx). No device roster/unlinking UI yet, and no "am I online"
-// niceties beyond a manual Sync now button — this is the minimal slice that
-// makes pairing/sharing actually usable (see CLAUDE.md's "Sharing feature"
-// roadmap item).
+// cook-mode.tsx). No device roster/unlinking UI yet.
+//
+// One sync model, deliberately kept simple after an earlier, more granular
+// design (a per-item "Share" toggle plus a separate "sync everything"
+// action) turned out to be confusing in practice and didn't match how
+// people actually think about syncing two of their own devices — see
+// CLAUDE.md's "Sharing feature" section. Once this device has an identity,
+// every recipe/grocery-list/meal-plan syncs automatically, both ways — the
+// only two things left to configure here are how a device gets an identity
+// in the first place (pairing) and a manual "do it now" button. "Link this
+// device" is hidden once this device already has an identity — re-linking
+// to a different account isn't supported yet (see
+// linkDeviceWithPairingCode's own comment in src/lib/identity/device.ts).
 export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 	const { hasDeviceIdentity, createPairingCode, linkDevice, syncNow } =
 		useAppData();
@@ -116,14 +125,17 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 
 				<p className="text-sm text-ink-dim">
 					{hasDeviceIdentity
-						? "This device can share recipes, grocery lists, and meal plans with another one of your devices."
-						: "Share a recipe, grocery list, or meal plan (via its Share icon) to get started — this panel is for linking a second device afterward."}
+						? "Everything on this device — recipes, grocery lists, meal plans — syncs automatically with any device linked to this account."
+						: "Link a second device to sync everything between them automatically — or tap a recipe/grocery list/meal plan's sync icon to get started from there instead."}
 				</p>
 
 				<section className="card bg-card p-4">
-					<h3 className="font-semibold text-sm">Link another device</h3>
+					<h3 className="font-semibold text-sm">
+						Get a code for another device
+					</h3>
 					<p className="mt-1 text-ink-dim text-xs">
-						Generate a code here, then enter it on the other device.
+						Generate a code here, then enter it on the other device to link it —
+						from then on, everything syncs both ways automatically.
 					</p>
 					<Button
 						variant="secondary"
@@ -152,30 +164,38 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 					) : null}
 				</section>
 
-				<section className="card bg-card p-4">
-					<h3 className="font-semibold text-sm">Have a code?</h3>
-					<p className="mt-1 text-ink-dim text-xs">
-						Enter a code generated on another device to link this one to that
-						account — anything you've already got here comes along too.
+				{hasDeviceIdentity ? (
+					<p className="text-ink-dim text-xs">
+						This device is already linked to an account, so it can't link to a
+						different one here yet.
 					</p>
-					<input
-						value={codeInput}
-						onChange={(event) => setCodeInput(event.target.value.toUpperCase())}
-						placeholder="Enter code"
-						aria-label="Pairing code"
-						className="mt-3 w-full rounded-full border border-line bg-bg px-4 py-2 text-center text-sm tracking-widest outline-none"
-					/>
-					<Button
-						className="mt-2 w-full"
-						onClick={handleLinkDevice}
-						disabled={linking || codeInput.trim().length === 0}
-					>
-						{linking ? "Linking…" : "Link this device"}
-					</Button>
-					{linkError ? (
-						<p className="mt-2 text-warn text-xs">{linkError}</p>
-					) : null}
-				</section>
+				) : (
+					<section className="card bg-card p-4">
+						<h3 className="font-semibold text-sm">Have a code?</h3>
+						<p className="mt-1 text-ink-dim text-xs">
+							Enter a code generated on another device to link this one to it.
+						</p>
+						<input
+							value={codeInput}
+							onChange={(event) =>
+								setCodeInput(event.target.value.toUpperCase())
+							}
+							placeholder="Enter code"
+							aria-label="Pairing code"
+							className="mt-3 w-full rounded-full border border-line bg-bg px-4 py-2 text-center text-sm tracking-widest outline-none"
+						/>
+						<Button
+							className="mt-2 w-full"
+							onClick={handleLinkDevice}
+							disabled={linking || codeInput.trim().length === 0}
+						>
+							{linking ? "Linking…" : "Link this device"}
+						</Button>
+						{linkError ? (
+							<p className="mt-2 text-warn text-xs">{linkError}</p>
+						) : null}
+					</section>
+				)}
 
 				{hasDeviceIdentity ? (
 					<section className="card bg-card p-4">

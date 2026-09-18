@@ -13,13 +13,15 @@ vi.mock("#/server/generate-recipe", () => ({
 }));
 
 const getDeviceIdentityMock = vi.fn();
+const ensureDeviceIdentityMock = vi.fn();
 vi.mock("#/lib/identity/device", () => ({
 	getDeviceIdentity: () => getDeviceIdentityMock(),
+	ensureDeviceIdentity: () => ensureDeviceIdentityMock(),
 }));
 
-const shareRecipeMock = vi.fn();
-vi.mock("#/lib/sync/share-actions", () => ({
-	shareRecipe: (...args: unknown[]) => shareRecipeMock(...args),
+const runSyncMock = vi.fn();
+vi.mock("#/lib/sync/sync-engine", () => ({
+	runSync: () => runSyncMock(),
 }));
 
 const validRecipe = {
@@ -46,8 +48,10 @@ beforeEach(() => {
 	modifyRecipeMock.mockReset();
 	window.localStorage.clear();
 	getDeviceIdentityMock.mockReset();
-	shareRecipeMock.mockReset();
+	ensureDeviceIdentityMock.mockReset();
+	runSyncMock.mockReset();
 	getDeviceIdentityMock.mockReturnValue(null);
+	runSyncMock.mockResolvedValue(null);
 });
 
 function seedRecipe(
@@ -248,23 +252,22 @@ describe("Recipe detail screen", () => {
 		});
 	});
 
-	it("shares the recipe via its Share icon", async () => {
+	it("starts syncing via the recipe's sync icon", async () => {
 		const recipe = seedRecipe();
-		shareRecipeMock.mockResolvedValue({
-			recipes: [{ ...recipe, sharedAt: "2026-01-01T00:00:00.000Z" }],
-			groceryLists: [],
-			mealPlans: [],
+		ensureDeviceIdentityMock.mockImplementation(async () => {
+			const identity = { deviceId: "device-1" };
+			getDeviceIdentityMock.mockReturnValue(identity);
+			return identity;
 		});
 		await renderApp(`/recipes/${recipe.id}`);
 		const user = userEvent.setup();
 
-		await user.click(
-			screen.getByRole("button", { name: `Share ${recipe.title}` }),
-		);
+		await user.click(screen.getByRole("button", { name: "Start syncing" }));
 
-		await waitFor(() => expect(shareRecipeMock).toHaveBeenCalled());
+		await waitFor(() => expect(ensureDeviceIdentityMock).toHaveBeenCalled());
+		await waitFor(() => expect(runSyncMock).toHaveBeenCalled());
 		expect(
-			await screen.findByRole("button", { name: `${recipe.title} is shared` }),
+			await screen.findByRole("button", { name: "Syncing" }),
 		).toBeInTheDocument();
 	});
 
