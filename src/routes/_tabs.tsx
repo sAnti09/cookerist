@@ -1,6 +1,4 @@
 import { createFileRoute, Outlet, useMatches } from "@tanstack/react-router";
-import { Menu } from "lucide-react";
-import { useState } from "react";
 import { AccountDrawer } from "#/components/account-drawer";
 import { BottomTabBar } from "#/components/bottom-tab-bar";
 import { GroceryListCreateForm } from "#/components/grocery-list-create-form";
@@ -27,9 +25,12 @@ export const Route = createFileRoute("/_tabs")({
 
 // Pathless layout shared by every tab: mounts the app-wide data provider
 // (recipes/grocery lists + their CRUD, shared across the list and detail
-// routes nested under it), the splash gate, the bottom tab bar, and the
+// routes nested under it), the splash gate, the bottom tab bar, the
 // grocery list create/edit modal (triggered from either the Grocery list
-// screen's FAB or a grocery detail screen's edit icon).
+// screen's FAB or a grocery detail screen's edit icon), and the account
+// drawer (its open/close state lives on AppDataContext since the button
+// that opens it is the hamburger icon on each tab root screen's own header,
+// not something rendered here).
 function TabsLayout() {
 	return (
 		<AppDataProvider>
@@ -47,30 +48,18 @@ function TabsLayoutContent() {
 		closeGroceryListForm,
 		saveGroceryListForm,
 		updateRecipe,
+		accountDrawerOpen,
+		closeAccountDrawer,
 	} = useAppData();
 	const matches = useMatches();
 	const onDetailRoute = matches.some((match) =>
 		DETAIL_ROUTE_IDS.has(match.routeId),
 	);
 	const { updateAvailable, applyUpdate, dismiss } = useServiceWorkerUpdate();
-	const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
 
 	return (
 		<>
 			<SplashScreen ready={ready} />
-			{onDetailRoute ? null : (
-				// Bottom-left, mirroring the Grocery/Meal Plan FABs' bottom-right
-				// position — deliberately not top-left/top-right, which would
-				// overlap every tab root screen's own <h1>/ThemeToggle header row.
-				<button
-					type="button"
-					aria-label="Account & sync"
-					onClick={() => setAccountDrawerOpen(true)}
-					className="fixed left-5 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] z-30 flex size-11 items-center justify-center rounded-full border border-line bg-surface text-ink-dim shadow-[0_10px_20px_-6px_rgba(33,28,22,0.25)]"
-				>
-					<Menu className="size-[18px]" aria-hidden="true" />
-				</button>
-			)}
 			<div
 				className={cn(
 					"mx-auto min-h-screen w-full max-w-2xl",
@@ -81,10 +70,7 @@ function TabsLayoutContent() {
 				<Outlet />
 			</div>
 			{onDetailRoute ? null : <BottomTabBar />}
-			<AccountDrawer
-				open={accountDrawerOpen}
-				onClose={() => setAccountDrawerOpen(false)}
-			/>
+			<AccountDrawer open={accountDrawerOpen} onClose={closeAccountDrawer} />
 			{creatingGroceryList || editingGroceryList ? (
 				<GroceryListCreateForm
 					recipes={recipes}

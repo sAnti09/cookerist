@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { Menu, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { MealPlanRow } from "#/components/meal-plan-row";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { IconButton } from "#/components/ui/icon-button";
 import { SearchInput } from "#/components/ui/search-input";
 import { ThemeToggle } from "#/components/ui/theme-toggle";
 import { useAppData } from "#/lib/app-data-context";
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/_tabs/meal-plan")({
 });
 
 function MealPlanScreen() {
-	const { mealPlans, deleteMealPlan } = useAppData();
+	const { mealPlans, deleteMealPlan, openAccountDrawer } = useAppData();
 	const [search, setSearch] = useState("");
 	const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
 	const filteredPlans = useMemo(
@@ -23,8 +24,11 @@ function MealPlanScreen() {
 
 	return (
 		<div className="px-5 pt-5">
-			<div className="flex items-center justify-between gap-3">
-				<h1 className="display-title text-[22px] font-semibold text-ink">
+			<div className="flex items-center gap-3">
+				<IconButton aria-label="Account & sync" onClick={openAccountDrawer}>
+					<Menu className="size-4 text-ink-dim" aria-hidden="true" />
+				</IconButton>
+				<h1 className="display-title flex-1 text-[22px] font-semibold text-ink">
 					Meal Plan
 				</h1>
 				<ThemeToggle />

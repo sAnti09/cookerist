@@ -1,8 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { Menu, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { GroceryListRow } from "#/components/grocery-list-row";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { IconButton } from "#/components/ui/icon-button";
 import { SearchInput } from "#/components/ui/search-input";
 import { ThemeToggle } from "#/components/ui/theme-toggle";
 import { useAppData } from "#/lib/app-data-context";
@@ -14,8 +15,12 @@ export const Route = createFileRoute("/_tabs/grocery")({
 
 function GroceryScreen() {
 	const navigate = useNavigate();
-	const { groceryLists, openCreateGroceryList, deleteGroceryList } =
-		useAppData();
+	const {
+		groceryLists,
+		openCreateGroceryList,
+		deleteGroceryList,
+		openAccountDrawer,
+	} = useAppData();
 	const [search, setSearch] = useState("");
 	const [deletingListId, setDeletingListId] = useState<string | null>(null);
 	const filteredLists = useMemo(
@@ -25,8 +30,11 @@ function GroceryScreen() {
 
 	return (
 		<div className="px-5 pt-5">
-			<div className="flex items-center justify-between gap-3">
-				<h1 className="display-title text-[22px] font-semibold text-ink">
+			<div className="flex items-center gap-3">
+				<IconButton aria-label="Account & sync" onClick={openAccountDrawer}>
+					<Menu className="size-4 text-ink-dim" aria-hidden="true" />
+				</IconButton>
+				<h1 className="display-title flex-1 text-[22px] font-semibold text-ink">
 					Grocery Lists
 				</h1>
 				<ThemeToggle />

@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Menu } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FeatureSection } from "#/components/feature-section";
 import { OfflineBanner } from "#/components/offline-banner";
@@ -11,6 +12,7 @@ import {
 } from "#/components/result-row";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { IconButton } from "#/components/ui/icon-button";
 import { SearchInput } from "#/components/ui/search-input";
 import { ThemeToggle } from "#/components/ui/theme-toggle";
 import { useAppData } from "#/lib/app-data-context";
@@ -64,7 +66,8 @@ function readStoredVisibleCount(): number {
 function RecipesScreen() {
 	const isOnline = useOnlineStatus();
 	const navigate = useNavigate();
-	const { recipes, createRecipe, deleteRecipe } = useAppData();
+	const { recipes, createRecipe, deleteRecipe, openAccountDrawer } =
+		useAppData();
 	const [pending, setPending] = useState<PendingRow[]>([]);
 	const [promptValue, setPromptValue] = useState("");
 	const [visibleCount, setVisibleCount] = useState(readStoredVisibleCount);
@@ -308,8 +311,11 @@ function RecipesScreen() {
 
 	return (
 		<div className="px-5 pt-5">
-			<div className="flex items-center justify-between gap-3">
-				<h1 className="display-title text-[22px] font-semibold text-ink">
+			<div className="flex items-center gap-3">
+				<IconButton aria-label="Account & sync" onClick={openAccountDrawer}>
+					<Menu className="size-4 text-ink-dim" aria-hidden="true" />
+				</IconButton>
+				<h1 className="display-title flex-1 text-[22px] font-semibold text-ink">
 					Recipes
 				</h1>
 				<ThemeToggle />

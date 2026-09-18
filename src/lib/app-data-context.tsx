@@ -90,6 +90,13 @@ type AppDataContextValue = {
 	// sync) — used by the account drawer's "Sync now" button, which needs to
 	// know whether to show a result message.
 	syncNow: () => Promise<boolean>;
+	// The account drawer's open/close state lives here (not local state in
+	// _tabs.tsx) because the hamburger icon that opens it lives on each tab
+	// root screen's own header row (see _tabs.recipes.tsx and its siblings),
+	// not on the shared layout itself.
+	accountDrawerOpen: boolean;
+	openAccountDrawer: () => void;
+	closeAccountDrawer: () => void;
 };
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -105,6 +112,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const [hasDeviceIdentity, setHasDeviceIdentity] = useState(
 		() => getDeviceIdentity() != null,
 	);
+	const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
+	const openAccountDrawer = useCallback(() => setAccountDrawerOpen(true), []);
+	const closeAccountDrawer = useCallback(() => setAccountDrawerOpen(false), []);
 	// Guards against two sync-on-open runs overlapping (e.g. a visibilitychange
 	// and a focus event firing back to back) — see triggerSync below.
 	const syncInFlightRef = useRef(false);
@@ -353,6 +363,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		createPairingCode: handleCreatePairingCode,
 		linkDevice: handleLinkDevice,
 		syncNow,
+		accountDrawerOpen,
+		openAccountDrawer,
+		closeAccountDrawer,
 	};
 
 	return (
