@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getAccessToken } from "#/lib/identity/device";
 
 // Read directly from the client bundle (see .env.example) rather than via a
 // server function -- the URL + publishable key are meant to be public,
@@ -15,4 +16,11 @@ if (!supabaseUrl || !supabasePublishableKey) {
 	);
 }
 
-export const supabase = createClient(supabaseUrl, supabasePublishableKey);
+// accessToken is our own self-signed device JWT (see CLAUDE.md's
+// "Account-less identity layer"), not a Supabase Auth session -- undefined
+// until this device has an identity, in which case every request goes out
+// unauthenticated (correct: RLS then hides every row, since there's
+// nothing to share/sync for this device yet).
+export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
+	accessToken: async () => (await getAccessToken()) ?? null,
+});

@@ -3,6 +3,13 @@ import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query
 import { getContext } from "./integrations/tanstack-query/root-provider";
 import { routeTree } from "./routeTree.gen";
 
+// Dynamic + DEV-gated so the whole identity dev-tools module (and its
+// import of the identity layer) is dropped from production builds entirely
+// -- see src/lib/identity/dev-tools.ts for what it's for.
+if (import.meta.env.DEV) {
+	import("#/lib/identity/dev-tools");
+}
+
 export function getRouter() {
 	const context = getContext();
 
