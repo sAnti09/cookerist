@@ -16,13 +16,24 @@ import {
 	mergeMealPlan,
 	mergeRecipe,
 } from "#/lib/sync/sync-merge";
-import { getWatermark, setWatermark } from "#/lib/sync/sync-watermark";
+import {
+	getPushWatermark,
+	getWatermark,
+	setPushWatermark,
+	setWatermark,
+} from "#/lib/sync/sync-watermark";
 
+// A caller that only cares about one entity type (e.g. an edit to a single
+// recipe) can ask for just that table — see runSync below. A table that
+// wasn't asked for is simply absent from the result, not reset to empty, so
+// callers must only apply the fields that are actually present.
 export type SyncResult = {
-	recipes: Recipe[];
-	groceryLists: GroceryList[];
-	mealPlans: MealPlan[];
+	recipes?: Recipe[];
+	groceryLists?: GroceryList[];
+	mealPlans?: MealPlan[];
 };
+
+const ALL_TABLES: SyncTable[] = ["recipes", "grocery_lists", "meal_plans"];
 
 type Syncable = {
 	id: string;
@@ -119,15 +130,46 @@ async function syncTable<T extends Syncable>(
 
 	try {
 		const stamped = merged.map((entity) => stampForSync(entity, deviceId));
-		if (stamped.some((entity, index) => entity !== merged[index])) {
+		// Entities newly stamped this cycle (first-ever share) always need
+		// pushing regardless of the watermark below — stamping doesn't bump
+		// `updatedAt`, so the watermark check alone would never catch them.
+		const newlyStampedIds = new Set(
+			stamped
+				.filter((entity, index) => entity !== merged[index])
+				.map((entity) => entity.id),
+		);
+		if (newlyStampedIds.size > 0) {
 			merged = upsert(merged, stamped);
 		}
 		// Excludes a detached entity (sharedAt null, ownerDeviceId still set —
 		// see stampForSync above) from the push entirely, not just from
 		// re-stamping: once the owner has tombstoned it, this device has no
-		// business uploading its own copy of it ever again.
-		const toPush = stamped.filter((entity) => entity.sharedAt != null);
+		// business uploading its own copy of it ever again. Of the remaining
+		// shared entities, only pushes ones that changed locally since the
+		// last successful push (`updatedAt` past the push watermark) — without
+		// this, every sync cycle (mount, focus, every debounced edit) would
+		// re-upload the entire shared set even when nothing actually changed.
+		const pushWatermark = getPushWatermark(table);
+		const toPush = stamped.filter(
+			(entity) =>
+				entity.sharedAt != null &&
+				(newlyStampedIds.has(entity.id) || entity.updatedAt > pushWatermark),
+		);
 		await pushEntities(table, toPush);
+		// Advance the watermark to the max `updatedAt` across every currently
+		// shared entity, not just the ones actually pushed this cycle — an
+		// entity already below the old watermark contributes nothing new to
+		// that max, and one pushed just now is now known to match Supabase.
+		// Only done after a successful push; a thrown push must leave the
+		// watermark alone so the next cycle retries the same entities.
+		const sharedEntities = stamped.filter((entity) => entity.sharedAt != null);
+		if (sharedEntities.length > 0) {
+			const maxUpdatedAt = sharedEntities.reduce(
+				(max, entity) => (entity.updatedAt > max ? entity.updatedAt : max),
+				pushWatermark,
+			);
+			setPushWatermark(table, maxUpdatedAt);
+		}
 	} catch (error) {
 		console.error(`Sync push failed for ${table}:`, error);
 	}
@@ -140,32 +182,49 @@ async function syncTable<T extends Syncable>(
 // the identity layer's own lazy-registration philosophy (see
 // src/lib/identity/device.ts). Once an identity exists, everything syncs —
 // see stampForSync above.
-export async function runSync(): Promise<SyncResult | null> {
+//
+// `tables` defaults to all three (the "I came back to the app, catch me up
+// on everything" case — mount/focus/visibilitychange in app-data-context.tsx
+// use this). A caller that knows exactly what changed (e.g. the debounced
+// sync after editing one recipe) can pass just that table, so editing a
+// grocery list never has to also touch recipes/meal_plans — see the "why
+// does opening a recipe pull grocery lists too" investigation this came
+// from.
+export async function runSync(
+	tables: SyncTable[] = ALL_TABLES,
+): Promise<SyncResult | null> {
 	const identity = getDeviceIdentity();
 	if (!identity) return null;
 
+	const wanted = new Set(tables);
 	const [recipes, groceryLists, mealPlans] = await Promise.all([
-		syncTable(
-			"recipes",
-			loadRecipes,
-			upsertRecipes,
-			mergeRecipe,
-			identity.deviceId,
-		),
-		syncTable(
-			"grocery_lists",
-			loadGroceryLists,
-			upsertGroceryLists,
-			mergeGroceryList,
-			identity.deviceId,
-		),
-		syncTable(
-			"meal_plans",
-			loadMealPlans,
-			upsertMealPlans,
-			mergeMealPlan,
-			identity.deviceId,
-		),
+		wanted.has("recipes")
+			? syncTable(
+					"recipes",
+					loadRecipes,
+					upsertRecipes,
+					mergeRecipe,
+					identity.deviceId,
+				)
+			: undefined,
+		wanted.has("grocery_lists")
+			? syncTable(
+					"grocery_lists",
+					loadGroceryLists,
+					upsertGroceryLists,
+					mergeGroceryList,
+					identity.deviceId,
+				)
+			: undefined,
+		wanted.has("meal_plans")
+			? syncTable(
+					"meal_plans",
+					loadMealPlans,
+					upsertMealPlans,
+					mergeMealPlan,
+					identity.deviceId,
+				)
+			: undefined,
 	]);
 
 	return { recipes, groceryLists, mealPlans };

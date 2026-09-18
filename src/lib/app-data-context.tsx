@@ -38,7 +38,7 @@ import {
 	updateRecipes,
 } from "#/lib/recipes-storage";
 import { isOwnedByThisDevice } from "#/lib/sync/ownership";
-import { pushTombstone } from "#/lib/sync/sync-client";
+import { pushTombstone, type SyncTable } from "#/lib/sync/sync-client";
 import { runSync } from "#/lib/sync/sync-engine";
 
 // The shared source of truth for recipes/grocery lists across every route —
@@ -90,8 +90,11 @@ type AppDataContextValue = {
 	// Manually triggers a sync (see triggerSync below) and reports whether one
 	// actually ran (false when this device has no identity yet — nothing to
 	// sync) — used by the account drawer's "Sync now" button, which needs to
-	// know whether to show a result message.
-	syncNow: () => Promise<boolean>;
+	// know whether to show a result message. Defaults to every table (an
+	// explicit manual action should always catch up on everything); an
+	// optional table list lets an internal caller (content-edit syncs) scope
+	// it down instead.
+	syncNow: (tables?: SyncTable[]) => Promise<boolean>;
 	// The account drawer's open/close state lives here (not local state in
 	// _tabs.tsx) because the hamburger icon that opens it lives on each tab
 	// root screen's own header row (see _tabs.recipes.tsx and its siblings),
@@ -125,46 +128,94 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	// or this device has no identity yet — nothing to sync). Exposed as
 	// `syncNow` on the context for the account drawer's manual button;
 	// `triggerSync` below is the fire-and-forget wrapper the mount/
-	// visibility/focus effects use.
-	const syncNow = useCallback(async (): Promise<boolean> => {
-		if (syncInFlightRef.current || !getDeviceIdentity()) return false;
-		syncInFlightRef.current = true;
-		try {
-			const result = await runSync();
-			if (!result) return false;
-			setRecipes(result.recipes);
-			setGroceryLists(result.groceryLists);
-			setMealPlans(result.mealPlans);
-			return true;
-		} finally {
-			syncInFlightRef.current = false;
-		}
-	}, []);
+	// visibility/focus effects use. `tables` defaults to everything (see
+	// runSync in sync-engine.ts) — only present so a scoped caller (the
+	// debounced content-edit sync below) can ask for just the table it
+	// actually touched, and only that table's local state gets replaced
+	// (a table that wasn't synced this cycle is simply absent from the
+	// result, so it's left untouched here).
+	const syncNow = useCallback(
+		async (tables?: SyncTable[]): Promise<boolean> => {
+			if (syncInFlightRef.current || !getDeviceIdentity()) return false;
+			syncInFlightRef.current = true;
+			try {
+				const result = await runSync(tables);
+				if (!result) return false;
+				if (result.recipes) setRecipes(result.recipes);
+				if (result.groceryLists) setGroceryLists(result.groceryLists);
+				if (result.mealPlans) setMealPlans(result.mealPlans);
+				return true;
+			} finally {
+				syncInFlightRef.current = false;
+			}
+		},
+		[],
+	);
 
-	const triggerSync = useCallback(() => {
-		syncNow().catch((error) => {
-			console.error("Sync failed:", error);
-		});
-	}, [syncNow]);
+	const triggerSync = useCallback(
+		(tables?: SyncTable[]) => {
+			syncNow(tables).catch((error) => {
+				console.error("Sync failed:", error);
+			});
+		},
+		[syncNow],
+	);
+
+	// Mount/focus/visibility-change ("I just came back to the app") syncs go
+	// through this leading-edge throttle instead of calling triggerSync
+	// directly: the whole point of those triggers is catching up on remote
+	// changes *right now*, so the first one in a window should fire
+	// immediately rather than waiting for things to go quiet (a trailing
+	// debounce here would delay the very sync the user is waiting for). Any
+	// further foreground trigger within the cooldown is just a duplicate
+	// signal for the same "welcome back" moment (e.g. a visibilitychange and
+	// a focus event firing back to back) and is dropped, not queued.
+	const FOREGROUND_SYNC_MIN_INTERVAL_MS = 20_000;
+	const lastForegroundSyncAtRef = useRef(0);
+	const triggerForegroundSync = useCallback(() => {
+		const now = Date.now();
+		if (
+			now - lastForegroundSyncAtRef.current <
+			FOREGROUND_SYNC_MIN_INTERVAL_MS
+		) {
+			return;
+		}
+		lastForegroundSyncAtRef.current = now;
+		triggerSync();
+	}, [triggerSync]);
 
 	// Checking five ingredients in a row shouldn't fire five separate sync
 	// round-trips — debounce content-mutation-triggered syncs so a burst of
 	// edits to the same (or different) entities coalesces into one push a
 	// few seconds after things go quiet, rather than one per keystroke-ish
-	// action. Mount/focus/visibility-change syncs stay immediate (undebounced
-	// triggerSync calls) — those are "I just opened this" moments, not
-	// rapid-fire edits.
+	// action (this one genuinely wants the trailing/"fire last" behavior,
+	// unlike the foreground trigger above — there's no urgency to push
+	// mid-edit-burst, and waiting for the settled state avoids sending
+	// several intermediate pushes in a row). Accumulates which table(s) were
+	// actually touched across the whole debounce window (in case, say, a
+	// recipe edit and a grocery-list edit land within the same 5s window) so
+	// the eventual sync only touches those, not every table every time.
+	// Mount/focus/visibility-change syncs stay immediate (via
+	// triggerForegroundSync above) — those are "I just opened this" moments,
+	// not rapid-fire edits.
 	const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const pendingSyncTablesRef = useRef<Set<SyncTable>>(new Set());
 	const SYNC_DEBOUNCE_MS = 5000;
-	const scheduleSync = useCallback(() => {
-		if (debounceTimerRef.current != null) {
-			clearTimeout(debounceTimerRef.current);
-		}
-		debounceTimerRef.current = setTimeout(() => {
-			debounceTimerRef.current = null;
-			triggerSync();
-		}, SYNC_DEBOUNCE_MS);
-	}, [triggerSync]);
+	const scheduleSync = useCallback(
+		(tables: SyncTable[]) => {
+			for (const table of tables) pendingSyncTablesRef.current.add(table);
+			if (debounceTimerRef.current != null) {
+				clearTimeout(debounceTimerRef.current);
+			}
+			debounceTimerRef.current = setTimeout(() => {
+				debounceTimerRef.current = null;
+				const tablesToSync = Array.from(pendingSyncTablesRef.current);
+				pendingSyncTablesRef.current.clear();
+				triggerSync(tablesToSync);
+			}, SYNC_DEBOUNCE_MS);
+		},
+		[triggerSync],
+	);
 
 	useEffect(() => {
 		return () => {
@@ -191,23 +242,26 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		// Also deliberately not awaited (same reasoning as migrations above) —
 		// a no-op when this device has never started syncing (see
 		// sync-engine.ts's runSync).
-		triggerSync();
-	}, [triggerSync]);
+		triggerForegroundSync();
+	}, [triggerForegroundSync]);
 
 	// Sync-on-open: re-sync whenever the tab regains focus/visibility, not
 	// just at mount — the whole point of "sync on open" is picking up changes
-	// another device made while this tab sat in the background.
+	// another device made while this tab sat in the background. Goes through
+	// the foreground throttle above rather than triggerSync directly, so a
+	// visibilitychange immediately followed by a focus event (or rapid
+	// tab-switching) collapses into one sync instead of two.
 	useEffect(() => {
 		function handleVisibilityChange() {
-			if (document.visibilityState === "visible") triggerSync();
+			if (document.visibilityState === "visible") triggerForegroundSync();
 		}
 		document.addEventListener("visibilitychange", handleVisibilityChange);
-		window.addEventListener("focus", triggerSync);
+		window.addEventListener("focus", triggerForegroundSync);
 		return () => {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
-			window.removeEventListener("focus", triggerSync);
+			window.removeEventListener("focus", triggerForegroundSync);
 		};
-	}, [triggerSync]);
+	}, [triggerForegroundSync]);
 
 	// Shared entities need to check ownership (src/lib/sync/ownership.ts)
 	// before deleting: the owner's delete tombstones it everywhere (pushed to
@@ -230,7 +284,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const handleToggleFavoriteRecipe = useCallback(
 		(id: string) => {
 			setRecipes((current) => toggleFavoriteRecipe(current, id));
-			scheduleSync();
+			scheduleSync(["recipes"]);
 		},
 		[scheduleSync],
 	);
@@ -244,7 +298,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const handleUpdateRecipe = useCallback(
 		(recipe: Recipe) => {
 			setRecipes((current) => updateRecipe(current, recipe));
-			scheduleSync();
+			scheduleSync(["recipes"]);
 		},
 		[scheduleSync],
 	);
@@ -252,7 +306,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const handleUpdateRecipes = useCallback(
 		(recipesToUpdate: Recipe[]) => {
 			setRecipes((current) => updateRecipes(current, recipesToUpdate));
-			scheduleSync();
+			scheduleSync(["recipes"]);
 		},
 		[scheduleSync],
 	);
@@ -260,7 +314,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const handleCreateRecipe = useCallback(
 		(recipe: Recipe) => {
 			setRecipes((current) => saveRecipe(current, recipe));
-			scheduleSync();
+			scheduleSync(["recipes"]);
 		},
 		[scheduleSync],
 	);
@@ -281,7 +335,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const handleUpdateGroceryList = useCallback(
 		(list: GroceryList) => {
 			setGroceryLists((current) => updateGroceryList(current, list));
-			scheduleSync();
+			scheduleSync(["grocery_lists"]);
 		},
 		[scheduleSync],
 	);
@@ -308,7 +362,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 			);
 			setCreatingGroceryList(false);
 			setEditingGroceryList(null);
-			scheduleSync();
+			scheduleSync(["grocery_lists"]);
 		},
 		[editingGroceryList, scheduleSync],
 	);
@@ -316,7 +370,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const handleCreateMealPlan = useCallback(
 		(plan: MealPlan) => {
 			setMealPlans((current) => saveMealPlan(current, plan));
-			scheduleSync();
+			scheduleSync(["meal_plans"]);
 		},
 		[scheduleSync],
 	);
@@ -324,7 +378,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const handleUpdateMealPlan = useCallback(
 		(plan: MealPlan) => {
 			setMealPlans((current) => updateMealPlan(current, plan));
-			scheduleSync();
+			scheduleSync(["meal_plans"]);
 		},
 		[scheduleSync],
 	);

@@ -29,7 +29,7 @@ vi.mock("#/lib/sync/sync-client", () => ({
 
 const runSyncMock = vi.fn();
 vi.mock("#/lib/sync/sync-engine", () => ({
-	runSync: () => runSyncMock(),
+	runSync: (...args: unknown[]) => runSyncMock(...args),
 }));
 
 function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
@@ -99,6 +99,8 @@ function Harness() {
 		deleteGroceryList,
 		deleteMealPlan,
 		updateRecipe,
+		updateGroceryList,
+		updateMealPlan,
 		hasDeviceIdentity,
 		enableSync,
 		createPairingCode,
@@ -131,6 +133,24 @@ function Harness() {
 				}}
 			>
 				update-recipe
+			</button>
+			<button
+				type="button"
+				onClick={() => {
+					const list = groceryLists.find((l) => l.id === "l1");
+					if (list) updateGroceryList({ ...list, name: "Updated" });
+				}}
+			>
+				update-list
+			</button>
+			<button
+				type="button"
+				onClick={() => {
+					const plan = mealPlans.find((p) => p.id === "p1");
+					if (plan) updateMealPlan({ ...plan, description: "Updated" });
+				}}
+			>
+				update-plan
 			</button>
 			<button type="button" onClick={() => enableSync()}>
 				enable-sync
@@ -447,7 +467,38 @@ describe("AppDataProvider sync", () => {
 		);
 	});
 
-	it("re-syncs when the tab becomes visible again", async () => {
+	it("re-syncs when the tab becomes visible again, past the foreground throttle window", async () => {
+		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+		runSyncMock.mockResolvedValue(null);
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		try {
+			renderHarness();
+			await screen.findByTestId("recipe-count");
+			await waitFor(() => expect(runSyncMock).toHaveBeenCalledTimes(1));
+
+			// Clear the foreground-sync throttle window (see
+			// FOREGROUND_SYNC_MIN_INTERVAL_MS in app-data-context.tsx) so this
+			// genuinely counts as a fresh "welcome back" moment rather than a
+			// duplicate of the mount-time sync just above.
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(20_000);
+			});
+
+			Object.defineProperty(document, "visibilityState", {
+				value: "visible",
+				configurable: true,
+			});
+			await act(async () => {
+				document.dispatchEvent(new Event("visibilitychange"));
+			});
+
+			await waitFor(() => expect(runSyncMock).toHaveBeenCalledTimes(2));
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("drops a duplicate foreground trigger (visibilitychange + focus back to back) inside the throttle window", async () => {
 		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
 		runSyncMock.mockResolvedValue(null);
 		renderHarness();
@@ -460,9 +511,12 @@ describe("AppDataProvider sync", () => {
 		});
 		await act(async () => {
 			document.dispatchEvent(new Event("visibilitychange"));
+			window.dispatchEvent(new Event("focus"));
 		});
 
-		await waitFor(() => expect(runSyncMock).toHaveBeenCalledTimes(2));
+		// Both fired within milliseconds of the mount sync — well inside the
+		// throttle window — so neither should have triggered a second sync.
+		expect(runSyncMock).toHaveBeenCalledTimes(1);
 	});
 });
 
@@ -498,6 +552,41 @@ describe("AppDataProvider content-mutation sync debouncing", () => {
 		});
 
 		expect(runSyncMock).toHaveBeenCalledTimes(2);
+		// Only the table actually edited gets synced — not grocery_lists or
+		// meal_plans too (the "why does opening/editing a recipe touch
+		// everything else" bug this debounce scoping fixes).
+		expect(runSyncMock).toHaveBeenNthCalledWith(2, ["recipes"]);
+	});
+
+	it("scopes the debounced sync to every table actually touched in the same window", async () => {
+		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+		runSyncMock.mockResolvedValue(null);
+		saveGroceryList([], makeGroceryList());
+		saveMealPlan([], makeMealPlan());
+		const user = userEvent.setup({
+			advanceTimers: (ms) => vi.advanceTimersByTimeAsync(ms),
+		});
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+		await waitFor(() => expect(runSyncMock).toHaveBeenCalledTimes(1));
+
+		await user.click(screen.getByRole("button", { name: "update-list" }));
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(2000);
+		});
+		await user.click(screen.getByRole("button", { name: "update-plan" }));
+
+		expect(runSyncMock).toHaveBeenCalledTimes(1);
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(5000);
+		});
+
+		expect(runSyncMock).toHaveBeenCalledTimes(2);
+		expect(runSyncMock).toHaveBeenNthCalledWith(2, [
+			"grocery_lists",
+			"meal_plans",
+		]);
 	});
 
 	it("coalesces rapid successive edits into a single debounced sync", async () => {
