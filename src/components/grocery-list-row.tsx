@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { CircleCheck, ShoppingCart, Trash2 } from "lucide-react";
+import { CircleCheck, ShoppingCart, Trash2, Users } from "lucide-react";
 import { type GroceryList, getGroceryListProgress } from "#/lib/grocery-list";
 import { useSwipeRowActions } from "#/lib/use-swipe-row-actions";
 
@@ -13,10 +13,14 @@ import { useSwipeRowActions } from "#/lib/use-swipe-row-actions";
 // than revealing a dead panel.
 export function GroceryListRow({
 	list,
+	shared = false,
 	onDelete,
 	onShop,
 }: {
 	list: GroceryList;
+	// True when this list was shared *to* this account by someone else —
+	// see CLAUDE.md's "Per-resource sharing" roadmap item.
+	shared?: boolean;
 	onDelete: () => void;
 	onShop?: () => void;
 }) {
@@ -64,6 +68,12 @@ export function GroceryListRow({
 						<CircleCheck
 							className="size-[15px] shrink-0 text-sage"
 							aria-label="Completed"
+						/>
+					) : null}
+					{shared ? (
+						<Users
+							className="size-[15px] shrink-0 text-ink-dim"
+							aria-label="Shared with you"
 						/>
 					) : null}
 				</div>

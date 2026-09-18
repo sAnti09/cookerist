@@ -59,6 +59,7 @@ export type GroceryList = {
 	// Always present after loadGroceryLists() normalizes them.
 	updatedAt: string;
 	sharedAt: string | null;
+	ownerId: string | null;
 };
 
 export const GROCERY_LIST_NAME_MAX_LENGTH = 255;

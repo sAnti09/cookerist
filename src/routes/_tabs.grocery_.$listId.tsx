@@ -2,13 +2,14 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
 	ChevronLeft,
 	Pencil,
-	Share2,
 	ShoppingCart,
 	Trash2,
+	UserPlus,
 } from "lucide-react";
 import { useState } from "react";
 import { GroceryListDetail } from "#/components/grocery-list-detail";
 import { GroceryMode } from "#/components/grocery-mode";
+import { ShareResourceDialog } from "#/components/share-resource-dialog";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { IconButton } from "#/components/ui/icon-button";
 import { useAppData } from "#/lib/app-data-context";
@@ -44,25 +45,15 @@ function GroceryDetailScreen() {
 		updateGroceryList,
 		updateRecipes,
 		openEditGroceryList,
-		hasDeviceIdentity,
-		enableSync,
+		isSharedWithMe,
 	} = useAppData();
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const [groceryModeOpen, setGroceryModeOpen] = useState(
 		search.autoStart === "shop",
 	);
-	const [sharing, setSharing] = useState(false);
+	const [shareDialogOpen, setShareDialogOpen] = useState(false);
 	const list = groceryLists.find((l) => l.id === listId);
-
-	async function handleShare() {
-		if (sharing) return;
-		setSharing(true);
-		try {
-			await enableSync();
-		} finally {
-			setSharing(false);
-		}
-	}
+	const shared = list ? isSharedWithMe(list) : false;
 
 	if (!list) {
 		return (
@@ -106,20 +97,16 @@ function GroceryDetailScreen() {
 					>
 						<Pencil className="size-4 text-ink-dim" aria-hidden="true" />
 					</IconButton>
+					{shared ? null : (
+						<IconButton
+							aria-label={`Share ${list.name}`}
+							onClick={() => setShareDialogOpen(true)}
+						>
+							<UserPlus className="size-4 text-ink-dim" />
+						</IconButton>
+					)}
 					<IconButton
-						aria-label={hasDeviceIdentity ? "Syncing" : "Start syncing"}
-						onClick={handleShare}
-						disabled={sharing}
-					>
-						<Share2
-							className={cn(
-								"size-4",
-								hasDeviceIdentity ? "text-sage" : "text-ink-dim",
-							)}
-						/>
-					</IconButton>
-					<IconButton
-						aria-label={`Delete ${list.name}`}
+						aria-label={shared ? `Remove ${list.name}` : `Delete ${list.name}`}
 						onClick={() => setConfirmingDelete(true)}
 					>
 						<Trash2 className="size-4 text-ink-dim" />
@@ -169,9 +156,15 @@ function GroceryDetailScreen() {
 
 			<ConfirmDialog
 				open={confirmingDelete}
-				title="Delete this grocery list?"
-				description={`"${list.name}" will be permanently removed.`}
-				confirmLabel="Delete"
+				title={
+					shared ? "Remove this grocery list?" : "Delete this grocery list?"
+				}
+				description={
+					shared
+						? `"${list.name}" will be removed from your grocery lists — the person who shared it (and anyone else it's shared with) keeps their copy.`
+						: `"${list.name}" will be permanently removed.`
+				}
+				confirmLabel={shared ? "Remove" : "Delete"}
 				cancelLabel="Cancel"
 				onConfirm={() => {
 					setConfirmingDelete(false);
@@ -179,6 +172,13 @@ function GroceryDetailScreen() {
 					navigate({ to: "/grocery" });
 				}}
 				onCancel={() => setConfirmingDelete(false)}
+			/>
+			<ShareResourceDialog
+				open={shareDialogOpen}
+				onClose={() => setShareDialogOpen(false)}
+				table="grocery_lists"
+				id={list.id}
+				title={list.name}
 			/>
 
 			{list.items.length > 0 ? (

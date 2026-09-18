@@ -14,9 +14,14 @@ export const Route = createFileRoute("/_tabs/meal-plan")({
 });
 
 function MealPlanScreen() {
-	const { mealPlans, deleteMealPlan, openAccountDrawer } = useAppData();
+	const { mealPlans, deleteMealPlan, openAccountDrawer, isSharedWithMe } =
+		useAppData();
 	const [search, setSearch] = useState("");
 	const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
+	const deletingPlan = mealPlans.find((p) => p.id === deletingPlanId);
+	const deletingPlanShared = deletingPlan
+		? isSharedWithMe(deletingPlan)
+		: false;
 	const filteredPlans = useMemo(
 		() => filterMealPlans(mealPlans, search),
 		[mealPlans, search],
@@ -60,6 +65,7 @@ function MealPlanScreen() {
 						<MealPlanRow
 							key={plan.id}
 							plan={plan}
+							shared={isSharedWithMe(plan)}
 							onDelete={() => setDeletingPlanId(plan.id)}
 						/>
 					))
@@ -76,9 +82,17 @@ function MealPlanScreen() {
 
 			<ConfirmDialog
 				open={deletingPlanId != null}
-				title="Delete this meal plan?"
-				description="This meal plan will be permanently removed. Any recipes it built stay in your Recipes list."
-				confirmLabel="Delete"
+				title={
+					deletingPlanShared
+						? "Remove this meal plan?"
+						: "Delete this meal plan?"
+				}
+				description={
+					deletingPlanShared
+						? "This meal plan will be removed from your meal plans — the person who shared it (and anyone else it's shared with) keeps their copy."
+						: "This meal plan will be permanently removed. Any recipes it built stay in your Recipes list."
+				}
+				confirmLabel={deletingPlanShared ? "Remove" : "Delete"}
 				cancelLabel="Cancel"
 				onConfirm={() => {
 					if (deletingPlanId) deleteMealPlan(deletingPlanId);

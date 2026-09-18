@@ -20,9 +20,14 @@ function GroceryScreen() {
 		openCreateGroceryList,
 		deleteGroceryList,
 		openAccountDrawer,
+		isSharedWithMe,
 	} = useAppData();
 	const [search, setSearch] = useState("");
 	const [deletingListId, setDeletingListId] = useState<string | null>(null);
+	const deletingList = groceryLists.find((l) => l.id === deletingListId);
+	const deletingListShared = deletingList
+		? isSharedWithMe(deletingList)
+		: false;
 	const filteredLists = useMemo(
 		() => filterGroceryLists(groceryLists, search),
 		[groceryLists, search],
@@ -66,6 +71,7 @@ function GroceryScreen() {
 						<GroceryListRow
 							key={list.id}
 							list={list}
+							shared={isSharedWithMe(list)}
 							onDelete={() => setDeletingListId(list.id)}
 							onShop={
 								list.items.length > 0
@@ -93,13 +99,19 @@ function GroceryScreen() {
 
 			<ConfirmDialog
 				open={deletingListId != null}
-				title="Delete this grocery list?"
+				title={
+					deletingListShared
+						? "Remove this grocery list?"
+						: "Delete this grocery list?"
+				}
 				description={
-					deletingListId
-						? `"${groceryLists.find((l) => l.id === deletingListId)?.name}" will be permanently removed.`
+					deletingList
+						? deletingListShared
+							? `"${deletingList.name}" will be removed from your grocery lists — the person who shared it (and anyone else it's shared with) keeps their copy.`
+							: `"${deletingList.name}" will be permanently removed.`
 						: undefined
 				}
-				confirmLabel="Delete"
+				confirmLabel={deletingListShared ? "Remove" : "Delete"}
 				cancelLabel="Cancel"
 				onConfirm={() => {
 					if (deletingListId) deleteGroceryList(deletingListId);

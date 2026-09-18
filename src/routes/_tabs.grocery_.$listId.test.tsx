@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroceryList } from "#/lib/grocery-list";
@@ -23,11 +23,19 @@ vi.mock("#/lib/sync/sync-engine", () => ({
 	runSync: () => runSyncMock(),
 }));
 
+const createResourceShareCodeMock = vi.fn();
+vi.mock("#/server/resource-sharing", () => ({
+	createResourceShareCode: (...args: unknown[]) =>
+		createResourceShareCodeMock(...args),
+	redeemResourceShareCode: vi.fn(),
+}));
+
 beforeEach(() => {
 	window.localStorage.clear();
 	getDeviceIdentityMock.mockReset();
 	ensureDeviceIdentityMock.mockReset();
 	runSyncMock.mockReset();
+	createResourceShareCodeMock.mockReset();
 	getDeviceIdentityMock.mockReturnValue(null);
 	runSyncMock.mockResolvedValue(null);
 });
@@ -38,6 +46,7 @@ function makeGroceryList(overrides: Partial<GroceryList> = {}): GroceryList {
 		createdAt: "2026-01-15T12:00:00.000Z",
 		updatedAt: "2026-01-15T12:00:00.000Z",
 		sharedAt: null,
+		ownerId: null,
 		name: "Weeknight Groceries",
 		recipeIds: [],
 		items: [
@@ -201,26 +210,6 @@ describe("Grocery detail screen", () => {
 		expect(stored[0].id).toBe("list-1");
 	});
 
-	it("starts syncing via the list's sync icon", async () => {
-		const list = makeGroceryList();
-		saveGroceryList(loadGroceryLists(), list);
-		ensureDeviceIdentityMock.mockImplementation(async () => {
-			const identity = { deviceId: "device-1" };
-			getDeviceIdentityMock.mockReturnValue(identity);
-			return identity;
-		});
-		await renderApp(`/grocery/${list.id}`);
-		const user = userEvent.setup();
-
-		await user.click(screen.getByRole("button", { name: "Start syncing" }));
-
-		await waitFor(() => expect(ensureDeviceIdentityMock).toHaveBeenCalled());
-		await waitFor(() => expect(runSyncMock).toHaveBeenCalled());
-		expect(
-			await screen.findByRole("button", { name: "Syncing" }),
-		).toBeInTheDocument();
-	});
-
 	// Every paired device is a symmetric co-owner (see CLAUDE.md's Ownership
 	// section) — delete is always "Delete," never a device-scoped "Remove."
 	it("labels delete as Delete for a shared list", async () => {
@@ -233,6 +222,55 @@ describe("Grocery detail screen", () => {
 
 		expect(
 			screen.getByRole("button", { name: `Delete ${list.name}` }),
+		).toBeInTheDocument();
+	});
+
+	// See CLAUDE.md's "Per-resource sharing" roadmap item.
+	it("opens the share dialog and generates a code from the Share icon", async () => {
+		const list = makeGroceryList();
+		saveGroceryList(loadGroceryLists(), list);
+		ensureDeviceIdentityMock.mockImplementation(async () => {
+			const identity = { deviceId: "device-1", deviceSecret: "s" };
+			getDeviceIdentityMock.mockReturnValue(identity);
+			return identity;
+		});
+		createResourceShareCodeMock.mockResolvedValue({
+			code: "ABCD1234",
+			expiresAt: "2026-01-15T12:10:00.000Z",
+		});
+		await renderApp(`/grocery/${list.id}`);
+		const user = userEvent.setup();
+
+		await user.click(
+			screen.getByRole("button", { name: `Share ${list.name}` }),
+		);
+		await user.click(
+			screen.getByRole("button", { name: /generate share code/i }),
+		);
+
+		expect(await screen.findByText("ABCD1234")).toBeInTheDocument();
+	});
+
+	// A list shared to this account can't be re-shared, and its Delete is a
+	// "Remove" (revoking this account's own access) instead — see
+	// CLAUDE.md's "Per-resource sharing" roadmap item.
+	it("hides the Share icon and labels delete as Remove for a list shared to this account", async () => {
+		getDeviceIdentityMock.mockReturnValue({
+			deviceId: "device-1",
+			userId: "me",
+		});
+		const list = makeGroceryList({
+			sharedAt: "2026-01-15T12:00:00.000Z",
+			ownerId: "someone-else",
+		});
+		saveGroceryList(loadGroceryLists(), list);
+		await renderApp(`/grocery/${list.id}`);
+
+		expect(
+			screen.queryByRole("button", { name: `Share ${list.name}` }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: `Remove ${list.name}` }),
 		).toBeInTheDocument();
 	});
 });

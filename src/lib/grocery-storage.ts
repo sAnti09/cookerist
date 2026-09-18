@@ -24,6 +24,7 @@ export function loadGroceryLists(): GroceryList[] {
 			...list,
 			updatedAt: list.updatedAt ?? list.createdAt,
 			sharedAt: list.sharedAt ?? null,
+			ownerId: list.ownerId ?? null,
 		}));
 	} catch {
 		return [];

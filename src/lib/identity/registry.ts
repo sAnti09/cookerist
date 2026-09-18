@@ -39,7 +39,9 @@ export async function registerDevice(): Promise<DeviceCredentials> {
 	return { userId: user.id, deviceId: device.id, deviceSecret };
 }
 
-async function authenticateDevice(
+// Exported for reuse by resource-share-registry.ts's own server functions,
+// which need the same "prove this device belongs to this account" check.
+export async function authenticateDevice(
 	deviceId: string,
 	deviceSecret: string,
 ): Promise<string> {

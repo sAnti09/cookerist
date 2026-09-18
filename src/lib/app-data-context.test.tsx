@@ -10,12 +10,10 @@ import { saveRecipe } from "#/lib/recipes-storage";
 import { AppDataProvider, useAppData } from "./app-data-context";
 
 const getDeviceIdentityMock = vi.fn();
-const ensureDeviceIdentityMock = vi.fn();
 const createPairingCodeForThisDeviceMock = vi.fn();
 const linkDeviceWithPairingCodeMock = vi.fn();
 vi.mock("#/lib/identity/device", () => ({
 	getDeviceIdentity: () => getDeviceIdentityMock(),
-	ensureDeviceIdentity: () => ensureDeviceIdentityMock(),
 	createPairingCodeForThisDevice: (...args: unknown[]) =>
 		createPairingCodeForThisDeviceMock(...args),
 	linkDeviceWithPairingCode: (...args: unknown[]) =>
@@ -23,13 +21,25 @@ vi.mock("#/lib/identity/device", () => ({
 }));
 
 const pushTombstoneMock = vi.fn();
+const pushShareRevocationMock = vi.fn();
+const pullOneMock = vi.fn();
 vi.mock("#/lib/sync/sync-client", () => ({
 	pushTombstone: (...args: unknown[]) => pushTombstoneMock(...args),
+	pushShareRevocation: (...args: unknown[]) => pushShareRevocationMock(...args),
+	pullOne: (...args: unknown[]) => pullOneMock(...args),
 }));
 
 const runSyncMock = vi.fn();
 vi.mock("#/lib/sync/sync-engine", () => ({
 	runSync: (...args: unknown[]) => runSyncMock(...args),
+}));
+
+const createShareCodeForResourceMock = vi.fn();
+const redeemShareCodeClientMock = vi.fn();
+vi.mock("#/lib/identity/resource-sharing", () => ({
+	createShareCodeForResource: (...args: unknown[]) =>
+		createShareCodeForResourceMock(...args),
+	redeemShareCode: (...args: unknown[]) => redeemShareCodeClientMock(...args),
 }));
 
 function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
@@ -39,6 +49,7 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
 		createdAt: now,
 		updatedAt: now,
 		sharedAt: null,
+		ownerId: null,
 		prompt: "test",
 		title: "Recipe",
 		overview: "",
@@ -59,6 +70,7 @@ function makeGroceryList(overrides: Partial<GroceryList> = {}): GroceryList {
 		createdAt: now,
 		updatedAt: now,
 		sharedAt: null,
+		ownerId: null,
 		name: "List",
 		recipeIds: [],
 		items: [],
@@ -74,6 +86,7 @@ function makeMealPlan(overrides: Partial<MealPlan> = {}): MealPlan {
 		createdAt: now,
 		updatedAt: now,
 		sharedAt: null,
+		ownerId: null,
 		startDate: "2026-01-01",
 		endDate: "2026-01-07",
 		description: "",
@@ -102,13 +115,17 @@ function Harness() {
 		updateGroceryList,
 		updateMealPlan,
 		hasDeviceIdentity,
-		enableSync,
 		createPairingCode,
 		linkDevice,
 		syncNow,
+		isSharedWithMe,
+		shareResource,
+		redeemShareCode,
 	} = useAppData();
 
 	if (!ready) return <div>loading</div>;
+
+	const r1 = recipes.find((r) => r.id === "r1");
 
 	return (
 		<div>
@@ -116,8 +133,29 @@ function Harness() {
 			<div data-testid="list-count">{groceryLists.length}</div>
 			<div data-testid="plan-count">{mealPlans.length}</div>
 			<div data-testid="has-identity">{String(hasDeviceIdentity)}</div>
+			<div data-testid="r1-shared">
+				{String(r1 ? isSharedWithMe(r1) : false)}
+			</div>
 			<button type="button" onClick={() => deleteRecipe("r1")}>
 				delete-recipe
+			</button>
+			<button
+				type="button"
+				onClick={async () => {
+					const result = await shareResource("recipes", "r1");
+					document.title = `share:${result.code}`;
+				}}
+			>
+				share-recipe
+			</button>
+			<button
+				type="button"
+				onClick={async () => {
+					const result = await redeemShareCode("SOMECODE");
+					document.title = `redeemed:${result.table}:${result.id}:${result.title}`;
+				}}
+			>
+				redeem-code
 			</button>
 			<button type="button" onClick={() => deleteGroceryList("l1")}>
 				delete-list
@@ -151,9 +189,6 @@ function Harness() {
 				}}
 			>
 				update-plan
-			</button>
-			<button type="button" onClick={() => enableSync()}>
-				enable-sync
 			</button>
 			<button type="button" onClick={() => createPairingCode()}>
 				gen-code
@@ -191,13 +226,17 @@ function renderHarness() {
 beforeEach(() => {
 	window.localStorage.clear();
 	getDeviceIdentityMock.mockReset();
-	ensureDeviceIdentityMock.mockReset();
 	createPairingCodeForThisDeviceMock.mockReset();
 	linkDeviceWithPairingCodeMock.mockReset();
 	pushTombstoneMock.mockReset();
+	pushShareRevocationMock.mockReset();
+	pullOneMock.mockReset();
 	runSyncMock.mockReset();
+	createShareCodeForResourceMock.mockReset();
+	redeemShareCodeClientMock.mockReset();
 	getDeviceIdentityMock.mockReturnValue(null);
 	pushTombstoneMock.mockResolvedValue(undefined);
+	pushShareRevocationMock.mockResolvedValue(undefined);
 	runSyncMock.mockResolvedValue(null);
 });
 
@@ -277,31 +316,130 @@ describe("AppDataProvider delete handlers", () => {
 	});
 });
 
-describe("AppDataProvider enableSync", () => {
-	it("ensures an identity exists and syncs, applying the result", async () => {
-		getDeviceIdentityMock.mockReturnValue(null);
-		// Mimic production: ensureDeviceIdentity() persists the identity to
-		// localStorage, so a subsequent getDeviceIdentity() call (inside
-		// syncNow()) reflects it immediately.
-		ensureDeviceIdentityMock.mockImplementation(async () => {
-			const identity = { deviceId: "device-1" };
-			getDeviceIdentityMock.mockReturnValue(identity);
-			return identity;
+describe("AppDataProvider per-resource sharing", () => {
+	it("reports isSharedWithMe false for a locally-owned recipe", async () => {
+		getDeviceIdentityMock.mockReturnValue({
+			deviceId: "device-1",
+			userId: "me",
 		});
-		runSyncMock.mockResolvedValue({
-			recipes: [makeRecipe({ id: "from-sync" })],
-			groceryLists: [],
-			mealPlans: [],
+		saveRecipe([], makeRecipe({ ownerId: "me" }));
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+
+		expect(screen.getByTestId("r1-shared")).toHaveTextContent("false");
+	});
+
+	it("reports isSharedWithMe true for a recipe owned by a different account", async () => {
+		getDeviceIdentityMock.mockReturnValue({
+			deviceId: "device-1",
+			userId: "me",
+		});
+		saveRecipe([], makeRecipe({ ownerId: "someone-else" }));
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+
+		expect(screen.getByTestId("r1-shared")).toHaveTextContent("true");
+	});
+
+	// A shared-to-me item's "delete" only ever revokes this account's own
+	// access grant — never a tombstone on the resource itself, which would
+	// delete it for the owner and every other recipient too.
+	it("revokes this account's own share grant when deleting a shared-to-me recipe, never a tombstone", async () => {
+		getDeviceIdentityMock.mockReturnValue({
+			deviceId: "device-1",
+			userId: "me",
+		});
+		saveRecipe(
+			[],
+			makeRecipe({
+				sharedAt: "2026-01-01T00:00:00.000Z",
+				ownerId: "someone-else",
+			}),
+		);
+		const user = userEvent.setup();
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+
+		await user.click(screen.getByRole("button", { name: "delete-recipe" }));
+
+		await waitFor(() =>
+			expect(pushShareRevocationMock).toHaveBeenCalledWith("recipes", "r1"),
+		);
+		expect(pushTombstoneMock).not.toHaveBeenCalled();
+		await waitFor(() =>
+			expect(screen.getByTestId("recipe-count")).toHaveTextContent("0"),
+		);
+	});
+
+	it("mints a share code for a resource this account owns", async () => {
+		createShareCodeForResourceMock.mockResolvedValue({
+			code: "ABCD1234",
+			expiresAt: "2026-01-01T00:10:00.000Z",
+		});
+		saveRecipe([], makeRecipe());
+		const user = userEvent.setup();
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+
+		await user.click(screen.getByRole("button", { name: "share-recipe" }));
+
+		await waitFor(() =>
+			expect(createShareCodeForResourceMock).toHaveBeenCalledWith(
+				"recipes",
+				"r1",
+			),
+		);
+		await waitFor(() => expect(document.title).toBe("share:ABCD1234"));
+	});
+
+	it("redeems a share code for a shared grocery list", async () => {
+		redeemShareCodeClientMock.mockResolvedValue({
+			resourceTable: "grocery_lists",
+			resourceId: "shared-list",
+		});
+		pullOneMock.mockResolvedValue({
+			id: "shared-list",
+			data: makeGroceryList({ id: "shared-list", name: "Shared List" }),
+			owner_id: "owner-1",
+			updated_at: "2026-01-01T00:00:00.000Z",
+			deleted_at: null,
 		});
 		const user = userEvent.setup();
 		renderHarness();
 		await screen.findByTestId("recipe-count");
 
-		await user.click(screen.getByRole("button", { name: "enable-sync" }));
+		await user.click(screen.getByRole("button", { name: "redeem-code" }));
 
-		expect(ensureDeviceIdentityMock).toHaveBeenCalled();
 		await waitFor(() =>
-			expect(screen.getByTestId("has-identity")).toHaveTextContent("true"),
+			expect(document.title).toBe(
+				"redeemed:grocery_lists:shared-list:Shared List",
+			),
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId("list-count")).toHaveTextContent("1"),
+		);
+	});
+
+	it("redeems a share code, fetching and inserting the resource locally right away", async () => {
+		redeemShareCodeClientMock.mockResolvedValue({
+			resourceTable: "recipes",
+			resourceId: "shared-recipe",
+		});
+		pullOneMock.mockResolvedValue({
+			id: "shared-recipe",
+			data: makeRecipe({ id: "shared-recipe", title: "Shared Dish" }),
+			owner_id: "owner-1",
+			updated_at: "2026-01-01T00:00:00.000Z",
+			deleted_at: null,
+		});
+		const user = userEvent.setup();
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+
+		await user.click(screen.getByRole("button", { name: "redeem-code" }));
+
+		await waitFor(() =>
+			expect(document.title).toBe("redeemed:recipes:shared-recipe:Shared Dish"),
 		);
 		await waitFor(() =>
 			expect(screen.getByTestId("recipe-count")).toHaveTextContent("1"),

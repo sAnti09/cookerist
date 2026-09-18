@@ -13,6 +13,7 @@ function recipe(overrides: Partial<Recipe>): Recipe {
 		createdAt: "2026-01-01T00:00:00.000Z",
 		updatedAt: "2026-01-01T00:00:00.000Z",
 		sharedAt: null,
+		ownerId: null,
 		prompt: "shrimp pasta for 2",
 		title: "Garlic Butter Shrimp Pasta",
 		overview: "A quick, creamy shrimp pasta.",

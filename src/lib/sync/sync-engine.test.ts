@@ -9,10 +9,12 @@ vi.mock("#/lib/identity/device", () => ({
 const pushEntitiesMock = vi.fn();
 const pullChangedSinceMock = vi.fn();
 const pushTombstoneMock = vi.fn();
+const pushShareRevocationMock = vi.fn();
 vi.mock("#/lib/sync/sync-client", () => ({
 	pushEntities: (...args: unknown[]) => pushEntitiesMock(...args),
 	pullChangedSince: (...args: unknown[]) => pullChangedSinceMock(...args),
 	pushTombstone: (...args: unknown[]) => pushTombstoneMock(...args),
+	pushShareRevocation: (...args: unknown[]) => pushShareRevocationMock(...args),
 }));
 
 function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
@@ -21,6 +23,7 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
 		createdAt: "2026-01-01T00:00:00.000Z",
 		updatedAt: "2026-01-01T00:00:00.000Z",
 		sharedAt: null,
+		ownerId: null,
 		prompt: "test",
 		title: "Original",
 		overview: "",
@@ -41,9 +44,11 @@ beforeEach(() => {
 	pushEntitiesMock.mockReset();
 	pullChangedSinceMock.mockReset();
 	pushTombstoneMock.mockReset();
+	pushShareRevocationMock.mockReset();
 	pushEntitiesMock.mockResolvedValue(undefined);
 	pullChangedSinceMock.mockResolvedValue([]);
 	pushTombstoneMock.mockResolvedValue(undefined);
+	pushShareRevocationMock.mockResolvedValue(undefined);
 });
 
 describe("runSync", () => {
@@ -508,6 +513,190 @@ describe("runSync", () => {
 
 			expect(result?.recipes?.find((r) => r.id === "r1")).toBeUndefined();
 			consoleErrorSpy.mockRestore();
+		});
+	});
+
+	// See CLAUDE.md's "Per-resource sharing" roadmap item.
+	describe("per-resource sharing", () => {
+		it("stamps a newly-synced entity's ownerId with this device's own account", async () => {
+			getDeviceIdentityMock.mockReturnValue({
+				deviceId: "device-1",
+				userId: "my-account",
+			});
+			const { saveRecipe } = await import("#/lib/recipes-storage");
+			saveRecipe([], makeRecipe({ id: "r1", sharedAt: null, ownerId: null }));
+			const { runSync } = await import("./sync-engine");
+
+			const result = await runSync();
+
+			expect(result?.recipes?.find((r) => r.id === "r1")?.ownerId).toBe(
+				"my-account",
+			);
+		});
+
+		it("never overwrites an entity's ownerId once it's already synced, even under a different device identity", async () => {
+			getDeviceIdentityMock.mockReturnValue({
+				deviceId: "device-1",
+				userId: "my-account",
+			});
+			const { saveRecipe } = await import("#/lib/recipes-storage");
+			saveRecipe(
+				[],
+				makeRecipe({
+					id: "r1",
+					sharedAt: "2026-01-01T00:00:00.000Z",
+					ownerId: "someone-else",
+				}),
+			);
+			const { runSync } = await import("./sync-engine");
+
+			const result = await runSync();
+
+			expect(result?.recipes?.find((r) => r.id === "r1")?.ownerId).toBe(
+				"someone-else",
+			);
+		});
+
+		it("pushes a shared-to-me entity's edits carrying its true owner's id, not this device's own", async () => {
+			getDeviceIdentityMock.mockReturnValue({
+				deviceId: "device-1",
+				userId: "my-account",
+			});
+			const { saveRecipe, updateRecipe, loadRecipes } = await import(
+				"#/lib/recipes-storage"
+			);
+			saveRecipe(
+				[],
+				makeRecipe({
+					id: "r1",
+					sharedAt: "2026-01-01T00:00:00.000Z",
+					updatedAt: "2026-01-01T00:00:00.000Z",
+					ownerId: "someone-else",
+				}),
+			);
+			const { runSync } = await import("./sync-engine");
+			await runSync();
+			pushEntitiesMock.mockClear();
+
+			updateRecipe(loadRecipes(), loadRecipes()[0]);
+			await runSync();
+
+			const recipesPushCall = pushEntitiesMock.mock.calls.find(
+				(call) => call[0] === "recipes",
+			);
+			const pushedR1 = (
+				recipesPushCall?.[1] as Array<{ id: string; ownerId: string | null }>
+			).find((r) => r.id === "r1");
+			expect(pushedR1?.ownerId).toBe("someone-else");
+		});
+
+		it("overrides a pulled row's ownerId from the authoritative Supabase column, ignoring whatever the jsonb payload carries", async () => {
+			getDeviceIdentityMock.mockReturnValue({
+				deviceId: "device-1",
+				userId: "my-account",
+			});
+			const remote = makeRecipe({
+				id: "remote-1",
+				sharedAt: "2026-01-01T00:00:00.000Z",
+				// Deliberately stale/wrong — the row's own owner_id column must win.
+				ownerId: "stale-value",
+			});
+			pullChangedSinceMock.mockImplementation(async (table: string) =>
+				table === "recipes"
+					? [
+							{
+								id: "remote-1",
+								data: remote,
+								owner_id: "authoritative-owner",
+								updated_at: "2026-01-02T00:00:00.000Z",
+								deleted_at: null,
+							},
+						]
+					: [],
+			);
+			const { runSync } = await import("./sync-engine");
+
+			const result = await runSync();
+
+			expect(result?.recipes?.find((r) => r.id === "remote-1")?.ownerId).toBe(
+				"authoritative-owner",
+			);
+		});
+
+		describe("pending share revocation retry", () => {
+			it("retries a pending revocation before pulling, and clears it once confirmed", async () => {
+				getDeviceIdentityMock.mockReturnValue({
+					deviceId: "device-1",
+					userId: "my-account",
+				});
+				const { addPendingShareRevocation, getPendingShareRevocations } =
+					await import("#/lib/sync/pending-share-revocations");
+				addPendingShareRevocation("recipes", "r1");
+				const { runSync } = await import("./sync-engine");
+
+				await runSync();
+
+				expect(pushShareRevocationMock).toHaveBeenCalledWith("recipes", "r1");
+				expect(getPendingShareRevocations("recipes")).toEqual([]);
+			});
+
+			it("leaves a pending revocation in place for the next cycle when the retry still fails", async () => {
+				getDeviceIdentityMock.mockReturnValue({
+					deviceId: "device-1",
+					userId: "my-account",
+				});
+				pushShareRevocationMock.mockRejectedValue(
+					new Error("still not landed"),
+				);
+				const { addPendingShareRevocation, getPendingShareRevocations } =
+					await import("#/lib/sync/pending-share-revocations");
+				addPendingShareRevocation("recipes", "r1");
+				const consoleErrorSpy = vi
+					.spyOn(console, "error")
+					.mockImplementation(() => {});
+				const { runSync } = await import("./sync-engine");
+
+				await runSync();
+
+				expect(getPendingShareRevocations("recipes")).toEqual(["r1"]);
+				consoleErrorSpy.mockRestore();
+			});
+
+			it("does not resurrect a shared entity locally while its own revocation retry is still failing", async () => {
+				getDeviceIdentityMock.mockReturnValue({
+					deviceId: "device-1",
+					userId: "my-account",
+				});
+				pushShareRevocationMock.mockRejectedValue(
+					new Error("still not landed"),
+				);
+				const { addPendingShareRevocation } = await import(
+					"#/lib/sync/pending-share-revocations"
+				);
+				addPendingShareRevocation("recipes", "r1");
+				pullChangedSinceMock.mockImplementation(async (table: string) =>
+					table === "recipes"
+						? [
+								{
+									id: "r1",
+									data: makeRecipe({ id: "r1", ownerId: "someone-else" }),
+									owner_id: "someone-else",
+									updated_at: "2026-01-02T00:00:00.000Z",
+									deleted_at: null,
+								},
+							]
+						: [],
+				);
+				const consoleErrorSpy = vi
+					.spyOn(console, "error")
+					.mockImplementation(() => {});
+				const { runSync } = await import("./sync-engine");
+
+				const result = await runSync();
+
+				expect(result?.recipes?.find((r) => r.id === "r1")).toBeUndefined();
+				consoleErrorSpy.mockRestore();
+			});
 		});
 	});
 });

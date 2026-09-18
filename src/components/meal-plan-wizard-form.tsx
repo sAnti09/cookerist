@@ -135,6 +135,7 @@ export function MealPlanWizardForm({
 						createdAt: now,
 						updatedAt: now,
 						sharedAt: null,
+						ownerId: null,
 						startDate,
 						endDate,
 						description: description.trim(),

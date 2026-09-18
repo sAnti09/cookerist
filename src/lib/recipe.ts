@@ -139,10 +139,18 @@ export type Recipe = {
 	// who never shares anything should never get a row in Supabase). Every
 	// device paired under the same identity is a symmetric co-owner once
 	// shared — any of them can fully delete it, which cascades to the rest
-	// (see src/lib/sync/sync-engine.ts). There's no per-device ownership
-	// concept here; that's reserved for a possible future "share one item
-	// with someone else's account" feature (see CLAUDE.md's Known limitations).
+	// (see src/lib/sync/sync-engine.ts).
 	sharedAt: string | null;
+	// The Supabase account (`users.id`) this recipe's row actually belongs
+	// to — null for a local-only recipe that's never synced. Set once, the
+	// first time this recipe is ever synced (to this device's own account),
+	// or overwritten from Supabase's own `owner_id` column on every pull
+	// thereafter (see sync-engine.ts). When this differs from the current
+	// device's own account, the recipe was shared *to* this account by
+	// someone else (see CLAUDE.md's "Per-resource sharing" roadmap item) —
+	// use isSharedWithMe (src/lib/sync/share-status.ts) rather than comparing
+	// this directly, so the "am I the owner" check lives in one place.
+	ownerId: string | null;
 };
 
 export function formatEstimatedTime(minutes: number): string {

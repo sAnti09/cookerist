@@ -234,6 +234,7 @@ export function GroceryListCreateForm({
 			createdAt: now,
 			updatedAt: now,
 			sharedAt: null,
+			ownerId: null,
 			name: finalName,
 			recipeIds,
 			items: previewItems,

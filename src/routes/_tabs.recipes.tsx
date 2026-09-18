@@ -66,8 +66,13 @@ function readStoredVisibleCount(): number {
 function RecipesScreen() {
 	const isOnline = useOnlineStatus();
 	const navigate = useNavigate();
-	const { recipes, createRecipe, deleteRecipe, openAccountDrawer } =
-		useAppData();
+	const {
+		recipes,
+		createRecipe,
+		deleteRecipe,
+		openAccountDrawer,
+		isSharedWithMe,
+	} = useAppData();
 	const [pending, setPending] = useState<PendingRow[]>([]);
 	const [promptValue, setPromptValue] = useState("");
 	const [visibleCount, setVisibleCount] = useState(readStoredVisibleCount);
@@ -78,6 +83,10 @@ function RecipesScreen() {
 	const [favoritesOnly, setFavoritesOnly] = useState(false);
 	const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 	const [deletingRecipeId, setDeletingRecipeId] = useState<string | null>(null);
+	const deletingRecipe = recipes.find((r) => r.id === deletingRecipeId);
+	const deletingRecipeShared = deletingRecipe
+		? isSharedWithMe(deletingRecipe)
+		: false;
 	const sentinelRef = useRef<HTMLDivElement | null>(null);
 	// Compared against on every filter-reset effect run (below) instead of a
 	// simple "have I run once yet" boolean ref — a boolean flag mutated
@@ -403,6 +412,7 @@ function RecipesScreen() {
 						<RecipeResultRow
 							key={recipe.id}
 							recipe={recipe}
+							shared={isSharedWithMe(recipe)}
 							onDelete={() => setDeletingRecipeId(recipe.id)}
 							onCook={
 								recipe.steps.length > 0
@@ -459,13 +469,17 @@ function RecipesScreen() {
 			/>
 			<ConfirmDialog
 				open={deletingRecipeId != null}
-				title="Delete this recipe?"
+				title={
+					deletingRecipeShared ? "Remove this recipe?" : "Delete this recipe?"
+				}
 				description={
-					deletingRecipeId
-						? `"${recipes.find((r) => r.id === deletingRecipeId)?.title}" will be permanently removed.`
+					deletingRecipe
+						? deletingRecipeShared
+							? `"${deletingRecipe.title}" will be removed from your recipes — the person who shared it (and anyone else it's shared with) keeps their copy.`
+							: `"${deletingRecipe.title}" will be permanently removed.`
 						: undefined
 				}
-				confirmLabel="Delete"
+				confirmLabel={deletingRecipeShared ? "Remove" : "Delete"}
 				cancelLabel="Cancel"
 				onConfirm={() => {
 					if (deletingRecipeId) deleteRecipe(deletingRecipeId);

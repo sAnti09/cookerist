@@ -56,6 +56,20 @@ vi.mock("#/lib/image-capture", () => ({
 	isImageFile: (file: File) => file.type.startsWith("image/"),
 }));
 
+const pushShareRevocationMock = vi.fn();
+vi.mock("#/lib/sync/sync-client", () => ({
+	pushTombstone: vi.fn(),
+	pushShareRevocation: (...args: unknown[]) => pushShareRevocationMock(...args),
+}));
+
+// A real device identity in localStorage (set by the "shared" test below)
+// would otherwise make the mount-time foreground sync call the real
+// sync-engine, which itself calls sync-client functions this mock doesn't
+// provide (pullChangedSince/pushEntities) — stub the whole engine out.
+vi.mock("#/lib/sync/sync-engine", () => ({
+	runSync: vi.fn().mockResolvedValue(null),
+}));
+
 const validRecipe = {
 	title: "Garlic Butter Shrimp Pasta",
 	overview: "A quick, creamy shrimp pasta.",
@@ -124,6 +138,8 @@ beforeEach(() => {
 	categorizeIngredientsMock.mockResolvedValue({ type: "success", items: [] });
 	window.localStorage.clear();
 	window.sessionStorage.clear();
+	pushShareRevocationMock.mockReset();
+	pushShareRevocationMock.mockResolvedValue(undefined);
 	MockIntersectionObserver.instances = [];
 	vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
 });
@@ -146,6 +162,8 @@ function seedRecipe(overrides: {
 	prompt?: string;
 	difficulty?: "quick_and_easy" | "intermediate" | "hard";
 	favorite?: boolean;
+	sharedAt?: string | null;
+	ownerId?: string | null;
 }) {
 	const recipe = toStoredRecipe(overrides.prompt ?? "a prompt", {
 		...validRecipe,
@@ -155,6 +173,8 @@ function seedRecipe(overrides: {
 	saveRecipe(loadRecipes(), {
 		...recipe,
 		favorite: overrides.favorite ?? false,
+		sharedAt: overrides.sharedAt ?? null,
+		ownerId: overrides.ownerId ?? null,
 	});
 }
 
@@ -576,6 +596,34 @@ describe("Recipes screen", () => {
 			expect(
 				screen.getByRole("heading", { name: "Recipes" }),
 			).toBeInTheDocument();
+		});
+
+		// See CLAUDE.md's "Per-resource sharing" roadmap item.
+		it("shows a Shared badge and offers Remove (not Delete) for a recipe shared to this account", async () => {
+			window.localStorage.setItem(
+				"cookerist:device-identity",
+				JSON.stringify({ userId: "me", deviceId: "d1", deviceSecret: "s" }),
+			);
+			seedRecipe({
+				title: "Garlic Shrimp Pasta",
+				sharedAt: "2026-01-01T00:00:00.000Z",
+				ownerId: "someone-else",
+			});
+			await renderApp("/recipes");
+			const user = userEvent.setup();
+			expect(screen.getByLabelText("Shared with you")).toBeInTheDocument();
+			const row = screen.getByText("Garlic Shrimp Pasta").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeLeft(row);
+			expect(
+				await screen.findByRole("alertdialog", {
+					name: "Remove this recipe?",
+				}),
+			).toBeInTheDocument();
+			await user.click(screen.getByRole("button", { name: "Remove" }));
+
+			expect(screen.queryByText("Garlic Shrimp Pasta")).not.toBeInTheDocument();
 		});
 	});
 

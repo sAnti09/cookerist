@@ -18,12 +18,17 @@ import {
 	upsertRecipes,
 } from "#/lib/recipes-storage";
 import {
+	getPendingShareRevocations,
+	removePendingShareRevocation,
+} from "#/lib/sync/pending-share-revocations";
+import {
 	getPendingTombstones,
 	removePendingTombstone,
 } from "#/lib/sync/pending-tombstones";
 import {
 	pullChangedSince,
 	pushEntities,
+	pushShareRevocation,
 	pushTombstone,
 	type SyncRow,
 	type SyncTable,
@@ -56,6 +61,14 @@ type Syncable = {
 	id: string;
 	updatedAt: string;
 	sharedAt: string | null;
+	// Which account's row this is on the server (see "Per-resource sharing"
+	// in CLAUDE.md) — null for a local-only entity that's never been synced.
+	// Set once, the first time an entity is ever synced (to this device's own
+	// account), or authoritatively overwritten from Supabase's own owner_id
+	// column on every pull thereafter — see the merge loop below. Distinct
+	// from `sharedAt`: an entity can be shared (synced) while still owned by
+	// someone else entirely (a resource shared to this account).
+	ownerId: string | null;
 };
 
 // Every local entity syncs once this device has an identity — there's no
@@ -67,11 +80,19 @@ type Syncable = {
 // "owner"/"leave" distinction (that was an earlier design, reverted: it
 // conflated "my own second device" with "someone else's device," which are
 // meant to be the same trust level here — see CLAUDE.md's Ownership section).
-// `sharedAt` is the only bookkeeping field left, stamped automatically here
-// the first time an entity is ever synced.
-function stampForSync<T extends Syncable>(entity: T): T {
+// `sharedAt`/`ownerId` are the only bookkeeping fields left, stamped
+// automatically here the first time an entity is ever synced — `ownerId`
+// defaults to this device's own account, since an entity being stamped for
+// the very first time was always created locally by it, never received via
+// a resource-share grant (that path inserts an already-owned, already-
+// stamped entity directly — see app-data-context.tsx's redeemShareCode).
+function stampForSync<T extends Syncable>(entity: T, myUserId: string): T {
 	if (entity.sharedAt != null) return entity;
-	return { ...entity, sharedAt: new Date().toISOString() };
+	return {
+		...entity,
+		sharedAt: new Date().toISOString(),
+		ownerId: entity.ownerId ?? myUserId,
+	};
 }
 
 // Pulls+merges everything changed since the last successful pull FIRST,
@@ -88,6 +109,7 @@ function stampForSync<T extends Syncable>(entity: T): T {
 // local change — never a downgrade.
 async function syncTable<T extends Syncable>(
 	table: SyncTable,
+	myUserId: string,
 	load: () => T[],
 	upsert: (current: T[], incoming: T[]) => T[],
 	remove: (current: T[], ids: string[]) => T[],
@@ -109,6 +131,24 @@ async function syncTable<T extends Syncable>(
 		} catch (error) {
 			console.error(
 				`Retry of pending tombstone failed for ${table}/${id}:`,
+				error,
+			);
+		}
+	}
+
+	// Same retry treatment for a share-revocation this device couldn't
+	// confirm last cycle (see pending-share-revocations.ts) — a resource
+	// shared *to* this account, not owned by it, so this only ever deletes
+	// this device's own resource_shares grant, never the resource itself.
+	const stillPendingRevocations = new Set(getPendingShareRevocations(table));
+	for (const id of stillPendingRevocations) {
+		try {
+			await pushShareRevocation(table, id);
+			removePendingShareRevocation(table, id);
+			stillPendingRevocations.delete(id);
+		} catch (error) {
+			console.error(
+				`Retry of pending share revocation failed for ${table}/${id}:`,
 				error,
 			);
 		}
@@ -137,7 +177,10 @@ async function syncTable<T extends Syncable>(
 		const deletedIds = new Set<string>();
 		for (const row of rows) {
 			if (row.updated_at > maxUpdatedAt) maxUpdatedAt = row.updated_at;
-			const remote = row.data as unknown as T;
+			// row.owner_id (the authoritative Supabase column) always wins over
+			// whatever ownerId happens to be baked into the jsonb `data` blob —
+			// never trust the payload's own copy for this.
+			const remote = { ...(row.data as unknown as T), ownerId: row.owner_id };
 			const localEntity = byId.get(remote.id);
 			if (row.deleted_at) {
 				deletedIds.add(remote.id);
@@ -145,8 +188,14 @@ async function syncTable<T extends Syncable>(
 			}
 			// This device already deleted this entity locally and its own
 			// tombstone retry above just failed again — don't let this pull
-			// resurrect it before the next retry gets a chance to land.
-			if (stillPending.has(remote.id)) continue;
+			// resurrect it before the next retry gets a chance to land. Same
+			// treatment for a share-revocation still waiting to confirm.
+			if (
+				stillPending.has(remote.id) ||
+				stillPendingRevocations.has(remote.id)
+			) {
+				continue;
+			}
 			resolved.push(
 				localEntity
 					? merge(localEntity, remote)
@@ -164,7 +213,7 @@ async function syncTable<T extends Syncable>(
 	}
 
 	try {
-		const stamped = merged.map((entity) => stampForSync(entity));
+		const stamped = merged.map((entity) => stampForSync(entity, myUserId));
 		// Entities newly stamped this cycle (first-ever share) always need
 		// pushing regardless of the watermark below — stamping doesn't bump
 		// `updatedAt`, so the watermark check alone would never catch them.
@@ -232,6 +281,7 @@ export async function runSync(
 		wanted.has("recipes")
 			? syncTable(
 					"recipes",
+					identity.userId,
 					loadRecipes,
 					upsertRecipes,
 					removeRecipes,
@@ -241,6 +291,7 @@ export async function runSync(
 		wanted.has("grocery_lists")
 			? syncTable(
 					"grocery_lists",
+					identity.userId,
 					loadGroceryLists,
 					upsertGroceryLists,
 					removeGroceryLists,
@@ -250,6 +301,7 @@ export async function runSync(
 		wanted.has("meal_plans")
 			? syncTable(
 					"meal_plans",
+					identity.userId,
 					loadMealPlans,
 					upsertMealPlans,
 					removeMealPlans,

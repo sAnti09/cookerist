@@ -32,6 +32,7 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
 		createdAt: new Date().toISOString(),
 		updatedAt: new Date().toISOString(),
 		sharedAt: null,
+		ownerId: null,
 		prompt: "a dish",
 		title: "A Dish",
 		overview: "overview",

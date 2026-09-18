@@ -202,6 +202,7 @@ export function RecipeModificationDialog({
 			createdAt: now,
 			updatedAt: now,
 			sharedAt: null,
+			ownerId: null,
 			prompt: `${recipe.prompt} — modified: ${pending.instructions.join("; ")}`,
 			title: draft.title,
 			overview: draft.overview,

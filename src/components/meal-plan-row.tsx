@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Trash2 } from "lucide-react";
+import { Trash2, Users } from "lucide-react";
 import {
 	formatMealPlanDateRange,
 	type MealPlan,
@@ -23,9 +23,13 @@ const STATUS_LABELS: Record<MealPlan["status"], string> = {
 // right-swipe is a no-op and never reveals a panel.
 export function MealPlanRow({
 	plan,
+	shared = false,
 	onDelete,
 }: {
 	plan: MealPlan;
+	// True when this plan was shared *to* this account by someone else —
+	// see CLAUDE.md's "Per-resource sharing" roadmap item.
+	shared?: boolean;
 	onDelete: () => void;
 }) {
 	const date = new Date(plan.createdAt).toLocaleDateString(undefined, {
@@ -56,9 +60,17 @@ export function MealPlanRow({
 				{...swipe.handlers}
 				className="card block translate-x-0 scroll-mt-6 bg-card p-4 text-ink no-underline transition-transform duration-200"
 			>
-				<h3 className="display-title text-lg text-ink">
-					{formatMealPlanDateRange(plan.startDate, plan.endDate)}
-				</h3>
+				<div className="flex items-center gap-1.5">
+					<h3 className="display-title text-lg text-ink">
+						{formatMealPlanDateRange(plan.startDate, plan.endDate)}
+					</h3>
+					{shared ? (
+						<Users
+							className="size-[15px] shrink-0 text-ink-dim"
+							aria-label="Shared with you"
+						/>
+					) : null}
+				</div>
 				<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
 					<span>{date}</span>
 					<span className="rounded-[10px] bg-bg2 px-2 py-0.5 font-medium">

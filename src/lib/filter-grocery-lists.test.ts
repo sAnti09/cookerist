@@ -8,6 +8,7 @@ function makeList(name: string): GroceryList {
 		createdAt: new Date().toISOString(),
 		updatedAt: new Date().toISOString(),
 		sharedAt: null,
+		ownerId: null,
 		name,
 		recipeIds: [],
 		items: [],

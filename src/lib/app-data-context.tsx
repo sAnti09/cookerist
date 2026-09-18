@@ -13,19 +13,24 @@ import {
 	loadGroceryLists,
 	saveGroceryList,
 	updateGroceryList,
+	upsertGroceryLists,
 } from "#/lib/grocery-storage";
 import {
 	createPairingCodeForThisDevice,
-	ensureDeviceIdentity,
 	getDeviceIdentity,
 	linkDeviceWithPairingCode,
 } from "#/lib/identity/device";
-import type { MealPlan } from "#/lib/meal-plan";
+import {
+	createShareCodeForResource,
+	redeemShareCode as redeemShareCodeClient,
+} from "#/lib/identity/resource-sharing";
+import { formatMealPlanDateRange, type MealPlan } from "#/lib/meal-plan";
 import {
 	deleteMealPlan,
 	loadMealPlans,
 	saveMealPlan,
 	updateMealPlan,
+	upsertMealPlans,
 } from "#/lib/meal-plan-storage";
 import { MIGRATIONS, runMigrations } from "#/lib/migrations";
 import type { Recipe } from "#/lib/recipe";
@@ -36,12 +41,23 @@ import {
 	toggleFavoriteRecipe,
 	updateRecipe,
 	updateRecipes,
+	upsertRecipes,
 } from "#/lib/recipes-storage";
+import {
+	addPendingShareRevocation,
+	removePendingShareRevocation,
+} from "#/lib/sync/pending-share-revocations";
 import {
 	addPendingTombstone,
 	removePendingTombstone,
 } from "#/lib/sync/pending-tombstones";
-import { pushTombstone, type SyncTable } from "#/lib/sync/sync-client";
+import { isSharedWithMe as isSharedWithMeUtil } from "#/lib/sync/share-status";
+import {
+	pullOne,
+	pushShareRevocation,
+	pushTombstone,
+	type SyncTable,
+} from "#/lib/sync/sync-client";
 import { runSync } from "#/lib/sync/sync-engine";
 
 // The shared source of truth for recipes/grocery lists across every route —
@@ -78,17 +94,18 @@ type AppDataContextValue = {
 	// See CLAUDE.md's "Sharing feature" roadmap item / src/lib/sync/. There's
 	// no per-item opt-in anymore — every recipe/grocery-list/meal-plan syncs
 	// automatically once this device has an identity (see sync-engine.ts's
-	// stampForSync). `enableSync` is what a per-item Share icon calls: it's
-	// really "start syncing this device" (creating the identity if needed),
-	// which happens to also push/pull everything, including whatever item
-	// the tap came from.
+	// stampForSync). The only ways a device actually gets an identity are the
+	// account drawer's "Generate pairing code"/"Link this device"/"Redeem a
+	// share code" actions (each lazily calls ensureDeviceIdentity) — there's
+	// deliberately no per-item "start syncing" entry point anymore (an earlier
+	// per-screen Share2 icon calling this was removed for being confusing
+	// right next to the per-resource Share/UserPlus icon).
 	hasDeviceIdentity: boolean;
-	enableSync: () => Promise<void>;
 	createPairingCode: () => Promise<{ code: string; expiresAt: string }>;
 	// Only pairs this device to the code's account and syncs — never bulk
-	// uploads this device's own data on its own (see enableSync above for
-	// that; entering a code and having your whole library dumped into
-	// someone else's account by surprise was a real bug this avoids).
+	// uploads this device's own data on its own (entering a code and having
+	// your whole library dumped into someone else's account by surprise was
+	// a real bug this avoids).
 	linkDevice: (code: string) => Promise<void>;
 	// Manually triggers a sync (see triggerSync below) and reports whether one
 	// actually ran (false when this device has no identity yet — nothing to
@@ -98,6 +115,26 @@ type AppDataContextValue = {
 	// optional table list lets an internal caller (content-edit syncs) scope
 	// it down instead.
 	syncNow: (tables?: SyncTable[]) => Promise<boolean>;
+	// True when `entity` (a recipe/grocery-list/meal-plan) was shared *to*
+	// this device's account by someone else, rather than owned by it — see
+	// CLAUDE.md's "Per-resource sharing" roadmap item and
+	// src/lib/sync/share-status.ts. Drives hiding the re-share icon,
+	// labeling Delete as "Remove," and the collapsed-row "Shared" badge.
+	isSharedWithMe: (entity: { ownerId: string | null }) => boolean;
+	// Mints a short-lived, single-use code for sharing one resource with a
+	// different account — see the new "Share" icon on each detail screen.
+	shareResource: (
+		table: SyncTable,
+		id: string,
+	) => Promise<{ code: string; expiresAt: string }>;
+	// Redeems a code minted by shareResource above: grants this account
+	// access, then fetches and inserts the resource locally right away
+	// (rather than waiting on the next watermark-based sync — see
+	// sync-client.ts's pullOne for why that matters here). Used by the
+	// account drawer's generic "Redeem a share code" field.
+	redeemShareCode: (
+		code: string,
+	) => Promise<{ table: SyncTable; id: string; title: string }>;
 	// The account drawer's open/close state lives here (not local state in
 	// _tabs.tsx) because the hamburger icon that opens it lives on each tab
 	// root screen's own header row (see _tabs.recipes.tsx and its siblings),
@@ -283,7 +320,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const handleDeleteRecipe = useCallback(
 		(id: string) => {
 			const recipe = recipes.find((r) => r.id === id);
-			if (recipe?.sharedAt != null) {
+			const myUserId = getDeviceIdentity()?.userId ?? null;
+			if (recipe && isSharedWithMeUtil(recipe, myUserId)) {
+				// A recipe shared *to* this account — "delete" here only ever
+				// revokes this account's own grant, never the resource itself
+				// (see CLAUDE.md's "Per-resource sharing" roadmap item).
+				addPendingShareRevocation("recipes", id);
+				pushShareRevocation("recipes", id)
+					.then(() => removePendingShareRevocation("recipes", id))
+					.catch((error) => {
+						console.error("Failed to push recipe share revocation:", error);
+					});
+			} else if (recipe?.sharedAt != null) {
 				addPendingTombstone("recipes", id);
 				pushTombstone("recipes", id)
 					.then(() => removePendingTombstone("recipes", id))
@@ -337,7 +385,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const handleDeleteGroceryList = useCallback(
 		(id: string) => {
 			const list = groceryLists.find((l) => l.id === id);
-			if (list?.sharedAt != null) {
+			const myUserId = getDeviceIdentity()?.userId ?? null;
+			if (list && isSharedWithMeUtil(list, myUserId)) {
+				addPendingShareRevocation("grocery_lists", id);
+				pushShareRevocation("grocery_lists", id)
+					.then(() => removePendingShareRevocation("grocery_lists", id))
+					.catch((error) => {
+						console.error(
+							"Failed to push grocery list share revocation:",
+							error,
+						);
+					});
+			} else if (list?.sharedAt != null) {
 				addPendingTombstone("grocery_lists", id);
 				pushTombstone("grocery_lists", id)
 					.then(() => removePendingTombstone("grocery_lists", id))
@@ -404,7 +463,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const handleDeleteMealPlan = useCallback(
 		(id: string) => {
 			const plan = mealPlans.find((p) => p.id === id);
-			if (plan?.sharedAt != null) {
+			const myUserId = getDeviceIdentity()?.userId ?? null;
+			if (plan && isSharedWithMeUtil(plan, myUserId)) {
+				addPendingShareRevocation("meal_plans", id);
+				pushShareRevocation("meal_plans", id)
+					.then(() => removePendingShareRevocation("meal_plans", id))
+					.catch((error) => {
+						console.error("Failed to push meal plan share revocation:", error);
+					});
+			} else if (plan?.sharedAt != null) {
 				addPendingTombstone("meal_plans", id);
 				pushTombstone("meal_plans", id)
 					.then(() => removePendingTombstone("meal_plans", id))
@@ -416,16 +483,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		},
 		[mealPlans],
 	);
-
-	// What a per-item Share icon calls — see the AppDataContextValue comment
-	// on `enableSync` above for why this isn't resource-scoped: it just
-	// ensures this device has an identity (a no-op if it already does) and
-	// runs a sync, which now pushes/pulls everything automatically.
-	const handleEnableSync = useCallback(async () => {
-		await ensureDeviceIdentity();
-		setHasDeviceIdentity(true);
-		await syncNow();
-	}, [syncNow]);
 
 	const handleCreatePairingCode = useCallback(async () => {
 		const result = await createPairingCodeForThisDevice();
@@ -445,6 +502,77 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 			await syncNow();
 		},
 		[syncNow],
+	);
+
+	const isEntitySharedWithMe = useCallback(
+		(entity: { ownerId: string | null }) =>
+			isSharedWithMeUtil(entity, getDeviceIdentity()?.userId ?? null),
+		[],
+	);
+
+	// Mints a share code for one resource — ensures this device has an
+	// identity first (a no-op if it already does), same lazy-registration
+	// philosophy as createPairingCode above.
+	const handleShareResource = useCallback(
+		async (table: SyncTable, id: string) => {
+			const result = await createShareCodeForResource(table, id);
+			setHasDeviceIdentity(true);
+			return result;
+		},
+		[],
+	);
+
+	// Redeems a share code, then immediately fetches and inserts the
+	// resource locally (see sync-client.ts's pullOne for why the generic
+	// watermark-based pull can't be relied on for this) so the account
+	// drawer can show the result right away instead of "check back after
+	// the next sync."
+	const handleRedeemShareCode = useCallback(
+		async (
+			code: string,
+		): Promise<{ table: SyncTable; id: string; title: string }> => {
+			const { resourceTable, resourceId } = await redeemShareCodeClient(code);
+			setHasDeviceIdentity(true);
+			const row = await pullOne(resourceTable, resourceId);
+			if (!row) {
+				throw new Error(
+					"Couldn't load the shared item after redeeming the code.",
+				);
+			}
+			const nowIso = new Date().toISOString();
+			if (resourceTable === "recipes") {
+				const recipe: Recipe = {
+					...(row.data as unknown as Recipe),
+					ownerId: row.owner_id,
+					sharedAt: (row.data as unknown as Recipe).sharedAt ?? nowIso,
+				};
+				setRecipes((current) => upsertRecipes(current, [recipe]));
+				return { table: resourceTable, id: recipe.id, title: recipe.title };
+			}
+			if (resourceTable === "grocery_lists") {
+				const list: GroceryList = {
+					...(row.data as unknown as GroceryList),
+					ownerId: row.owner_id,
+					sharedAt: (row.data as unknown as GroceryList).sharedAt ?? nowIso,
+				};
+				setGroceryLists((current) => upsertGroceryLists(current, [list]));
+				return { table: resourceTable, id: list.id, title: list.name };
+			}
+			const plan: MealPlan = {
+				...(row.data as unknown as MealPlan),
+				ownerId: row.owner_id,
+				sharedAt: (row.data as unknown as MealPlan).sharedAt ?? nowIso,
+			};
+			setMealPlans((current) => upsertMealPlans(current, [plan]));
+			return {
+				table: resourceTable,
+				id: plan.id,
+				title:
+					plan.description ||
+					`${formatMealPlanDateRange(plan.startDate, plan.endDate)} meal plan`,
+			};
+		},
+		[],
 	);
 
 	const value: AppDataContextValue = {
@@ -469,10 +597,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		updateMealPlan: handleUpdateMealPlan,
 		deleteMealPlan: handleDeleteMealPlan,
 		hasDeviceIdentity,
-		enableSync: handleEnableSync,
 		createPairingCode: handleCreatePairingCode,
 		linkDevice: handleLinkDevice,
 		syncNow,
+		isSharedWithMe: isEntitySharedWithMe,
+		shareResource: handleShareResource,
+		redeemShareCode: handleRedeemShareCode,
 		accountDrawerOpen,
 		openAccountDrawer,
 		closeAccountDrawer,

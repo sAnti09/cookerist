@@ -10,10 +10,24 @@ const eqSelectMock = vi.fn();
 const eqMock = vi.fn(() => ({ select: eqSelectMock }));
 const updateMock = vi.fn(() => ({ eq: eqMock }));
 const gtMock = vi.fn();
-const selectMock = vi.fn(() => ({ gt: gtMock }));
+// Same shape a real supabase-js query builder has: pullChangedSince chains
+// .gt() off select(), pullOne chains .eq().maybeSingle() off the same
+// select() call — both need to be available on whatever select() returns.
+const maybeSingleMock = vi.fn();
+const singleEqMock = vi.fn(() => ({ maybeSingle: maybeSingleMock }));
+const selectMock = vi.fn(() => ({ gt: gtMock, eq: singleEqMock }));
+// resource_shares delete chain: .delete().eq().eq().eq().select() — three
+// chained eq() calls (resource_table, resource_id, grantee_id) before the
+// final select() confirmation, unlike pushTombstone's single eq().
+const deleteEqSelectMock = vi.fn();
+const deleteEq3Mock = vi.fn(() => ({ select: deleteEqSelectMock }));
+const deleteEq2Mock = vi.fn(() => ({ eq: deleteEq3Mock }));
+const deleteEq1Mock = vi.fn(() => ({ eq: deleteEq2Mock }));
+const deleteMock = vi.fn(() => ({ eq: deleteEq1Mock }));
 const fromMock = vi.fn((_table: string) => ({
 	upsert: upsertMock,
 	update: updateMock,
+	delete: deleteMock,
 	select: selectMock,
 }));
 vi.mock("#/lib/supabase/client", () => ({
@@ -28,11 +42,23 @@ beforeEach(() => {
 	eqMock.mockClear();
 	updateMock.mockClear();
 	gtMock.mockReset();
+	maybeSingleMock.mockReset();
+	singleEqMock.mockClear();
 	selectMock.mockClear();
 	fromMock.mockClear();
+	deleteEqSelectMock.mockReset();
+	deleteEq3Mock.mockClear();
+	deleteEq2Mock.mockClear();
+	deleteEq1Mock.mockClear();
+	deleteMock.mockClear();
 	upsertMock.mockResolvedValue({ error: null });
 	eqSelectMock.mockResolvedValue({ data: [{ id: "r1" }], error: null });
 	gtMock.mockResolvedValue({ data: [], error: null });
+	maybeSingleMock.mockResolvedValue({ data: null, error: null });
+	deleteEqSelectMock.mockResolvedValue({
+		data: [{ id: "share-1" }],
+		error: null,
+	});
 });
 
 describe("pushEntities", () => {
@@ -75,6 +101,111 @@ describe("pushEntities", () => {
 		await expect(pushEntities("recipes", [{ id: "r1" }])).rejects.toThrow(
 			"boom",
 		);
+	});
+
+	// A resource shared *to* this account (see "Per-resource sharing" in
+	// CLAUDE.md) must keep pushing under its true owner's id, never this
+	// device's own — the database's own prevent_owner_id_change trigger would
+	// reject a mismatch anyway, but the client must not even attempt it.
+	it("pushes a row carrying its own ownerId under that owner, not this device's account", async () => {
+		getDeviceIdentityMock.mockReturnValue({ userId: "u1" });
+		const { pushEntities } = await import("./sync-client");
+
+		await pushEntities("recipes", [
+			{ id: "owned", ownerId: null },
+			{ id: "shared-to-me", ownerId: "owner-2" },
+		]);
+
+		expect(upsertMock).toHaveBeenCalledWith([
+			{ id: "owned", owner_id: "u1", data: { id: "owned", ownerId: null } },
+			{
+				id: "shared-to-me",
+				owner_id: "owner-2",
+				data: { id: "shared-to-me", ownerId: "owner-2" },
+			},
+		]);
+	});
+});
+
+describe("pushShareRevocation", () => {
+	it("does nothing when this device has no identity", async () => {
+		getDeviceIdentityMock.mockReturnValue(null);
+		const { pushShareRevocation } = await import("./sync-client");
+
+		await pushShareRevocation("recipes", "r1");
+
+		expect(fromMock).not.toHaveBeenCalled();
+	});
+
+	it("deletes only this account's own grant on the resource", async () => {
+		getDeviceIdentityMock.mockReturnValue({ userId: "grantee-1" });
+		const { pushShareRevocation } = await import("./sync-client");
+
+		await pushShareRevocation("recipes", "r1");
+
+		expect(fromMock).toHaveBeenCalledWith("resource_shares");
+		expect(deleteMock).toHaveBeenCalled();
+		expect(deleteEq1Mock).toHaveBeenCalledWith("resource_table", "recipes");
+		expect(deleteEq2Mock).toHaveBeenCalledWith("resource_id", "r1");
+		expect(deleteEq3Mock).toHaveBeenCalledWith("grantee_id", "grantee-1");
+		expect(deleteEqSelectMock).toHaveBeenCalledWith("id");
+	});
+
+	it("throws when Supabase returns an error", async () => {
+		getDeviceIdentityMock.mockReturnValue({ userId: "grantee-1" });
+		deleteEqSelectMock.mockResolvedValue({
+			data: null,
+			error: new Error("boom"),
+		});
+		const { pushShareRevocation } = await import("./sync-client");
+
+		await expect(pushShareRevocation("recipes", "r1")).rejects.toThrow("boom");
+	});
+
+	it("throws when the delete matches no grant, so a silent no-op isn't mistaken for success", async () => {
+		getDeviceIdentityMock.mockReturnValue({ userId: "grantee-1" });
+		deleteEqSelectMock.mockResolvedValue({ data: [], error: null });
+		const { pushShareRevocation } = await import("./sync-client");
+
+		await expect(pushShareRevocation("recipes", "r1")).rejects.toThrow(
+			"matched no grant",
+		);
+	});
+});
+
+describe("pullOne", () => {
+	it("fetches a single row by id", async () => {
+		maybeSingleMock.mockResolvedValue({
+			data: {
+				id: "r1",
+				data: {},
+				owner_id: "owner-1",
+				updated_at: "x",
+				deleted_at: null,
+			},
+			error: null,
+		});
+		const { pullOne } = await import("./sync-client");
+
+		const row = await pullOne("recipes", "r1");
+
+		expect(fromMock).toHaveBeenCalledWith("recipes");
+		expect(singleEqMock).toHaveBeenCalledWith("id", "r1");
+		expect(row?.owner_id).toBe("owner-1");
+	});
+
+	it("returns null when no row matches", async () => {
+		maybeSingleMock.mockResolvedValue({ data: null, error: null });
+		const { pullOne } = await import("./sync-client");
+
+		expect(await pullOne("recipes", "missing")).toBeNull();
+	});
+
+	it("throws when Supabase returns an error", async () => {
+		maybeSingleMock.mockResolvedValue({ data: null, error: new Error("boom") });
+		const { pullOne } = await import("./sync-client");
+
+		await expect(pullOne("recipes", "r1")).rejects.toThrow("boom");
 	});
 });
 

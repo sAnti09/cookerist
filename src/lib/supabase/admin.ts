@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "#/lib/supabase/database.types";
+import type { SyncTable } from "#/lib/sync/sync-client";
 
 // Server-only: the service role key must never reach the client bundle.
 // Only imported (transitively) from src/server/identity.ts's server
@@ -101,4 +102,88 @@ export async function claimPairingCode(
 		.maybeSingle();
 	if (error) throw new Error(error.message);
 	return data ? { userId: data.user_id } : null;
+}
+
+// Backs the authorization check in resource-share-registry.ts's
+// createResourceShareCode -- this runs under the service role (bypasses
+// RLS entirely), so verifying the caller actually owns the resource before
+// minting a code is the only thing standing in for RLS here.
+export async function findResourceOwner(
+	table: SyncTable,
+	id: string,
+): Promise<{ ownerId: string } | null> {
+	const { data, error } = await getClient()
+		.from(table)
+		.select("owner_id")
+		.eq("id", id)
+		.maybeSingle();
+	if (error) throw new Error(error.message);
+	return data ? { ownerId: data.owner_id } : null;
+}
+
+export async function insertResourceShareCode(
+	ownerId: string,
+	table: SyncTable,
+	id: string,
+	codeHash: string,
+	expiresAt: string,
+): Promise<void> {
+	const { error } = await getClient().from("resource_share_codes").insert({
+		owner_id: ownerId,
+		resource_table: table,
+		resource_id: id,
+		code_hash: codeHash,
+		expires_at: expiresAt,
+	});
+	if (error) throw new Error(error.message);
+}
+
+// Same atomic-claim pattern as claimPairingCode, but also hands back which
+// resource the code pointed to so the caller can grant access to it.
+export async function claimResourceShareCode(codeHash: string): Promise<{
+	ownerId: string;
+	resourceTable: SyncTable;
+	resourceId: string;
+} | null> {
+	const nowIso = new Date().toISOString();
+	const { data, error } = await getClient()
+		.from("resource_share_codes")
+		.update({ used_at: nowIso })
+		.eq("code_hash", codeHash)
+		.is("used_at", null)
+		.gt("expires_at", nowIso)
+		.select("owner_id, resource_table, resource_id")
+		.maybeSingle();
+	if (error) throw new Error(error.message);
+	return data
+		? {
+				ownerId: data.owner_id,
+				resourceTable: data.resource_table as SyncTable,
+				resourceId: data.resource_id,
+			}
+		: null;
+}
+
+// Idempotent: redeeming a second code for a resource this account was
+// already granted just no-ops instead of erroring (the unique constraint
+// on (resource_table, resource_id, grantee_id) would otherwise conflict).
+export async function insertResourceShare(
+	table: SyncTable,
+	id: string,
+	ownerId: string,
+	granteeId: string,
+): Promise<void> {
+	const { error } = await getClient().from("resource_shares").upsert(
+		{
+			resource_table: table,
+			resource_id: id,
+			owner_id: ownerId,
+			grantee_id: granteeId,
+		},
+		{
+			onConflict: "resource_table,resource_id,grantee_id",
+			ignoreDuplicates: true,
+		},
+	);
+	if (error) throw new Error(error.message);
 }

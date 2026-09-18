@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ChevronLeft, Share2, Trash2 } from "lucide-react";
+import { ChevronLeft, Trash2, UserPlus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { MealPlanBuilding } from "#/components/meal-plan-building";
 import { MealPlanDraft } from "#/components/meal-plan-draft";
 import { MealPlanReady } from "#/components/meal-plan-ready";
+import { ShareResourceDialog } from "#/components/share-resource-dialog";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { IconButton } from "#/components/ui/icon-button";
 import {
@@ -22,7 +23,6 @@ import type { Recipe } from "#/lib/recipe";
 import { reapplyConfirmedMerges } from "#/lib/suggest-grocery-merges";
 import { useBuildMealPlan } from "#/lib/use-build-meal-plan";
 import { useGoBack } from "#/lib/use-go-back";
-import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/_tabs/meal-plan_/$planId")({
 	component: MealPlanDetailScreen,
@@ -42,6 +42,7 @@ const NOT_FOUND_PLAN: MealPlan = {
 	createdAt: "",
 	updatedAt: "",
 	sharedAt: null,
+	ownerId: null,
 	startDate: "",
 	endDate: "",
 	description: "",
@@ -66,22 +67,12 @@ function MealPlanDetailScreen() {
 		updateRecipes,
 		saveGroceryListForm,
 		updateGroceryList,
-		hasDeviceIdentity,
-		enableSync,
+		isSharedWithMe,
 	} = useAppData();
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
-	const [sharing, setSharing] = useState(false);
+	const [shareDialogOpen, setShareDialogOpen] = useState(false);
 	const plan = mealPlans.find((p) => p.id === planId);
-
-	async function handleShare() {
-		if (sharing) return;
-		setSharing(true);
-		try {
-			await enableSync();
-		} finally {
-			setSharing(false);
-		}
-	}
+	const shared = plan ? isSharedWithMe(plan) : false;
 
 	const buildDeps = useMemo(
 		() => ({
@@ -168,6 +159,7 @@ function MealPlanDetailScreen() {
 			createdAt: now,
 			updatedAt: now,
 			sharedAt: null,
+			ownerId: null,
 			name: `${formatMealPlanDateRange(plan.startDate, plan.endDate)} meal plan`,
 			recipeIds: planRecipes.map((recipe) => recipe.id),
 			items: aggregateGroceryItems(planRecipes),
@@ -238,22 +230,18 @@ function MealPlanDetailScreen() {
 				<div className="display-title flex-1 truncate text-[15px] font-semibold">
 					Meal Plan
 				</div>
-				{plan.status === "ready" ? (
+				{plan.status === "ready" && !shared ? (
 					<IconButton
-						aria-label={hasDeviceIdentity ? "Syncing" : "Start syncing"}
-						onClick={handleShare}
-						disabled={sharing}
+						aria-label="Share this meal plan"
+						onClick={() => setShareDialogOpen(true)}
 					>
-						<Share2
-							className={cn(
-								"size-4",
-								hasDeviceIdentity ? "text-sage" : "text-ink-dim",
-							)}
-						/>
+						<UserPlus className="size-4 text-ink-dim" />
 					</IconButton>
 				) : null}
 				<IconButton
-					aria-label="Delete this meal plan"
+					aria-label={
+						shared ? "Remove this meal plan" : "Delete this meal plan"
+					}
 					onClick={() => setConfirmingDelete(true)}
 				>
 					<Trash2 className="size-4 text-ink-dim" />
@@ -295,9 +283,13 @@ function MealPlanDetailScreen() {
 
 			<ConfirmDialog
 				open={confirmingDelete}
-				title="Delete this meal plan?"
-				description="This meal plan will be permanently removed. Any recipes it built stay in your Recipes list."
-				confirmLabel="Delete"
+				title={shared ? "Remove this meal plan?" : "Delete this meal plan?"}
+				description={
+					shared
+						? "This meal plan will be removed from your meal plans — the person who shared it (and anyone else it's shared with) keeps their copy."
+						: "This meal plan will be permanently removed. Any recipes it built stay in your Recipes list."
+				}
+				confirmLabel={shared ? "Remove" : "Delete"}
 				cancelLabel="Cancel"
 				onConfirm={() => {
 					setConfirmingDelete(false);
@@ -305,6 +297,13 @@ function MealPlanDetailScreen() {
 					navigate({ to: "/meal-plan" });
 				}}
 				onCancel={() => setConfirmingDelete(false)}
+			/>
+			<ShareResourceDialog
+				open={shareDialogOpen}
+				onClose={() => setShareDialogOpen(false)}
+				table="meal_plans"
+				id={plan.id}
+				title={formatMealPlanDateRange(plan.startDate, plan.endDate)}
 			/>
 		</div>
 	);

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroceryList } from "#/lib/grocery-list";
@@ -33,6 +33,13 @@ vi.mock("#/lib/sync/sync-engine", () => ({
 	runSync: () => runSyncMock(),
 }));
 
+const createResourceShareCodeMock = vi.fn();
+vi.mock("#/server/resource-sharing", () => ({
+	createResourceShareCode: (...args: unknown[]) =>
+		createResourceShareCodeMock(...args),
+	redeemResourceShareCode: vi.fn(),
+}));
+
 const generateRecipeMock = vi.mocked(generateRecipe);
 const refineMealPlanDraftMock = vi.mocked(refineMealPlanDraft);
 
@@ -43,6 +50,7 @@ beforeEach(() => {
 	getDeviceIdentityMock.mockReset();
 	ensureDeviceIdentityMock.mockReset();
 	runSyncMock.mockReset();
+	createResourceShareCodeMock.mockReset();
 	getDeviceIdentityMock.mockReturnValue(null);
 	runSyncMock.mockResolvedValue(null);
 });
@@ -66,6 +74,7 @@ function makePlan(overrides: Partial<MealPlan> = {}): MealPlan {
 		createdAt: "2026-09-15T12:00:00.000Z",
 		updatedAt: "2026-09-15T12:00:00.000Z",
 		sharedAt: null,
+		ownerId: null,
 		startDate: "2026-09-15",
 		endDate: "2026-09-15",
 		description: "",
@@ -98,6 +107,7 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
 		createdAt: new Date().toISOString(),
 		updatedAt: new Date().toISOString(),
 		sharedAt: null,
+		ownerId: null,
 		prompt: "a dish",
 		title: "Overnight Oats",
 		overview: "Oats soaked overnight with berries.",
@@ -117,6 +127,7 @@ function makeGroceryList(overrides: Partial<GroceryList> = {}): GroceryList {
 		createdAt: "2026-09-15T12:00:00.000Z",
 		updatedAt: "2026-09-15T12:00:00.000Z",
 		sharedAt: null,
+		ownerId: null,
 		name: "Sep 15 meal plan",
 		recipeIds: ["recipe-1"],
 		items: [
@@ -1206,36 +1217,13 @@ describe("Meal plan detail screen — delete", () => {
 		).toEqual([]);
 	});
 
-	it("shows no sync icon while the plan is still a draft", async () => {
+	it("hides the Share icon while the plan is still a draft", async () => {
 		saveMealPlan(loadMealPlans(), makePlan({ status: "draft" }));
 		await renderApp("/meal-plan/plan-1");
 
 		expect(
-			screen.queryByRole("button", { name: "Start syncing" }),
+			screen.queryByRole("button", { name: "Share this meal plan" }),
 		).not.toBeInTheDocument();
-	});
-
-	it("starts syncing a ready plan via its sync icon", async () => {
-		const plan = makePlan({
-			status: "ready",
-			entries: [makeEntry({ status: "ready", recipeId: "recipe-1" })],
-		});
-		saveMealPlan(loadMealPlans(), plan);
-		ensureDeviceIdentityMock.mockImplementation(async () => {
-			const identity = { deviceId: "device-1" };
-			getDeviceIdentityMock.mockReturnValue(identity);
-			return identity;
-		});
-		await renderApp("/meal-plan/plan-1");
-		const user = userEvent.setup();
-
-		await user.click(screen.getByRole("button", { name: "Start syncing" }));
-
-		await waitFor(() => expect(ensureDeviceIdentityMock).toHaveBeenCalled());
-		await waitFor(() => expect(runSyncMock).toHaveBeenCalled());
-		expect(
-			await screen.findByRole("button", { name: "Syncing" }),
-		).toBeInTheDocument();
 	});
 
 	// Every paired device is a symmetric co-owner (see CLAUDE.md's Ownership
@@ -1254,6 +1242,61 @@ describe("Meal plan detail screen — delete", () => {
 
 		expect(
 			screen.getByRole("button", { name: "Delete this meal plan" }),
+		).toBeInTheDocument();
+	});
+
+	// See CLAUDE.md's "Per-resource sharing" roadmap item.
+	it("opens the share dialog and generates a code from the Share icon", async () => {
+		saveMealPlan(
+			loadMealPlans(),
+			makePlan({
+				status: "ready",
+				entries: [makeEntry({ status: "ready", recipeId: "recipe-1" })],
+			}),
+		);
+		ensureDeviceIdentityMock.mockImplementation(async () => {
+			const identity = { deviceId: "device-1", deviceSecret: "s" };
+			getDeviceIdentityMock.mockReturnValue(identity);
+			return identity;
+		});
+		createResourceShareCodeMock.mockResolvedValue({
+			code: "ABCD1234",
+			expiresAt: "2026-09-15T12:10:00.000Z",
+		});
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		await user.click(
+			screen.getByRole("button", { name: "Share this meal plan" }),
+		);
+		await user.click(
+			screen.getByRole("button", { name: /generate share code/i }),
+		);
+
+		expect(await screen.findByText("ABCD1234")).toBeInTheDocument();
+	});
+
+	it("hides the Share icon and labels delete as Remove for a plan shared to this account", async () => {
+		getDeviceIdentityMock.mockReturnValue({
+			deviceId: "device-1",
+			userId: "me",
+		});
+		saveMealPlan(
+			loadMealPlans(),
+			makePlan({
+				status: "ready",
+				entries: [makeEntry({ status: "ready", recipeId: "recipe-1" })],
+				sharedAt: "2026-09-15T12:00:00.000Z",
+				ownerId: "someone-else",
+			}),
+		);
+		await renderApp("/meal-plan/plan-1");
+
+		expect(
+			screen.queryByRole("button", { name: "Share this meal plan" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Remove this meal plan" }),
 		).toBeInTheDocument();
 	});
 });

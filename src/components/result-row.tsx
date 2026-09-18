@@ -6,6 +6,7 @@ import {
 	Image as ImageIcon,
 	Star,
 	Trash2,
+	Users,
 } from "lucide-react";
 import { Button } from "#/components/ui/button";
 import { DifficultyBadge } from "#/components/ui/difficulty-badge";
@@ -122,10 +123,14 @@ export function PendingResultRow({
 // disables the right-swipe drag itself rather than revealing a dead panel.
 export function RecipeResultRow({
 	recipe,
+	shared = false,
 	onDelete,
 	onCook,
 }: {
 	recipe: Recipe;
+	// True when this recipe was shared *to* this account by someone else —
+	// see CLAUDE.md's "Per-resource sharing" roadmap item.
+	shared?: boolean;
 	onDelete: () => void;
 	onCook?: () => void;
 }) {
@@ -166,7 +171,15 @@ export function RecipeResultRow({
 				{...swipe.handlers}
 				className="card block translate-x-0 scroll-mt-6 bg-card p-4 text-ink no-underline transition-transform duration-200"
 			>
-				<h3 className="display-title text-lg text-ink">{recipe.title}</h3>
+				<div className="flex items-center gap-1.5">
+					<h3 className="display-title text-lg text-ink">{recipe.title}</h3>
+					{shared ? (
+						<Users
+							className="size-[15px] shrink-0 text-ink-dim"
+							aria-label="Shared with you"
+						/>
+					) : null}
+				</div>
 				<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
 					<span>{date}</span>
 					{recipe.difficulty ? (

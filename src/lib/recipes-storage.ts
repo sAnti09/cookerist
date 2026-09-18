@@ -28,6 +28,7 @@ export function loadRecipes(): Recipe[] {
 			modificationCount: recipe.modificationCount ?? 0,
 			updatedAt: recipe.updatedAt ?? recipe.createdAt,
 			sharedAt: recipe.sharedAt ?? null,
+			ownerId: recipe.ownerId ?? null,
 		}));
 	} catch {
 		return [];
@@ -156,6 +157,7 @@ export function toStoredRecipe(
 		createdAt: now,
 		updatedAt: now,
 		sharedAt: null,
+		ownerId: null,
 		prompt,
 		title: input.title,
 		overview: input.overview,

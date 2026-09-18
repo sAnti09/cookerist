@@ -1,7 +1,11 @@
-import { X } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Check, Copy, Share, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { useAppData } from "#/lib/app-data-context";
+import { canShareNatively, shareNatively } from "#/lib/share-native";
+import { RESOURCE_TABLE_LABEL } from "#/lib/sync/share-status";
+import type { SyncTable } from "#/lib/sync/sync-client";
 import { useBodyScrollLock } from "#/lib/use-body-scroll-lock";
 
 type AccountDrawerProps = {
@@ -26,19 +30,34 @@ type AccountDrawerProps = {
 // to a different account isn't supported yet (see
 // linkDeviceWithPairingCode's own comment in src/lib/identity/device.ts).
 export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
-	const { hasDeviceIdentity, createPairingCode, linkDevice, syncNow } =
-		useAppData();
+	const navigate = useNavigate();
+	const {
+		hasDeviceIdentity,
+		createPairingCode,
+		linkDevice,
+		syncNow,
+		redeemShareCode,
+	} = useAppData();
 	const [pairingCode, setPairingCode] = useState<{
 		code: string;
 		expiresAt: string;
 	} | null>(null);
 	const [generating, setGenerating] = useState(false);
 	const [generateError, setGenerateError] = useState<string | null>(null);
+	const [pairingCodeCopied, setPairingCodeCopied] = useState(false);
 	const [codeInput, setCodeInput] = useState("");
 	const [linking, setLinking] = useState(false);
 	const [linkError, setLinkError] = useState<string | null>(null);
 	const [syncing, setSyncing] = useState(false);
 	const [syncMessage, setSyncMessage] = useState<string | null>(null);
+	const [shareCodeInput, setShareCodeInput] = useState("");
+	const [redeeming, setRedeeming] = useState(false);
+	const [redeemError, setRedeemError] = useState<string | null>(null);
+	const [redeemed, setRedeemed] = useState<{
+		table: SyncTable;
+		id: string;
+		title: string;
+	} | null>(null);
 
 	useBodyScrollLock(open);
 
@@ -56,6 +75,7 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 	async function handleGenerateCode() {
 		setGenerating(true);
 		setGenerateError(null);
+		setPairingCodeCopied(false);
 		try {
 			const result = await createPairingCode();
 			setPairingCode(result);
@@ -64,6 +84,26 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 		} finally {
 			setGenerating(false);
 		}
+	}
+
+	async function handleCopyPairingCode() {
+		if (!pairingCode) return;
+		try {
+			await navigator.clipboard.writeText(pairingCode.code);
+			setPairingCodeCopied(true);
+			setTimeout(() => setPairingCodeCopied(false), 2000);
+		} catch {
+			// Clipboard access can be denied/unavailable — the code is still
+			// visible on screen either way, so there's nothing more to do.
+		}
+	}
+
+	async function handleSharePairingCode() {
+		if (!pairingCode) return;
+		await shareNatively({
+			title: "Cookerist pairing code",
+			text: `Sync your data to another device using the code ${pairingCode.code}.`,
+		});
 	}
 
 	async function handleLinkDevice() {
@@ -78,6 +118,34 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 			setLinkError("That code didn't work — check it and try again.");
 		} finally {
 			setLinking(false);
+		}
+	}
+
+	async function handleRedeemShareCode() {
+		const code = shareCodeInput.trim();
+		if (!code) return;
+		setRedeeming(true);
+		setRedeemError(null);
+		try {
+			const result = await redeemShareCode(code);
+			setRedeemed(result);
+			setShareCodeInput("");
+		} catch {
+			setRedeemError("That code didn't work — check it and try again.");
+		} finally {
+			setRedeeming(false);
+		}
+	}
+
+	function handleViewRedeemed() {
+		if (!redeemed) return;
+		onClose();
+		if (redeemed.table === "recipes") {
+			navigate({ to: "/recipes/$recipeId", params: { recipeId: redeemed.id } });
+		} else if (redeemed.table === "grocery_lists") {
+			navigate({ to: "/grocery/$listId", params: { listId: redeemed.id } });
+		} else {
+			navigate({ to: "/meal-plan/$planId", params: { planId: redeemed.id } });
 		}
 	}
 
@@ -146,7 +214,7 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 						{generating ? "Generating…" : "Generate pairing code"}
 					</Button>
 					{pairingCode ? (
-						<p className="mt-3 text-center">
+						<div className="mt-3 text-center">
 							<span className="display-title block text-2xl tracking-widest">
 								{pairingCode.code}
 							</span>
@@ -157,7 +225,33 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 									minute: "2-digit",
 								})}
 							</span>
-						</p>
+							<div className="mt-3 flex gap-2">
+								<Button
+									variant="secondary"
+									className="flex-1"
+									onClick={handleCopyPairingCode}
+								>
+									{pairingCodeCopied ? (
+										<>
+											<Check className="size-4" aria-hidden="true" /> Copied
+										</>
+									) : (
+										<>
+											<Copy className="size-4" aria-hidden="true" /> Copy code
+										</>
+									)}
+								</Button>
+								{canShareNatively() ? (
+									<Button
+										variant="secondary"
+										className="flex-1"
+										onClick={handleSharePairingCode}
+									>
+										<Share className="size-4" aria-hidden="true" /> Share
+									</Button>
+								) : null}
+							</div>
+						</div>
 					) : null}
 					{generateError ? (
 						<p className="mt-2 text-warn text-xs">{generateError}</p>
@@ -196,6 +290,49 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 						) : null}
 					</section>
 				)}
+
+				<section className="card bg-card p-4">
+					<h3 className="font-semibold text-sm">Redeem a share code</h3>
+					<p className="mt-1 text-ink-dim text-xs">
+						Have a code someone shared a recipe, grocery list, or meal plan with
+						you? Enter it here — you'll be able to view and edit it, but not
+						re-share it or delete it for them.
+					</p>
+					<input
+						value={shareCodeInput}
+						onChange={(event) =>
+							setShareCodeInput(event.target.value.toUpperCase())
+						}
+						placeholder="Enter code"
+						aria-label="Share code"
+						className="mt-3 w-full rounded-full border border-line bg-bg px-4 py-2 text-center text-sm tracking-widest outline-none"
+					/>
+					<Button
+						className="mt-2 w-full"
+						onClick={handleRedeemShareCode}
+						disabled={redeeming || shareCodeInput.trim().length === 0}
+					>
+						{redeeming ? "Redeeming…" : "Redeem code"}
+					</Button>
+					{redeemError ? (
+						<p className="mt-2 text-warn text-xs">{redeemError}</p>
+					) : null}
+					{redeemed ? (
+						<div className="mt-2 flex items-center justify-between gap-2 text-xs">
+							<p className="text-ink-dim">
+								Added the {RESOURCE_TABLE_LABEL[redeemed.table]} "
+								{redeemed.title}".
+							</p>
+							<button
+								type="button"
+								onClick={handleViewRedeemed}
+								className="shrink-0 font-medium text-accent underline underline-offset-2"
+							>
+								View
+							</button>
+						</div>
+					) : null}
+				</section>
 
 				{hasDeviceIdentity ? (
 					<section className="card bg-card p-4">

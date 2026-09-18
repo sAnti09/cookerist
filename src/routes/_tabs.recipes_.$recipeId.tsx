@@ -4,15 +4,16 @@ import {
 	ChevronLeft,
 	Clock,
 	Flame,
-	Share2,
 	SquarePen,
 	Star,
 	Trash2,
+	UserPlus,
 } from "lucide-react";
 import { useState } from "react";
 import { CookMode } from "#/components/cook-mode";
 import { RecipeDetail } from "#/components/recipe-detail";
 import { RecipeModificationDialog } from "#/components/recipe-modification-dialog";
+import { ShareResourceDialog } from "#/components/share-resource-dialog";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DifficultyBadge } from "#/components/ui/difficulty-badge";
 import { IconButton } from "#/components/ui/icon-button";
@@ -55,24 +56,14 @@ function RecipeDetailScreen() {
 		toggleFavoriteRecipe,
 		updateRecipe,
 		createRecipe,
-		hasDeviceIdentity,
-		enableSync,
+		isSharedWithMe,
 	} = useAppData();
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
 	const [cookModeOpen, setCookModeOpen] = useState(search.autoStart === "cook");
-	const [sharing, setSharing] = useState(false);
+	const [shareDialogOpen, setShareDialogOpen] = useState(false);
 	const recipe = recipes.find((r) => r.id === recipeId);
-
-	async function handleShare() {
-		if (sharing) return;
-		setSharing(true);
-		try {
-			await enableSync();
-		} finally {
-			setSharing(false);
-		}
-	}
+	const shared = recipe ? isSharedWithMe(recipe) : false;
 
 	function handleBack() {
 		goBack(() => {
@@ -140,20 +131,18 @@ function RecipeDetailScreen() {
 							)}
 						/>
 					</IconButton>
+					{shared ? null : (
+						<IconButton
+							aria-label={`Share ${recipe.title}`}
+							onClick={() => setShareDialogOpen(true)}
+						>
+							<UserPlus className="size-4 text-ink-dim" />
+						</IconButton>
+					)}
 					<IconButton
-						aria-label={hasDeviceIdentity ? "Syncing" : "Start syncing"}
-						onClick={handleShare}
-						disabled={sharing}
-					>
-						<Share2
-							className={cn(
-								"size-4",
-								hasDeviceIdentity ? "text-sage" : "text-ink-dim",
-							)}
-						/>
-					</IconButton>
-					<IconButton
-						aria-label={`Delete ${recipe.title}`}
+						aria-label={
+							shared ? `Remove ${recipe.title}` : `Delete ${recipe.title}`
+						}
 						onClick={() => setConfirmingDelete(true)}
 					>
 						<Trash2 className="size-4 text-ink-dim" />
@@ -198,9 +187,13 @@ function RecipeDetailScreen() {
 
 			<ConfirmDialog
 				open={confirmingDelete}
-				title="Delete this recipe?"
-				description={`"${recipe.title}" will be permanently removed.`}
-				confirmLabel="Delete"
+				title={shared ? "Remove this recipe?" : "Delete this recipe?"}
+				description={
+					shared
+						? `"${recipe.title}" will be removed from your recipes — the person who shared it (and anyone else it's shared with) keeps their copy.`
+						: `"${recipe.title}" will be permanently removed.`
+				}
+				confirmLabel={shared ? "Remove" : "Delete"}
 				cancelLabel="Cancel"
 				onConfirm={() => {
 					setConfirmingDelete(false);
@@ -208,6 +201,13 @@ function RecipeDetailScreen() {
 					navigate({ to: "/recipes" });
 				}}
 				onCancel={() => setConfirmingDelete(false)}
+			/>
+			<ShareResourceDialog
+				open={shareDialogOpen}
+				onClose={() => setShareDialogOpen(false)}
+				table="recipes"
+				id={recipe.id}
+				title={recipe.title}
 			/>
 			<RecipeModificationDialog
 				recipe={recipe}

@@ -25,6 +25,7 @@ export function loadMealPlans(): MealPlan[] {
 			...plan,
 			updatedAt: plan.updatedAt ?? plan.createdAt,
 			sharedAt: plan.sharedAt ?? null,
+			ownerId: plan.ownerId ?? null,
 		}));
 	} catch {
 		return [];

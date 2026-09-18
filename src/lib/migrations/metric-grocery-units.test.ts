@@ -21,6 +21,7 @@ function makeList(overrides: Partial<GroceryList> = {}): GroceryList {
 		createdAt: new Date().toISOString(),
 		updatedAt: new Date().toISOString(),
 		sharedAt: null,
+		ownerId: null,
 		name: "Weeknight Shopping",
 		recipeIds: ["recipe-1"],
 		items: [makeItem()],

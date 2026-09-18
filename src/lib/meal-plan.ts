@@ -124,6 +124,7 @@ export type MealPlan = {
 	// Always present after loadMealPlans() normalizes them.
 	updatedAt: string;
 	sharedAt: string | null;
+	ownerId: string | null;
 };
 
 // One token per plan entry with a resolved recipe, capturing exactly what

@@ -15,8 +15,24 @@ vi.mock("#/server/meal-plan", () => ({
 	refineMealPlanDraft: vi.fn(),
 }));
 
+const pushShareRevocationMock = vi.fn();
+vi.mock("#/lib/sync/sync-client", () => ({
+	pushTombstone: vi.fn(),
+	pushShareRevocation: (...args: unknown[]) => pushShareRevocationMock(...args),
+}));
+
+// A real device identity in localStorage (set by the "shared" test below)
+// would otherwise make the mount-time foreground sync call the real
+// sync-engine, which itself calls sync-client functions this mock doesn't
+// provide (pullChangedSince/pushEntities) — stub the whole engine out.
+vi.mock("#/lib/sync/sync-engine", () => ({
+	runSync: vi.fn().mockResolvedValue(null),
+}));
+
 beforeEach(() => {
 	window.localStorage.clear();
+	pushShareRevocationMock.mockReset();
+	pushShareRevocationMock.mockResolvedValue(undefined);
 });
 
 function makePlan(overrides: Partial<MealPlan> = {}): MealPlan {
@@ -25,6 +41,7 @@ function makePlan(overrides: Partial<MealPlan> = {}): MealPlan {
 		createdAt: "2026-09-15T12:00:00.000Z",
 		updatedAt: "2026-09-15T12:00:00.000Z",
 		sharedAt: null,
+		ownerId: null,
 		startDate: "2026-09-15",
 		endDate: "2026-09-21",
 		description: "",
@@ -271,6 +288,36 @@ describe("Meal Plan screen", () => {
 				screen.getByRole("heading", { name: "Meal Plan" }),
 			).toBeInTheDocument();
 			expect(screen.getByText("Sep 15 – Sep 21")).toBeInTheDocument();
+		});
+
+		// See CLAUDE.md's "Per-resource sharing" roadmap item.
+		it("shows a Shared badge and offers Remove (not Delete) for a plan shared to this account", async () => {
+			window.localStorage.setItem(
+				"cookerist:device-identity",
+				JSON.stringify({ userId: "me", deviceId: "d1", deviceSecret: "s" }),
+			);
+			saveMealPlan(
+				loadMealPlans(),
+				makePlan({
+					sharedAt: "2026-09-15T12:00:00.000Z",
+					ownerId: "someone-else",
+				}),
+			);
+			await renderApp("/meal-plan");
+			const user = userEvent.setup();
+			expect(screen.getByLabelText("Shared with you")).toBeInTheDocument();
+			const row = screen.getByText("Sep 15 – Sep 21").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeLeft(row);
+			expect(
+				await screen.findByRole("alertdialog", {
+					name: "Remove this meal plan?",
+				}),
+			).toBeInTheDocument();
+			await user.click(screen.getByRole("button", { name: "Remove" }));
+
+			expect(screen.queryByText("Sep 15 – Sep 21")).not.toBeInTheDocument();
 		});
 	});
 });

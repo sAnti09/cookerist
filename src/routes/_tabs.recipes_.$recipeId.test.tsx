@@ -24,6 +24,13 @@ vi.mock("#/lib/sync/sync-engine", () => ({
 	runSync: () => runSyncMock(),
 }));
 
+const createResourceShareCodeMock = vi.fn();
+vi.mock("#/server/resource-sharing", () => ({
+	createResourceShareCode: (...args: unknown[]) =>
+		createResourceShareCodeMock(...args),
+	redeemResourceShareCode: vi.fn(),
+}));
+
 const validRecipe = {
 	title: "Garlic Butter Shrimp Pasta",
 	overview: "A quick, creamy shrimp pasta.",
@@ -50,6 +57,7 @@ beforeEach(() => {
 	getDeviceIdentityMock.mockReset();
 	ensureDeviceIdentityMock.mockReset();
 	runSyncMock.mockReset();
+	createResourceShareCodeMock.mockReset();
 	getDeviceIdentityMock.mockReturnValue(null);
 	runSyncMock.mockResolvedValue(null);
 });
@@ -59,6 +67,7 @@ function seedRecipe(
 		title?: string;
 		favorite?: boolean;
 		sharedAt?: string | null;
+		ownerId?: string | null;
 	} = {},
 ) {
 	const recipe = toStoredRecipe("shrimp pasta for 2", {
@@ -69,6 +78,7 @@ function seedRecipe(
 		...recipe,
 		favorite: overrides.favorite ?? false,
 		sharedAt: overrides.sharedAt ?? null,
+		ownerId: overrides.ownerId ?? null,
 	});
 	return saved[0];
 }
@@ -250,25 +260,6 @@ describe("Recipe detail screen", () => {
 		});
 	});
 
-	it("starts syncing via the recipe's sync icon", async () => {
-		const recipe = seedRecipe();
-		ensureDeviceIdentityMock.mockImplementation(async () => {
-			const identity = { deviceId: "device-1" };
-			getDeviceIdentityMock.mockReturnValue(identity);
-			return identity;
-		});
-		await renderApp(`/recipes/${recipe.id}`);
-		const user = userEvent.setup();
-
-		await user.click(screen.getByRole("button", { name: "Start syncing" }));
-
-		await waitFor(() => expect(ensureDeviceIdentityMock).toHaveBeenCalled());
-		await waitFor(() => expect(runSyncMock).toHaveBeenCalled());
-		expect(
-			await screen.findByRole("button", { name: "Syncing" }),
-		).toBeInTheDocument();
-	});
-
 	// Every paired device is a symmetric co-owner (see CLAUDE.md's Ownership
 	// section) — delete is always "Delete," never a device-scoped "Remove."
 	it("labels delete as Delete for a shared recipe", async () => {
@@ -280,6 +271,50 @@ describe("Recipe detail screen", () => {
 
 		expect(
 			screen.getByRole("button", { name: `Delete ${recipe.title}` }),
+		).toBeInTheDocument();
+	});
+
+	// See CLAUDE.md's "Per-resource sharing" roadmap item.
+	it("opens the share dialog and generates a code from the Share icon", async () => {
+		const recipe = seedRecipe();
+		ensureDeviceIdentityMock.mockImplementation(async () => {
+			const identity = { deviceId: "device-1", deviceSecret: "s" };
+			getDeviceIdentityMock.mockReturnValue(identity);
+			return identity;
+		});
+		createResourceShareCodeMock.mockResolvedValue({
+			code: "ABCD1234",
+			expiresAt: "2026-01-01T00:10:00.000Z",
+		});
+		await renderApp(`/recipes/${recipe.id}`);
+		const user = userEvent.setup();
+
+		await user.click(
+			screen.getByRole("button", { name: `Share ${recipe.title}` }),
+		);
+		await user.click(
+			screen.getByRole("button", { name: /generate share code/i }),
+		);
+
+		expect(await screen.findByText("ABCD1234")).toBeInTheDocument();
+	});
+
+	it("hides the Share icon and labels delete as Remove for a recipe shared to this account", async () => {
+		getDeviceIdentityMock.mockReturnValue({
+			deviceId: "device-1",
+			userId: "me",
+		});
+		const recipe = seedRecipe({
+			sharedAt: "2026-01-01T00:00:00.000Z",
+			ownerId: "someone-else",
+		});
+		await renderApp(`/recipes/${recipe.id}`);
+
+		expect(
+			screen.queryByRole("button", { name: `Share ${recipe.title}` }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: `Remove ${recipe.title}` }),
 		).toBeInTheDocument();
 	});
 });

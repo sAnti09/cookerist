@@ -191,6 +191,89 @@ export type Database = {
 					},
 				];
 			};
+			resource_share_codes: {
+				Row: {
+					code_hash: string;
+					created_at: string;
+					expires_at: string;
+					id: string;
+					owner_id: string;
+					resource_id: string;
+					resource_table: string;
+					used_at: string | null;
+				};
+				Insert: {
+					code_hash: string;
+					created_at?: string;
+					expires_at: string;
+					id?: string;
+					owner_id: string;
+					resource_id: string;
+					resource_table: string;
+					used_at?: string | null;
+				};
+				Update: {
+					code_hash?: string;
+					created_at?: string;
+					expires_at?: string;
+					id?: string;
+					owner_id?: string;
+					resource_id?: string;
+					resource_table?: string;
+					used_at?: string | null;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "resource_share_codes_owner_id_fkey";
+						columns: ["owner_id"];
+						isOneToOne: false;
+						referencedRelation: "users";
+						referencedColumns: ["id"];
+					},
+				];
+			};
+			resource_shares: {
+				Row: {
+					created_at: string;
+					grantee_id: string;
+					id: string;
+					owner_id: string;
+					resource_id: string;
+					resource_table: string;
+				};
+				Insert: {
+					created_at?: string;
+					grantee_id: string;
+					id?: string;
+					owner_id: string;
+					resource_id: string;
+					resource_table: string;
+				};
+				Update: {
+					created_at?: string;
+					grantee_id?: string;
+					id?: string;
+					owner_id?: string;
+					resource_id?: string;
+					resource_table?: string;
+				};
+				Relationships: [
+					{
+						foreignKeyName: "resource_shares_grantee_id_fkey";
+						columns: ["grantee_id"];
+						isOneToOne: false;
+						referencedRelation: "users";
+						referencedColumns: ["id"];
+					},
+					{
+						foreignKeyName: "resource_shares_owner_id_fkey";
+						columns: ["owner_id"];
+						isOneToOne: false;
+						referencedRelation: "users";
+						referencedColumns: ["id"];
+					},
+				];
+			};
 			users: {
 				Row: {
 					created_at: string;

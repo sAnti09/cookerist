@@ -12,8 +12,24 @@ vi.mock("#/server/generate-recipe", () => ({
 	modifyRecipe: vi.fn(),
 }));
 
+const pushShareRevocationMock = vi.fn();
+vi.mock("#/lib/sync/sync-client", () => ({
+	pushTombstone: vi.fn(),
+	pushShareRevocation: (...args: unknown[]) => pushShareRevocationMock(...args),
+}));
+
+// A real device identity in localStorage (set by the "shared" test below)
+// would otherwise make the mount-time foreground sync call the real
+// sync-engine, which itself calls sync-client functions this mock doesn't
+// provide (pullChangedSince/pushEntities) — stub the whole engine out.
+vi.mock("#/lib/sync/sync-engine", () => ({
+	runSync: vi.fn().mockResolvedValue(null),
+}));
+
 beforeEach(() => {
 	window.localStorage.clear();
+	pushShareRevocationMock.mockReset();
+	pushShareRevocationMock.mockResolvedValue(undefined);
 });
 
 function makeGroceryList(overrides: Partial<GroceryList> = {}): GroceryList {
@@ -22,6 +38,7 @@ function makeGroceryList(overrides: Partial<GroceryList> = {}): GroceryList {
 		createdAt: new Date().toISOString(),
 		updatedAt: new Date().toISOString(),
 		sharedAt: null,
+		ownerId: null,
 		name: "Shrimp Pasta",
 		recipeIds: [],
 		items: [
@@ -300,6 +317,37 @@ describe("Grocery screen", () => {
 			expect(
 				screen.queryByLabelText("Exit grocery mode"),
 			).not.toBeInTheDocument();
+		});
+
+		// See CLAUDE.md's "Per-resource sharing" roadmap item.
+		it("shows a Shared badge and offers Remove (not Delete) for a list shared to this account", async () => {
+			window.localStorage.setItem(
+				"cookerist:device-identity",
+				JSON.stringify({ userId: "me", deviceId: "d1", deviceSecret: "s" }),
+			);
+			saveGroceryList(
+				loadGroceryLists(),
+				makeGroceryList({
+					name: "Weeknight Groceries",
+					sharedAt: "2026-01-01T00:00:00.000Z",
+					ownerId: "someone-else",
+				}),
+			);
+			await renderApp("/grocery");
+			const user = userEvent.setup();
+			expect(screen.getByLabelText("Shared with you")).toBeInTheDocument();
+			const row = screen.getByText("Weeknight Groceries").closest("a");
+			if (!row) throw new Error("row not found");
+
+			swipeLeft(row);
+			expect(
+				await screen.findByRole("alertdialog", {
+					name: "Remove this grocery list?",
+				}),
+			).toBeInTheDocument();
+			await user.click(screen.getByRole("button", { name: "Remove" }));
+
+			expect(screen.queryByText("Weeknight Groceries")).not.toBeInTheDocument();
 		});
 	});
 });

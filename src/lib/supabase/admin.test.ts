@@ -7,6 +7,7 @@ function createQueryChain(result: ChainResult) {
 	// biome-ignore lint/suspicious/noExplicitAny: minimal fluent-chain stand-in for supabase-js's PostgrestQueryBuilder
 	const chain: any = {
 		insert: vi.fn(() => chain),
+		upsert: vi.fn(() => chain),
 		select: vi.fn(() => chain),
 		update: vi.fn(() => chain),
 		eq: vi.fn(() => chain),
@@ -174,5 +175,119 @@ describe("claimPairingCode", () => {
 		const { claimPairingCode } = await loadAdmin();
 
 		await expect(claimPairingCode("hash")).rejects.toThrow("db down");
+	});
+});
+
+describe("findResourceOwner", () => {
+	it("returns the owner id when the resource exists", async () => {
+		nextChainResult = { data: { owner_id: "owner-1" }, error: null };
+		const { findResourceOwner } = await loadAdmin();
+
+		await expect(findResourceOwner("recipes", "r1")).resolves.toEqual({
+			ownerId: "owner-1",
+		});
+		expect(fromMock).toHaveBeenCalledWith("recipes");
+	});
+
+	it("returns null when no resource matches", async () => {
+		nextChainResult = { data: null, error: null };
+		const { findResourceOwner } = await loadAdmin();
+
+		await expect(findResourceOwner("recipes", "missing")).resolves.toBeNull();
+	});
+
+	it("throws on a query error", async () => {
+		nextChainResult = { data: null, error: { message: "db down" } };
+		const { findResourceOwner } = await loadAdmin();
+
+		await expect(findResourceOwner("recipes", "r1")).rejects.toThrow("db down");
+	});
+});
+
+describe("insertResourceShareCode", () => {
+	it("inserts a resource share code row", async () => {
+		nextChainResult = { data: null, error: null };
+		const { insertResourceShareCode } = await loadAdmin();
+
+		await expect(
+			insertResourceShareCode(
+				"owner-1",
+				"recipes",
+				"r1",
+				"hash",
+				"2026-01-01T00:00:00.000Z",
+			),
+		).resolves.toBeUndefined();
+		expect(fromMock).toHaveBeenCalledWith("resource_share_codes");
+	});
+
+	it("throws on a query error", async () => {
+		nextChainResult = { data: null, error: { message: "db down" } };
+		const { insertResourceShareCode } = await loadAdmin();
+
+		await expect(
+			insertResourceShareCode(
+				"owner-1",
+				"recipes",
+				"r1",
+				"hash",
+				"2026-01-01T00:00:00.000Z",
+			),
+		).rejects.toThrow("db down");
+	});
+});
+
+describe("claimResourceShareCode", () => {
+	it("returns the resource location when a matching unused code is claimed", async () => {
+		nextChainResult = {
+			data: {
+				owner_id: "owner-1",
+				resource_table: "recipes",
+				resource_id: "r1",
+			},
+			error: null,
+		};
+		const { claimResourceShareCode } = await loadAdmin();
+
+		await expect(claimResourceShareCode("hash")).resolves.toEqual({
+			ownerId: "owner-1",
+			resourceTable: "recipes",
+			resourceId: "r1",
+		});
+	});
+
+	it("returns null when no unused, unexpired code matches", async () => {
+		nextChainResult = { data: null, error: null };
+		const { claimResourceShareCode } = await loadAdmin();
+
+		await expect(claimResourceShareCode("hash")).resolves.toBeNull();
+	});
+
+	it("throws on a query error", async () => {
+		nextChainResult = { data: null, error: { message: "db down" } };
+		const { claimResourceShareCode } = await loadAdmin();
+
+		await expect(claimResourceShareCode("hash")).rejects.toThrow("db down");
+	});
+});
+
+describe("insertResourceShare", () => {
+	it("upserts a grant row", async () => {
+		nextChainResult = { data: null, error: null };
+		const { insertResourceShare } = await loadAdmin();
+
+		await expect(
+			insertResourceShare("recipes", "r1", "owner-1", "grantee-1"),
+		).resolves.toBeUndefined();
+		expect(fromMock).toHaveBeenCalledWith("resource_shares");
+	});
+
+	it("throws on a query error", async () => {
+		nextChainResult = { data: null, error: { message: "db down" } };
+		const { insertResourceShare } = await loadAdmin();
+
+		await expect(
+			insertResourceShare("recipes", "r1", "owner-1", "grantee-1"),
+		).rejects.toThrow("db down");
 	});
 });
