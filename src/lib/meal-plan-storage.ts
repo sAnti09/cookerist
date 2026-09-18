@@ -21,7 +21,11 @@ export function loadMealPlans(): MealPlan[] {
 	try {
 		const parsed = JSON.parse(raw);
 		if (!Array.isArray(parsed)) return [];
-		return parsed.filter(isMealPlan);
+		return parsed.filter(isMealPlan).map((plan) => ({
+			...plan,
+			updatedAt: plan.updatedAt ?? plan.createdAt,
+			sharedAt: plan.sharedAt ?? null,
+		}));
 	} catch {
 		return [];
 	}
@@ -48,8 +52,43 @@ export function deleteMealPlan(plans: MealPlan[], id: string): MealPlan[] {
 	return next;
 }
 
+// Stamps `updatedAt` on every write below so the sync engine's
+// last-write-wins merge (src/lib/sync/) has an accurate clock for content
+// changes.
+function touch(plan: MealPlan): MealPlan {
+	return { ...plan, updatedAt: new Date().toISOString() };
+}
+
 export function updateMealPlan(plans: MealPlan[], plan: MealPlan): MealPlan[] {
-	const next = plans.map((p) => (p.id === plan.id ? plan : p));
+	const touched = touch(plan);
+	const next = plans.map((p) => (p.id === touched.id ? touched : p));
+	persist(next);
+	return next;
+}
+
+// Bulk-overwrites every stored plan at once, bypassing touch() above — used
+// by one-time data migrations (see src/lib/migrations/) that need to
+// backfill/correct fields without it looking like a fresh user edit (which
+// would bump updatedAt to "now" and needlessly flag the plan for re-sync).
+export function replaceMealPlans(plans: MealPlan[]): MealPlan[] {
+	persist(plans);
+	return plans;
+}
+
+// Insert-or-replace-by-id for every entity in `incoming` at once, re-sorted
+// newest-first by createdAt — used by the sync engine (src/lib/sync/) to
+// write a batch of pull-merged plans back in one persist() call, same as
+// recipes-storage.ts's upsertRecipes.
+export function upsertMealPlans(
+	plans: MealPlan[],
+	incoming: MealPlan[],
+): MealPlan[] {
+	if (incoming.length === 0) return plans;
+	const byId = new Map(plans.map((plan) => [plan.id, plan]));
+	for (const plan of incoming) byId.set(plan.id, plan);
+	const next = Array.from(byId.values()).sort((a, b) =>
+		b.createdAt.localeCompare(a.createdAt),
+	);
 	persist(next);
 	return next;
 }

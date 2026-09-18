@@ -4,6 +4,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useRef,
 	useState,
 } from "react";
 import type { GroceryList } from "#/lib/grocery-list";
@@ -13,6 +14,11 @@ import {
 	saveGroceryList,
 	updateGroceryList,
 } from "#/lib/grocery-storage";
+import {
+	createPairingCodeForThisDevice,
+	getDeviceIdentity,
+	linkDeviceWithPairingCode,
+} from "#/lib/identity/device";
 import type { MealPlan } from "#/lib/meal-plan";
 import {
 	deleteMealPlan,
@@ -30,6 +36,16 @@ import {
 	updateRecipe,
 	updateRecipes,
 } from "#/lib/recipes-storage";
+import { isOwnedByThisDevice } from "#/lib/sync/ownership";
+import {
+	type LocalData,
+	shareAllLocalData,
+	shareGroceryList as shareGroceryListAction,
+	shareMealPlan as shareMealPlanAction,
+	shareRecipe as shareRecipeAction,
+} from "#/lib/sync/share-actions";
+import { pushTombstone } from "#/lib/sync/sync-client";
+import { runSync } from "#/lib/sync/sync-engine";
 
 // The shared source of truth for recipes/grocery lists across every route —
 // the old single-page app kept this as local useState in routes/index.tsx,
@@ -62,6 +78,18 @@ type AppDataContextValue = {
 	createMealPlan: (plan: MealPlan) => void;
 	updateMealPlan: (plan: MealPlan) => void;
 	deleteMealPlan: (id: string) => void;
+	// See CLAUDE.md's "Sharing feature" roadmap item / src/lib/sync/.
+	hasDeviceIdentity: boolean;
+	shareRecipe: (id: string) => Promise<void>;
+	shareGroceryList: (id: string) => Promise<void>;
+	shareMealPlan: (id: string) => Promise<void>;
+	createPairingCode: () => Promise<{ code: string; expiresAt: string }>;
+	linkDevice: (code: string) => Promise<void>;
+	// Manually triggers a sync (see triggerSync below) and reports whether one
+	// actually ran (false when this device has no identity yet — nothing to
+	// sync) — used by the account drawer's "Sync now" button, which needs to
+	// know whether to show a result message.
+	syncNow: () => Promise<boolean>;
 };
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -74,6 +102,38 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	const [creatingGroceryList, setCreatingGroceryList] = useState(false);
 	const [editingGroceryList, setEditingGroceryList] =
 		useState<GroceryList | null>(null);
+	const [hasDeviceIdentity, setHasDeviceIdentity] = useState(
+		() => getDeviceIdentity() != null,
+	);
+	// Guards against two sync-on-open runs overlapping (e.g. a visibilitychange
+	// and a focus event firing back to back) — see triggerSync below.
+	const syncInFlightRef = useRef(false);
+
+	// Returns whether a sync actually ran (false if one was already in flight,
+	// or this device has no identity yet — nothing to sync). Exposed as
+	// `syncNow` on the context for the account drawer's manual button;
+	// `triggerSync` below is the fire-and-forget wrapper the mount/
+	// visibility/focus effects use.
+	const syncNow = useCallback(async (): Promise<boolean> => {
+		if (syncInFlightRef.current || !getDeviceIdentity()) return false;
+		syncInFlightRef.current = true;
+		try {
+			const result = await runSync();
+			if (!result) return false;
+			setRecipes(result.recipes);
+			setGroceryLists(result.groceryLists);
+			setMealPlans(result.mealPlans);
+			return true;
+		} finally {
+			syncInFlightRef.current = false;
+		}
+	}, []);
+
+	const triggerSync = useCallback(() => {
+		syncNow().catch((error) => {
+			console.error("Sync failed:", error);
+		});
+	}, [syncNow]);
 
 	useEffect(() => {
 		// Deliberately not awaited — see run-migrations.ts / CLAUDE.md's
@@ -89,11 +149,44 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		setGroceryLists(loadGroceryLists());
 		setMealPlans(loadMealPlans());
 		setReady(true);
-	}, []);
+		// Also deliberately not awaited (same reasoning as migrations above) —
+		// a no-op when this device has never shared anything (see
+		// sync-engine.ts's runSync).
+		triggerSync();
+	}, [triggerSync]);
 
-	const handleDeleteRecipe = useCallback((id: string) => {
-		setRecipes((current) => deleteRecipe(current, id));
-	}, []);
+	// Sync-on-open: re-sync whenever the tab regains focus/visibility, not
+	// just at mount — the whole point of "sync on open" is picking up changes
+	// another device made while this tab sat in the background.
+	useEffect(() => {
+		function handleVisibilityChange() {
+			if (document.visibilityState === "visible") triggerSync();
+		}
+		document.addEventListener("visibilitychange", handleVisibilityChange);
+		window.addEventListener("focus", triggerSync);
+		return () => {
+			document.removeEventListener("visibilitychange", handleVisibilityChange);
+			window.removeEventListener("focus", triggerSync);
+		};
+	}, [triggerSync]);
+
+	// Shared entities need to check ownership (src/lib/sync/ownership.ts)
+	// before deleting: the owner's delete tombstones it everywhere (pushed to
+	// Supabase), anyone else's just removes their own copy ("leave" — see
+	// CLAUDE.md's "Sharing feature" roadmap item). Either way the local
+	// removal below is the same; only whether a tombstone gets pushed differs.
+	const handleDeleteRecipe = useCallback(
+		(id: string) => {
+			const recipe = recipes.find((r) => r.id === id);
+			if (recipe?.sharedAt != null && isOwnedByThisDevice(recipe)) {
+				pushTombstone("recipes", id).catch((error) => {
+					console.error("Failed to push recipe tombstone:", error);
+				});
+			}
+			setRecipes((current) => deleteRecipe(current, id));
+		},
+		[recipes],
+	);
 
 	const handleToggleFavoriteRecipe = useCallback((id: string) => {
 		setRecipes((current) => toggleFavoriteRecipe(current, id));
@@ -111,9 +204,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		setRecipes((current) => saveRecipe(current, recipe));
 	}, []);
 
-	const handleDeleteGroceryList = useCallback((id: string) => {
-		setGroceryLists((current) => deleteGroceryList(current, id));
-	}, []);
+	const handleDeleteGroceryList = useCallback(
+		(id: string) => {
+			const list = groceryLists.find((l) => l.id === id);
+			if (list?.sharedAt != null && isOwnedByThisDevice(list)) {
+				pushTombstone("grocery_lists", id).catch((error) => {
+					console.error("Failed to push grocery list tombstone:", error);
+				});
+			}
+			setGroceryLists((current) => deleteGroceryList(current, id));
+		},
+		[groceryLists],
+	);
 
 	const handleUpdateGroceryList = useCallback((list: GroceryList) => {
 		setGroceryLists((current) => updateGroceryList(current, list));
@@ -153,9 +255,75 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		setMealPlans((current) => updateMealPlan(current, plan));
 	}, []);
 
-	const handleDeleteMealPlan = useCallback((id: string) => {
-		setMealPlans((current) => deleteMealPlan(current, id));
+	const handleDeleteMealPlan = useCallback(
+		(id: string) => {
+			const plan = mealPlans.find((p) => p.id === id);
+			if (plan?.sharedAt != null && isOwnedByThisDevice(plan)) {
+				pushTombstone("meal_plans", id).catch((error) => {
+					console.error("Failed to push meal plan tombstone:", error);
+				});
+			}
+			setMealPlans((current) => deleteMealPlan(current, id));
+		},
+		[mealPlans],
+	);
+
+	const localData = useCallback(
+		(): LocalData => ({ recipes, groceryLists, mealPlans }),
+		[recipes, groceryLists, mealPlans],
+	);
+
+	const handleShareRecipe = useCallback(
+		async (id: string) => {
+			const result = await shareRecipeAction(localData(), id);
+			setRecipes(result.recipes);
+			setGroceryLists(result.groceryLists);
+			setMealPlans(result.mealPlans);
+		},
+		[localData],
+	);
+
+	const handleShareGroceryList = useCallback(
+		async (id: string) => {
+			const result = await shareGroceryListAction(localData(), id);
+			setRecipes(result.recipes);
+			setGroceryLists(result.groceryLists);
+			setMealPlans(result.mealPlans);
+		},
+		[localData],
+	);
+
+	const handleShareMealPlan = useCallback(
+		async (id: string) => {
+			const result = await shareMealPlanAction(localData(), id);
+			setRecipes(result.recipes);
+			setGroceryLists(result.groceryLists);
+			setMealPlans(result.mealPlans);
+		},
+		[localData],
+	);
+
+	const handleCreatePairingCode = useCallback(async () => {
+		const result = await createPairingCodeForThisDevice();
+		setHasDeviceIdentity(true);
+		return result;
 	}, []);
+
+	// Linking to an existing account brings this device's pre-existing local
+	// data with it — see share-actions.ts's shareAllLocalData and CLAUDE.md's
+	// "Sharing feature" roadmap item ("reuses this feature's merge logic when
+	// the other device is your own").
+	const handleLinkDevice = useCallback(
+		async (code: string) => {
+			await linkDeviceWithPairingCode(code);
+			setHasDeviceIdentity(true);
+			const result = await shareAllLocalData(localData());
+			setRecipes(result.recipes);
+			setGroceryLists(result.groceryLists);
+			setMealPlans(result.mealPlans);
+		},
+		[localData],
+	);
 
 	const value: AppDataContextValue = {
 		recipes,
@@ -178,6 +346,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		createMealPlan: handleCreateMealPlan,
 		updateMealPlan: handleUpdateMealPlan,
 		deleteMealPlan: handleDeleteMealPlan,
+		hasDeviceIdentity,
+		shareRecipe: handleShareRecipe,
+		shareGroceryList: handleShareGroceryList,
+		shareMealPlan: handleShareMealPlan,
+		createPairingCode: handleCreatePairingCode,
+		linkDevice: handleLinkDevice,
+		syncNow,
 	};
 
 	return (

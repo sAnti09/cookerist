@@ -20,7 +20,11 @@ export function loadGroceryLists(): GroceryList[] {
 	try {
 		const parsed = JSON.parse(raw);
 		if (!Array.isArray(parsed)) return [];
-		return parsed.filter(isGroceryList);
+		return parsed.filter(isGroceryList).map((list) => ({
+			...list,
+			updatedAt: list.updatedAt ?? list.createdAt,
+			sharedAt: list.sharedAt ?? null,
+		}));
 	} catch {
 		return [];
 	}
@@ -53,11 +57,20 @@ export function deleteGroceryList(
 	return next;
 }
 
+// Stamps `updatedAt` on every write below (except setExpandedGroceryList,
+// which is pure UI state — see grocery-list.ts) so the sync engine's
+// last-write-wins merge (src/lib/sync/) has an accurate clock for content
+// changes.
+function touch(list: GroceryList): GroceryList {
+	return { ...list, updatedAt: new Date().toISOString() };
+}
+
 export function updateGroceryList(
 	lists: GroceryList[],
 	list: GroceryList,
 ): GroceryList[] {
-	const next = lists.map((l) => (l.id === list.id ? list : l));
+	const touched = touch(list);
+	const next = lists.map((l) => (l.id === touched.id ? touched : l));
 	persist(next);
 	return next;
 }
@@ -66,10 +79,30 @@ export function updateGroceryList(
 // helpers above — used by one-time data migrations (see
 // src/lib/migrations/) that need to rewrite many lists' items together
 // without a separate persist() call (and full array re-serialization) per
-// list.
+// list. Deliberately does NOT bump updatedAt — a migration corrects
+// already-stored content in place, it isn't a new user edit worth a sync
+// round-trip.
 export function replaceGroceryLists(lists: GroceryList[]): GroceryList[] {
 	persist(lists);
 	return lists;
+}
+
+// Insert-or-replace-by-id for every entity in `incoming` at once, re-sorted
+// newest-first by createdAt — used by the sync engine (src/lib/sync/) to
+// write a batch of pull-merged lists back in one persist() call, same as
+// recipes-storage.ts's upsertRecipes.
+export function upsertGroceryLists(
+	lists: GroceryList[],
+	incoming: GroceryList[],
+): GroceryList[] {
+	if (incoming.length === 0) return lists;
+	const byId = new Map(lists.map((list) => [list.id, list]));
+	for (const list of incoming) byId.set(list.id, list);
+	const next = Array.from(byId.values()).sort((a, b) =>
+		b.createdAt.localeCompare(a.createdAt),
+	);
+	persist(next);
+	return next;
 }
 
 export function setExpandedGroceryList(

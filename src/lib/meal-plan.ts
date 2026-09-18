@@ -119,6 +119,13 @@ export type MealPlan = {
 	// verbatim instead of leaving the Ready screen pointing at entries a
 	// refine has since replaced; approving clears it.
 	preAdjustEntries?: MealPlanEntry[];
+	// See the equivalent fields on Recipe (recipe.ts) — same sync-engine
+	// contract (src/lib/sync/), just for a meal plan instead of a recipe.
+	// updatedAt/sharedAt are always present after loadMealPlans() normalizes
+	// them; ownerDeviceId is genuinely optional (unset until first shared).
+	updatedAt: string;
+	sharedAt: string | null;
+	ownerDeviceId?: string;
 };
 
 // One token per plan entry with a resolved recipe, capturing exactly what

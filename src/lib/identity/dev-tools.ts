@@ -7,11 +7,12 @@ import {
 } from "#/lib/identity/device";
 
 // Dev-only console helpers for exercising the identity layer against the
-// real dev Supabase project while `pnpm dev` is running -- there's no UI
-// wired to any of this yet (that's item 3 in CLAUDE.md's roadmap), so this
-// is the only way to drive it through the actual server-function/HTTP path
-// (not just calling the core logic directly, the way the throwaway vitest
-// smoke test does) before then.
+// real dev Supabase project while `pnpm dev` is running -- the account
+// drawer (src/components/account-drawer.tsx) now covers the normal
+// pairing/linking flow through the UI, but this stays useful for driving
+// individual identity calls directly through the actual server-function/HTTP
+// path (not just calling the core logic directly, the way the throwaway
+// vitest smoke test does) when debugging.
 //
 // Usage in the browser devtools console:
 //   await __cookeristIdentity.ensureDeviceIdentity()

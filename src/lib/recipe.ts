@@ -125,6 +125,25 @@ export type Recipe = {
 	// MAX_MODIFICATIONS. Optional: absent on recipes saved before this
 	// feature existed — treat as 0.
 	modificationCount?: number;
+	// ISO timestamp bumped on every content mutation (not pure UI state like
+	// `expanded`) — the clock the sync engine's last-write-wins merge compares
+	// (see src/lib/sync/). Always present after loadRecipes() normalizes it —
+	// the one-time `add-sync-metadata` migration backfills it from
+	// `createdAt` for existing data, and recipes-storage.ts's load path falls
+	// back the same way for anything that migration hasn't reached yet (e.g.
+	// a fresh test).
+	updatedAt: string;
+	// ISO timestamp once this recipe has been pushed to Supabase at least
+	// once; null means it's still local-only and the sync engine never
+	// touches it (see CLAUDE.md's "Sharing feature" roadmap item — a solo user
+	// who never shares anything should never get a row in Supabase).
+	sharedAt: string | null;
+	// The device id (see src/lib/identity/device.ts) that first shared this
+	// recipe — only that device can delete it everywhere; every other paired
+	// device can only remove its own copy ("leave", not delete). Stamped
+	// lazily the first time this recipe is shared, never at creation time —
+	// see src/lib/sync/ownership.ts.
+	ownerDeviceId?: string;
 };
 
 export function formatEstimatedTime(minutes: number): string {

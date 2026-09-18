@@ -129,9 +129,12 @@ export function MealPlanWizardForm({
 						setError(result.message);
 						return;
 					}
+					const now = new Date().toISOString();
 					const plan: MealPlan = {
 						id: crypto.randomUUID(),
-						createdAt: new Date().toISOString(),
+						createdAt: now,
+						updatedAt: now,
+						sharedAt: null,
 						startDate,
 						endDate,
 						description: description.trim(),

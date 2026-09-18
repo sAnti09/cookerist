@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ChevronLeft, Trash2 } from "lucide-react";
+import { ChevronLeft, Share2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { MealPlanBuilding } from "#/components/meal-plan-building";
 import { MealPlanDraft } from "#/components/meal-plan-draft";
@@ -20,8 +20,10 @@ import {
 } from "#/lib/meal-plan";
 import type { Recipe } from "#/lib/recipe";
 import { reapplyConfirmedMerges } from "#/lib/suggest-grocery-merges";
+import { isOwnedByThisDevice } from "#/lib/sync/ownership";
 import { useBuildMealPlan } from "#/lib/use-build-meal-plan";
 import { useGoBack } from "#/lib/use-go-back";
+import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/_tabs/meal-plan_/$planId")({
 	component: MealPlanDetailScreen,
@@ -39,6 +41,8 @@ const STATUS_SUBTITLES: Record<MealPlan["status"], string> = {
 const NOT_FOUND_PLAN: MealPlan = {
 	id: "__not-found__",
 	createdAt: "",
+	updatedAt: "",
+	sharedAt: null,
 	startDate: "",
 	endDate: "",
 	description: "",
@@ -63,9 +67,23 @@ function MealPlanDetailScreen() {
 		updateRecipes,
 		saveGroceryListForm,
 		updateGroceryList,
+		shareMealPlan,
 	} = useAppData();
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
+	const [sharing, setSharing] = useState(false);
 	const plan = mealPlans.find((p) => p.id === planId);
+	const isShared = plan?.sharedAt != null;
+	const isOwned = !plan || !isShared || isOwnedByThisDevice(plan);
+
+	async function handleShare() {
+		if (!plan || sharing) return;
+		setSharing(true);
+		try {
+			await shareMealPlan(plan.id);
+		} finally {
+			setSharing(false);
+		}
+	}
 
 	const buildDeps = useMemo(
 		() => ({
@@ -146,9 +164,12 @@ function MealPlanDetailScreen() {
 			)
 			.filter((recipe): recipe is Recipe => Boolean(recipe));
 		if (planRecipes.length === 0) return;
+		const now = new Date().toISOString();
 		const list: GroceryList = {
 			id: crypto.randomUUID(),
-			createdAt: new Date().toISOString(),
+			createdAt: now,
+			updatedAt: now,
+			sharedAt: null,
 			name: `${formatMealPlanDateRange(plan.startDate, plan.endDate)} meal plan`,
 			recipeIds: planRecipes.map((recipe) => recipe.id),
 			items: aggregateGroceryItems(planRecipes),
@@ -219,8 +240,23 @@ function MealPlanDetailScreen() {
 				<div className="display-title flex-1 truncate text-[15px] font-semibold">
 					Meal Plan
 				</div>
+				{plan.status === "ready" ? (
+					<IconButton
+						aria-label={
+							isShared ? "This meal plan is shared" : "Share this meal plan"
+						}
+						onClick={handleShare}
+						disabled={sharing}
+					>
+						<Share2
+							className={cn("size-4", isShared ? "text-sage" : "text-ink-dim")}
+						/>
+					</IconButton>
+				) : null}
 				<IconButton
-					aria-label="Delete this meal plan"
+					aria-label={
+						isOwned ? "Delete this meal plan" : "Remove this meal plan"
+					}
 					onClick={() => setConfirmingDelete(true)}
 				>
 					<Trash2 className="size-4 text-ink-dim" />
@@ -262,9 +298,13 @@ function MealPlanDetailScreen() {
 
 			<ConfirmDialog
 				open={confirmingDelete}
-				title="Delete this meal plan?"
-				description="This meal plan will be permanently removed. Any recipes it built stay in your Recipes list."
-				confirmLabel="Delete"
+				title={isOwned ? "Delete this meal plan?" : "Remove this meal plan?"}
+				description={
+					isOwned
+						? "This meal plan will be permanently removed. Any recipes it built stay in your Recipes list."
+						: "This meal plan is shared by someone else — it'll only be removed from this device, not for them."
+				}
+				confirmLabel={isOwned ? "Delete" : "Remove"}
 				cancelLabel="Cancel"
 				onConfirm={() => {
 					setConfirmingDelete(false);

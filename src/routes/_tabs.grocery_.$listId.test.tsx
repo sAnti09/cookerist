@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GroceryList } from "#/lib/grocery-list";
@@ -11,14 +11,29 @@ vi.mock("#/server/generate-recipe", () => ({
 	modifyRecipe: vi.fn(),
 }));
 
+const getDeviceIdentityMock = vi.fn();
+vi.mock("#/lib/identity/device", () => ({
+	getDeviceIdentity: () => getDeviceIdentityMock(),
+}));
+
+const shareGroceryListMock = vi.fn();
+vi.mock("#/lib/sync/share-actions", () => ({
+	shareGroceryList: (...args: unknown[]) => shareGroceryListMock(...args),
+}));
+
 beforeEach(() => {
 	window.localStorage.clear();
+	getDeviceIdentityMock.mockReset();
+	shareGroceryListMock.mockReset();
+	getDeviceIdentityMock.mockReturnValue(null);
 });
 
 function makeGroceryList(overrides: Partial<GroceryList> = {}): GroceryList {
 	return {
 		id: "list-1",
 		createdAt: "2026-01-15T12:00:00.000Z",
+		updatedAt: "2026-01-15T12:00:00.000Z",
+		sharedAt: null,
 		name: "Weeknight Groceries",
 		recipeIds: [],
 		items: [
@@ -180,5 +195,54 @@ describe("Grocery detail screen", () => {
 		);
 		expect(stored).toHaveLength(1);
 		expect(stored[0].id).toBe("list-1");
+	});
+
+	it("shares the list via its Share icon", async () => {
+		const list = makeGroceryList();
+		saveGroceryList(loadGroceryLists(), list);
+		shareGroceryListMock.mockResolvedValue({
+			recipes: [],
+			groceryLists: [{ ...list, sharedAt: "2026-01-15T12:05:00.000Z" }],
+			mealPlans: [],
+		});
+		await renderApp(`/grocery/${list.id}`);
+		const user = userEvent.setup();
+
+		await user.click(
+			screen.getByRole("button", { name: `Share ${list.name}` }),
+		);
+
+		await waitFor(() => expect(shareGroceryListMock).toHaveBeenCalled());
+		expect(
+			await screen.findByRole("button", { name: `${list.name} is shared` }),
+		).toBeInTheDocument();
+	});
+
+	it("labels delete as Remove for a shared list owned by another device", async () => {
+		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+		const list = makeGroceryList({
+			sharedAt: "2026-01-15T12:00:00.000Z",
+			ownerDeviceId: "device-2",
+		});
+		saveGroceryList(loadGroceryLists(), list);
+		await renderApp(`/grocery/${list.id}`);
+
+		expect(
+			screen.getByRole("button", { name: `Remove ${list.name}` }),
+		).toBeInTheDocument();
+	});
+
+	it("still labels delete as Delete for a shared list this device owns", async () => {
+		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+		const list = makeGroceryList({
+			sharedAt: "2026-01-15T12:00:00.000Z",
+			ownerDeviceId: "device-1",
+		});
+		saveGroceryList(loadGroceryLists(), list);
+		await renderApp(`/grocery/${list.id}`);
+
+		expect(
+			screen.getByRole("button", { name: `Delete ${list.name}` }),
+		).toBeInTheDocument();
 	});
 });

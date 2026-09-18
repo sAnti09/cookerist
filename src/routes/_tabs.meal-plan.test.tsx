@@ -23,6 +23,8 @@ function makePlan(overrides: Partial<MealPlan> = {}): MealPlan {
 	return {
 		id: "plan-1",
 		createdAt: "2026-09-15T12:00:00.000Z",
+		updatedAt: "2026-09-15T12:00:00.000Z",
+		sharedAt: null,
 		startDate: "2026-09-15",
 		endDate: "2026-09-21",
 		description: "",

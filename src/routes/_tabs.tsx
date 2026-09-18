@@ -1,4 +1,7 @@
 import { createFileRoute, Outlet, useMatches } from "@tanstack/react-router";
+import { Menu } from "lucide-react";
+import { useState } from "react";
+import { AccountDrawer } from "#/components/account-drawer";
 import { BottomTabBar } from "#/components/bottom-tab-bar";
 import { GroceryListCreateForm } from "#/components/grocery-list-create-form";
 import { InAppBrowserBanner } from "#/components/in-app-browser-banner";
@@ -50,10 +53,24 @@ function TabsLayoutContent() {
 		DETAIL_ROUTE_IDS.has(match.routeId),
 	);
 	const { updateAvailable, applyUpdate, dismiss } = useServiceWorkerUpdate();
+	const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
 
 	return (
 		<>
 			<SplashScreen ready={ready} />
+			{onDetailRoute ? null : (
+				// Bottom-left, mirroring the Grocery/Meal Plan FABs' bottom-right
+				// position — deliberately not top-left/top-right, which would
+				// overlap every tab root screen's own <h1>/ThemeToggle header row.
+				<button
+					type="button"
+					aria-label="Account & sync"
+					onClick={() => setAccountDrawerOpen(true)}
+					className="fixed left-5 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] z-30 flex size-11 items-center justify-center rounded-full border border-line bg-surface text-ink-dim shadow-[0_10px_20px_-6px_rgba(33,28,22,0.25)]"
+				>
+					<Menu className="size-[18px]" aria-hidden="true" />
+				</button>
+			)}
 			<div
 				className={cn(
 					"mx-auto min-h-screen w-full max-w-2xl",
@@ -64,6 +81,10 @@ function TabsLayoutContent() {
 				<Outlet />
 			</div>
 			{onDetailRoute ? null : <BottomTabBar />}
+			<AccountDrawer
+				open={accountDrawerOpen}
+				onClose={() => setAccountDrawerOpen(false)}
+			/>
 			{creatingGroceryList || editingGroceryList ? (
 				<GroceryListCreateForm
 					recipes={recipes}

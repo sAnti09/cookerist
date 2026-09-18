@@ -196,9 +196,12 @@ export function RecipeModificationDialog({
 		const pending = recipe.pendingModification;
 		if (!pending) return;
 		const draft = pending.draft;
+		const now = new Date().toISOString();
 		const newRecipe: Recipe = {
 			id: crypto.randomUUID(),
-			createdAt: new Date().toISOString(),
+			createdAt: now,
+			updatedAt: now,
+			sharedAt: null,
 			prompt: `${recipe.prompt} — modified: ${pending.instructions.join("; ")}`,
 			title: draft.title,
 			overview: draft.overview,

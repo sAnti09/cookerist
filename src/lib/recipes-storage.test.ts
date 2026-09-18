@@ -289,8 +289,15 @@ describe("updateRecipe", () => {
 		const updatedFirst = { ...first, currentServings: 4 };
 		const result = updateRecipe(afterSecond, updatedFirst);
 
-		expect(result).toEqual([second, updatedFirst]);
-		expect(loadRecipes()).toEqual([second, updatedFirst]);
+		// updateRecipe stamps a fresh updatedAt (see touch() in
+		// recipes-storage.ts), so compare everything else exactly and just
+		// sanity-check updatedAt moved forward.
+		expect(result).toEqual([
+			second,
+			{ ...updatedFirst, updatedAt: result[1]?.updatedAt },
+		]);
+		expect(result[1]?.updatedAt >= first.updatedAt).toBe(true);
+		expect(loadRecipes()).toEqual(result);
 	});
 
 	it("is a no-op when the id isn't found", () => {
@@ -326,7 +333,16 @@ describe("updateRecipes", () => {
 		const updatedThird = { ...third, currentServings: 6 };
 		const result = updateRecipes(afterThird, [updatedFirst, updatedThird]);
 
-		expect(result).toEqual([updatedThird, second, updatedFirst]);
+		// updateRecipes stamps a fresh updatedAt per recipe (see touch() in
+		// recipes-storage.ts), so compare everything else exactly and just
+		// sanity-check updatedAt moved forward for both.
+		expect(result).toEqual([
+			{ ...updatedThird, updatedAt: result[0]?.updatedAt },
+			second,
+			{ ...updatedFirst, updatedAt: result[2]?.updatedAt },
+		]);
+		expect(result[0]?.updatedAt >= third.updatedAt).toBe(true);
+		expect(result[2]?.updatedAt >= first.updatedAt).toBe(true);
 		expect(loadRecipes()).toEqual(result);
 	});
 

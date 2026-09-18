@@ -46,6 +46,8 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
 	return {
 		id: crypto.randomUUID(),
 		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		sharedAt: null,
 		prompt: "a dish",
 		title: "Veggie Stir-Fry",
 		overview: "overview",
@@ -63,6 +65,8 @@ function makePlan(overrides: Partial<MealPlan> = {}): MealPlan {
 	return {
 		id: crypto.randomUUID(),
 		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		sharedAt: null,
 		startDate: "2026-09-15",
 		endDate: "2026-09-15",
 		description: "",

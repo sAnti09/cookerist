@@ -19,6 +19,8 @@ function makeList(overrides: Partial<GroceryList> = {}): GroceryList {
 	return {
 		id: crypto.randomUUID(),
 		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		sharedAt: null,
 		name: "Weeknight Shopping",
 		recipeIds: ["recipe-1"],
 		items: [makeItem()],

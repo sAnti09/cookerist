@@ -6,6 +6,8 @@ function makeList(name: string): GroceryList {
 	return {
 		id: crypto.randomUUID(),
 		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		sharedAt: null,
 		name,
 		recipeIds: [],
 		items: [],

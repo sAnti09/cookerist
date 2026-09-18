@@ -1,4 +1,8 @@
 import {
+	ADD_SYNC_METADATA_MIGRATION_ID,
+	addSyncMetadata,
+} from "./add-sync-metadata";
+import {
 	CATEGORIZE_RECIPE_INGREDIENTS_APPROX_WEIGHT_MIGRATION_ID,
 	CATEGORIZE_RECIPE_INGREDIENTS_MIGRATION_ID,
 	categorizeRecipeIngredients,
@@ -75,5 +79,11 @@ export const MIGRATIONS: readonly Migration[] = [
 	{
 		id: REAGGREGATE_GROCERY_LISTS_LIQUID_HYBRID_FIX_MIGRATION_ID,
 		run: reaggregateGroceryLists,
+	},
+	// Backfills the sync-engine metadata fields (updatedAt/sharedAt) added for
+	// the sharing feature — see add-sync-metadata.ts.
+	{
+		id: ADD_SYNC_METADATA_MIGRATION_ID,
+		run: addSyncMetadata,
 	},
 ];

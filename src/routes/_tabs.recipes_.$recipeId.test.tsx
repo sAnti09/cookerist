@@ -12,6 +12,16 @@ vi.mock("#/server/generate-recipe", () => ({
 	modifyRecipe: (...args: unknown[]) => modifyRecipeMock(...args),
 }));
 
+const getDeviceIdentityMock = vi.fn();
+vi.mock("#/lib/identity/device", () => ({
+	getDeviceIdentity: () => getDeviceIdentityMock(),
+}));
+
+const shareRecipeMock = vi.fn();
+vi.mock("#/lib/sync/share-actions", () => ({
+	shareRecipe: (...args: unknown[]) => shareRecipeMock(...args),
+}));
+
 const validRecipe = {
 	title: "Garlic Butter Shrimp Pasta",
 	overview: "A quick, creamy shrimp pasta.",
@@ -35,9 +45,19 @@ const validRecipe = {
 beforeEach(() => {
 	modifyRecipeMock.mockReset();
 	window.localStorage.clear();
+	getDeviceIdentityMock.mockReset();
+	shareRecipeMock.mockReset();
+	getDeviceIdentityMock.mockReturnValue(null);
 });
 
-function seedRecipe(overrides: { title?: string; favorite?: boolean } = {}) {
+function seedRecipe(
+	overrides: {
+		title?: string;
+		favorite?: boolean;
+		sharedAt?: string | null;
+		ownerDeviceId?: string;
+	} = {},
+) {
 	const recipe = toStoredRecipe("shrimp pasta for 2", {
 		...validRecipe,
 		title: overrides.title ?? validRecipe.title,
@@ -45,6 +65,8 @@ function seedRecipe(overrides: { title?: string; favorite?: boolean } = {}) {
 	const saved = saveRecipe(loadRecipes(), {
 		...recipe,
 		favorite: overrides.favorite ?? false,
+		sharedAt: overrides.sharedAt ?? null,
+		ownerDeviceId: overrides.ownerDeviceId,
 	});
 	return saved[0];
 }
@@ -224,5 +246,51 @@ describe("Recipe detail screen", () => {
 				stored.some((r: { title: string }) => r.title === "Forked Recipe"),
 			).toBe(true);
 		});
+	});
+
+	it("shares the recipe via its Share icon", async () => {
+		const recipe = seedRecipe();
+		shareRecipeMock.mockResolvedValue({
+			recipes: [{ ...recipe, sharedAt: "2026-01-01T00:00:00.000Z" }],
+			groceryLists: [],
+			mealPlans: [],
+		});
+		await renderApp(`/recipes/${recipe.id}`);
+		const user = userEvent.setup();
+
+		await user.click(
+			screen.getByRole("button", { name: `Share ${recipe.title}` }),
+		);
+
+		await waitFor(() => expect(shareRecipeMock).toHaveBeenCalled());
+		expect(
+			await screen.findByRole("button", { name: `${recipe.title} is shared` }),
+		).toBeInTheDocument();
+	});
+
+	it("labels delete as Remove for a shared recipe owned by another device", async () => {
+		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+		const recipe = seedRecipe({
+			sharedAt: "2026-01-01T00:00:00.000Z",
+			ownerDeviceId: "device-2",
+		});
+		await renderApp(`/recipes/${recipe.id}`);
+
+		expect(
+			screen.getByRole("button", { name: `Remove ${recipe.title}` }),
+		).toBeInTheDocument();
+	});
+
+	it("still labels delete as Delete for a shared recipe this device owns", async () => {
+		getDeviceIdentityMock.mockReturnValue({ deviceId: "device-1" });
+		const recipe = seedRecipe({
+			sharedAt: "2026-01-01T00:00:00.000Z",
+			ownerDeviceId: "device-1",
+		});
+		await renderApp(`/recipes/${recipe.id}`);
+
+		expect(
+			screen.getByRole("button", { name: `Delete ${recipe.title}` }),
+		).toBeInTheDocument();
 	});
 });

@@ -14,6 +14,8 @@ vi.mock("#/server/generate-recipe", () => ({
 const baseRecipe: Recipe = {
 	id: "recipe-1",
 	createdAt: "2026-01-15T12:00:00.000Z",
+	updatedAt: "2026-01-15T12:00:00.000Z",
+	sharedAt: null,
 	prompt: "shrimp pasta for 2",
 	title: "Garlic Butter Shrimp Pasta",
 	overview: "A quick, creamy shrimp pasta.",

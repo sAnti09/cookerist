@@ -23,6 +23,8 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
 	return {
 		id: "recipe-1",
 		createdAt: "2026-01-15T12:00:00.000Z",
+		updatedAt: "2026-01-15T12:00:00.000Z",
+		sharedAt: null,
 		prompt: "shrimp pasta",
 		title: "Shrimp Pasta",
 		overview: "",
@@ -676,6 +678,8 @@ describe("GroceryListCreateForm", () => {
 			return {
 				id: "list-1",
 				createdAt: "2026-01-15T12:00:00.000Z",
+				updatedAt: "2026-01-15T12:00:00.000Z",
+				sharedAt: null,
 				name: "My Custom Name",
 				recipeIds: ["recipe-1"],
 				items: [

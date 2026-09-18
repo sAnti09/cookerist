@@ -228,9 +228,12 @@ export function GroceryListCreateForm({
 			});
 			return;
 		}
+		const now = new Date().toISOString();
 		onSave({
 			id: crypto.randomUUID(),
-			createdAt: new Date().toISOString(),
+			createdAt: now,
+			updatedAt: now,
+			sharedAt: null,
 			name: finalName,
 			recipeIds,
 			items: previewItems,

@@ -11,6 +11,8 @@ function makePlan(overrides: Partial<MealPlan> = {}): MealPlan {
 	return {
 		id: crypto.randomUUID(),
 		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		sharedAt: null,
 		startDate: "2026-09-15",
 		endDate: "2026-09-21",
 		description: "Mostly vegetarian",
@@ -114,8 +116,15 @@ describe("updateMealPlan", () => {
 		const updatedFirst = { ...first, status: "ready" as const };
 		const result = updateMealPlan(afterSecond, updatedFirst);
 
-		expect(result).toEqual([second, updatedFirst]);
-		expect(loadMealPlans()).toEqual([second, updatedFirst]);
+		// updateMealPlan stamps a fresh updatedAt (see touch() in
+		// meal-plan-storage.ts), so compare everything else exactly and just
+		// sanity-check updatedAt moved forward.
+		expect(result).toEqual([
+			second,
+			{ ...updatedFirst, updatedAt: result[1]?.updatedAt },
+		]);
+		expect(result[1]?.updatedAt >= first.updatedAt).toBe(true);
+		expect(loadMealPlans()).toEqual(result);
 	});
 
 	it("is a no-op when the id isn't found", () => {

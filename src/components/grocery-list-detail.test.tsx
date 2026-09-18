@@ -8,6 +8,8 @@ import { GroceryListDetail } from "./grocery-list-detail";
 const list: GroceryList = {
 	id: "list-1",
 	createdAt: "2026-01-15T12:00:00.000Z",
+	updatedAt: "2026-01-15T12:00:00.000Z",
+	sharedAt: null,
 	name: "Weeknight Shopping",
 	recipeIds: ["recipe-1"],
 	items: [
@@ -36,6 +38,8 @@ const recipes: Recipe[] = [
 	{
 		id: "recipe-1",
 		createdAt: "2026-01-15T12:00:00.000Z",
+		updatedAt: "2026-01-15T12:00:00.000Z",
+		sharedAt: null,
 		prompt: "shrimp pasta",
 		title: "Shrimp Pasta",
 		overview: "",

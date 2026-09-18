@@ -12,6 +12,8 @@ function makeList(overrides: Partial<GroceryList> = {}): GroceryList {
 	return {
 		id: crypto.randomUUID(),
 		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		sharedAt: null,
 		name: "Shrimp Pasta, Garlic Bread",
 		recipeIds: ["recipe-1", "recipe-2"],
 		items: [
@@ -138,8 +140,15 @@ describe("updateGroceryList", () => {
 		const updatedFirst = { ...first, expanded: true };
 		const result = updateGroceryList(afterSecond, updatedFirst);
 
-		expect(result).toEqual([second, updatedFirst]);
-		expect(loadGroceryLists()).toEqual([second, updatedFirst]);
+		// updateGroceryList stamps a fresh updatedAt (see touch() in
+		// grocery-storage.ts), so compare everything else exactly and just
+		// sanity-check updatedAt moved forward.
+		expect(result).toEqual([
+			second,
+			{ ...updatedFirst, updatedAt: result[1]?.updatedAt },
+		]);
+		expect(result[1]?.updatedAt >= first.updatedAt).toBe(true);
+		expect(loadGroceryLists()).toEqual(result);
 	});
 
 	it("is a no-op when the id isn't found", () => {

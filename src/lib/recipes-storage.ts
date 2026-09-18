@@ -26,6 +26,8 @@ export function loadRecipes(): Recipe[] {
 			favorite: recipe.favorite ?? false,
 			truncated: recipe.truncated ?? false,
 			modificationCount: recipe.modificationCount ?? 0,
+			updatedAt: recipe.updatedAt ?? recipe.createdAt,
+			sharedAt: recipe.sharedAt ?? null,
 		}));
 	} catch {
 		return [];
@@ -57,8 +59,16 @@ export function deleteRecipe(recipes: Recipe[], id: string): Recipe[] {
 	return next;
 }
 
+// Stamps `updatedAt` on every write below (except setExpandedRecipe, which is
+// pure UI state — see recipe.ts) so the sync engine's last-write-wins merge
+// (src/lib/sync/) has an accurate clock for content changes.
+function touch(recipe: Recipe): Recipe {
+	return { ...recipe, updatedAt: new Date().toISOString() };
+}
+
 export function updateRecipe(recipes: Recipe[], recipe: Recipe): Recipe[] {
-	const next = recipes.map((r) => (r.id === recipe.id ? recipe : r));
+	const touched = touch(recipe);
+	const next = recipes.map((r) => (r.id === touched.id ? touched : r));
 	persist(next);
 	return next;
 }
@@ -70,8 +80,36 @@ export function updateRecipes(
 	recipes: Recipe[],
 	recipesToUpdate: Recipe[],
 ): Recipe[] {
-	const byId = new Map(recipesToUpdate.map((recipe) => [recipe.id, recipe]));
+	const byId = new Map(
+		recipesToUpdate.map((recipe) => [recipe.id, touch(recipe)]),
+	);
 	const next = recipes.map((r) => byId.get(r.id) ?? r);
+	persist(next);
+	return next;
+}
+
+// Bulk-overwrites every stored recipe at once, bypassing touch() above —
+// used by one-time data migrations (see src/lib/migrations/) that need to
+// backfill/correct fields without it looking like a fresh user edit (which
+// would bump updatedAt to "now" and needlessly flag the recipe for re-sync).
+export function replaceRecipes(recipes: Recipe[]): Recipe[] {
+	persist(recipes);
+	return recipes;
+}
+
+// Insert-or-replace-by-id for every entity in `incoming` at once, re-sorted
+// newest-first by createdAt — used by the sync engine (src/lib/sync/) to
+// write a batch of pull-merged recipes back in one persist() call. A pulled
+// recipe not yet known locally is appended like any other id; the final sort
+// is what actually puts it in the right newest-first spot instead of at the
+// end, regardless of merge order.
+export function upsertRecipes(recipes: Recipe[], incoming: Recipe[]): Recipe[] {
+	if (incoming.length === 0) return recipes;
+	const byId = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+	for (const recipe of incoming) byId.set(recipe.id, recipe);
+	const next = Array.from(byId.values()).sort((a, b) =>
+		b.createdAt.localeCompare(a.createdAt),
+	);
 	persist(next);
 	return next;
 }
@@ -90,7 +128,7 @@ export function setExpandedRecipe(
 
 export function toggleFavoriteRecipe(recipes: Recipe[], id: string): Recipe[] {
 	const next = recipes.map((r) =>
-		r.id === id ? { ...r, favorite: !r.favorite } : r,
+		r.id === id ? touch({ ...r, favorite: !r.favorite }) : r,
 	);
 	persist(next);
 	return next;
@@ -101,9 +139,12 @@ export function toStoredRecipe(
 	input: RecipeResponse,
 	truncated = false,
 ): Recipe {
+	const now = new Date().toISOString();
 	return {
 		id: crypto.randomUUID(),
-		createdAt: new Date().toISOString(),
+		createdAt: now,
+		updatedAt: now,
+		sharedAt: null,
 		prompt,
 		title: input.title,
 		overview: input.overview,

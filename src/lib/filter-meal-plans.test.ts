@@ -6,6 +6,8 @@ function makePlan(overrides: Partial<MealPlan> = {}): MealPlan {
 	return {
 		id: crypto.randomUUID(),
 		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		sharedAt: null,
 		startDate: "2026-09-15",
 		endDate: "2026-09-21",
 		description: "",

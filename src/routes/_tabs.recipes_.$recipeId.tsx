@@ -4,6 +4,7 @@ import {
 	ChevronLeft,
 	Clock,
 	Flame,
+	Share2,
 	SquarePen,
 	Star,
 	Trash2,
@@ -17,6 +18,7 @@ import { DifficultyBadge } from "#/components/ui/difficulty-badge";
 import { IconButton } from "#/components/ui/icon-button";
 import { useAppData } from "#/lib/app-data-context";
 import { formatCaloriesPerServing, formatEstimatedTime } from "#/lib/recipe";
+import { isOwnedByThisDevice } from "#/lib/sync/ownership";
 import { useGoBack } from "#/lib/use-go-back";
 import { cn } from "#/lib/utils";
 
@@ -54,11 +56,25 @@ function RecipeDetailScreen() {
 		toggleFavoriteRecipe,
 		updateRecipe,
 		createRecipe,
+		shareRecipe,
 	} = useAppData();
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
 	const [cookModeOpen, setCookModeOpen] = useState(search.autoStart === "cook");
+	const [sharing, setSharing] = useState(false);
 	const recipe = recipes.find((r) => r.id === recipeId);
+	const isShared = recipe?.sharedAt != null;
+	const isOwned = !recipe || !isShared || isOwnedByThisDevice(recipe);
+
+	async function handleShare() {
+		if (!recipe || sharing) return;
+		setSharing(true);
+		try {
+			await shareRecipe(recipe.id);
+		} finally {
+			setSharing(false);
+		}
+	}
 
 	function handleBack() {
 		goBack(() => {
@@ -127,7 +143,20 @@ function RecipeDetailScreen() {
 						/>
 					</IconButton>
 					<IconButton
-						aria-label={`Delete ${recipe.title}`}
+						aria-label={
+							isShared ? `${recipe.title} is shared` : `Share ${recipe.title}`
+						}
+						onClick={handleShare}
+						disabled={sharing}
+					>
+						<Share2
+							className={cn("size-4", isShared ? "text-sage" : "text-ink-dim")}
+						/>
+					</IconButton>
+					<IconButton
+						aria-label={
+							isOwned ? `Delete ${recipe.title}` : `Remove ${recipe.title}`
+						}
 						onClick={() => setConfirmingDelete(true)}
 					>
 						<Trash2 className="size-4 text-ink-dim" />
@@ -172,9 +201,13 @@ function RecipeDetailScreen() {
 
 			<ConfirmDialog
 				open={confirmingDelete}
-				title="Delete this recipe?"
-				description={`"${recipe.title}" will be permanently removed.`}
-				confirmLabel="Delete"
+				title={isOwned ? "Delete this recipe?" : "Remove this recipe?"}
+				description={
+					isOwned
+						? `"${recipe.title}" will be permanently removed.`
+						: `"${recipe.title}" is shared by someone else — it'll only be removed from this device, not for them.`
+				}
+				confirmLabel={isOwned ? "Delete" : "Remove"}
 				cancelLabel="Cancel"
 				onConfirm={() => {
 					setConfirmingDelete(false);

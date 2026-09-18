@@ -30,6 +30,8 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
 	return {
 		id: crypto.randomUUID(),
 		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		sharedAt: null,
 		prompt: "a dish",
 		title: "A Dish",
 		overview: "overview",

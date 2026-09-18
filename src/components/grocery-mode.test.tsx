@@ -21,6 +21,8 @@ function makeList(overrides: Partial<GroceryList> = {}): GroceryList {
 	return {
 		id: "list-1",
 		createdAt: "2026-01-15T12:00:00.000Z",
+		updatedAt: "2026-01-15T12:00:00.000Z",
+		sharedAt: null,
 		name: "Weeknight Shopping",
 		recipeIds: [],
 		items: [],
