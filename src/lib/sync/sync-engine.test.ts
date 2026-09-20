@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { GroceryList } from "#/lib/grocery-list";
 import type { Recipe } from "#/lib/recipe";
 
 const getDeviceIdentityMock = vi.fn();
@@ -10,11 +11,22 @@ const pushEntitiesMock = vi.fn();
 const pullChangedSinceMock = vi.fn();
 const pushTombstoneMock = vi.fn();
 const pushShareRevocationMock = vi.fn();
+const pullGrantedResourceIdsMock = vi.fn();
+const pullOneMock = vi.fn();
 vi.mock("#/lib/sync/sync-client", () => ({
 	pushEntities: (...args: unknown[]) => pushEntitiesMock(...args),
 	pullChangedSince: (...args: unknown[]) => pullChangedSinceMock(...args),
 	pushTombstone: (...args: unknown[]) => pushTombstoneMock(...args),
 	pushShareRevocation: (...args: unknown[]) => pushShareRevocationMock(...args),
+	pullGrantedResourceIds: (...args: unknown[]) =>
+		pullGrantedResourceIdsMock(...args),
+	pullOne: (...args: unknown[]) => pullOneMock(...args),
+}));
+
+const cascadeSharesForResourceMock = vi.fn();
+vi.mock("#/lib/identity/resource-sharing", () => ({
+	cascadeSharesForResource: (...args: unknown[]) =>
+		cascadeSharesForResourceMock(...args),
 }));
 
 function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
@@ -37,6 +49,21 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
 	};
 }
 
+function makeGroceryList(overrides: Partial<GroceryList> = {}): GroceryList {
+	return {
+		id: "list-1",
+		createdAt: "2026-01-01T00:00:00.000Z",
+		name: "Test list",
+		recipeIds: [],
+		items: [],
+		expanded: false,
+		updatedAt: "2026-01-01T00:00:00.000Z",
+		sharedAt: null,
+		ownerId: null,
+		...overrides,
+	};
+}
+
 beforeEach(() => {
 	vi.resetModules();
 	window.localStorage.clear();
@@ -45,10 +72,16 @@ beforeEach(() => {
 	pullChangedSinceMock.mockReset();
 	pushTombstoneMock.mockReset();
 	pushShareRevocationMock.mockReset();
+	pullGrantedResourceIdsMock.mockReset();
+	pullOneMock.mockReset();
+	cascadeSharesForResourceMock.mockReset();
 	pushEntitiesMock.mockResolvedValue(undefined);
 	pullChangedSinceMock.mockResolvedValue([]);
 	pushTombstoneMock.mockResolvedValue(undefined);
 	pushShareRevocationMock.mockResolvedValue(undefined);
+	pullGrantedResourceIdsMock.mockResolvedValue([]);
+	pullOneMock.mockResolvedValue(null);
+	cascadeSharesForResourceMock.mockResolvedValue(undefined);
 });
 
 describe("runSync", () => {
@@ -696,6 +729,152 @@ describe("runSync", () => {
 
 				expect(result?.recipes?.find((r) => r.id === "r1")).toBeUndefined();
 				consoleErrorSpy.mockRestore();
+			});
+		});
+
+		// See CLAUDE.md's "Per-resource sharing" section: sharing a grocery
+		// list/meal plan alone left the recipes it references inaccessible
+		// (bare id references, no embedded content) — these two mechanisms
+		// close that gap.
+		describe("linked-resource grant cascade", () => {
+			it("adopts a resource this account was granted access to but doesn't have locally yet, bypassing the watermark", async () => {
+				getDeviceIdentityMock.mockReturnValue({
+					deviceId: "device-1",
+					userId: "my-account",
+				});
+				pullGrantedResourceIdsMock.mockImplementation(async (table: string) =>
+					table === "recipes" ? ["granted-1"] : [],
+				);
+				pullOneMock.mockImplementation(async (table: string, id: string) =>
+					table === "recipes" && id === "granted-1"
+						? {
+								id: "granted-1",
+								data: makeRecipe({ id: "granted-1", ownerId: "owner-1" }),
+								owner_id: "owner-1",
+								updated_at: "2020-01-01T00:00:00.000Z",
+								deleted_at: null,
+							}
+						: null,
+				);
+				const { runSync } = await import("./sync-engine");
+
+				const result = await runSync();
+
+				const adopted = result?.recipes?.find((r) => r.id === "granted-1");
+				expect(adopted).toBeDefined();
+				expect(adopted?.ownerId).toBe("owner-1");
+				expect(adopted?.sharedAt).not.toBeNull();
+			});
+
+			it("doesn't re-fetch a granted resource that's already known locally", async () => {
+				getDeviceIdentityMock.mockReturnValue({
+					deviceId: "device-1",
+					userId: "my-account",
+				});
+				const { saveRecipe } = await import("#/lib/recipes-storage");
+				saveRecipe(
+					[],
+					makeRecipe({
+						id: "already-here",
+						sharedAt: "2026-01-01T00:00:00.000Z",
+						ownerId: "owner-1",
+					}),
+				);
+				pullGrantedResourceIdsMock.mockImplementation(async (table: string) =>
+					table === "recipes" ? ["already-here"] : [],
+				);
+				const { runSync } = await import("./sync-engine");
+
+				await runSync();
+
+				expect(pullOneMock).not.toHaveBeenCalled();
+			});
+
+			it("logs and continues when grant reconciliation itself fails", async () => {
+				getDeviceIdentityMock.mockReturnValue({
+					deviceId: "device-1",
+					userId: "my-account",
+				});
+				pullGrantedResourceIdsMock.mockRejectedValue(new Error("boom"));
+				const consoleErrorSpy = vi
+					.spyOn(console, "error")
+					.mockImplementation(() => {});
+				const { runSync } = await import("./sync-engine");
+
+				const result = await runSync();
+
+				expect(result).not.toBeNull();
+				expect(consoleErrorSpy).toHaveBeenCalledWith(
+					expect.stringContaining("Grant reconciliation failed"),
+					expect.any(Error),
+				);
+				consoleErrorSpy.mockRestore();
+			});
+
+			it("re-derives cascaded grants after pushing an owned grocery list", async () => {
+				getDeviceIdentityMock.mockReturnValue({
+					deviceId: "device-1",
+					userId: "my-account",
+				});
+				const { saveGroceryList } = await import("#/lib/grocery-storage");
+				saveGroceryList(
+					[],
+					makeGroceryList({
+						id: "list-1",
+						sharedAt: "2026-01-01T00:00:00.000Z",
+						ownerId: "my-account",
+					}),
+				);
+				const { runSync } = await import("./sync-engine");
+
+				await runSync();
+
+				expect(cascadeSharesForResourceMock).toHaveBeenCalledWith(
+					"grocery_lists",
+					"list-1",
+				);
+			});
+
+			it("never cascades for the recipes table itself", async () => {
+				getDeviceIdentityMock.mockReturnValue({
+					deviceId: "device-1",
+					userId: "my-account",
+				});
+				const { saveRecipe } = await import("#/lib/recipes-storage");
+				saveRecipe(
+					[],
+					makeRecipe({
+						id: "r1",
+						sharedAt: "2026-01-01T00:00:00.000Z",
+						ownerId: "my-account",
+					}),
+				);
+				const { runSync } = await import("./sync-engine");
+
+				await runSync();
+
+				expect(cascadeSharesForResourceMock).not.toHaveBeenCalled();
+			});
+
+			it("never cascades a grocery list shared TO this account, only one it owns", async () => {
+				getDeviceIdentityMock.mockReturnValue({
+					deviceId: "device-1",
+					userId: "my-account",
+				});
+				const { saveGroceryList } = await import("#/lib/grocery-storage");
+				saveGroceryList(
+					[],
+					makeGroceryList({
+						id: "list-1",
+						sharedAt: "2026-01-01T00:00:00.000Z",
+						ownerId: "someone-else",
+					}),
+				);
+				const { runSync } = await import("./sync-engine");
+
+				await runSync();
+
+				expect(cascadeSharesForResourceMock).not.toHaveBeenCalled();
 			});
 		});
 	});

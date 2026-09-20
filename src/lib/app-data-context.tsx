@@ -546,6 +546,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 				);
 			}
 			const nowIso = new Date().toISOString();
+			let title: string;
 			if (resourceTable === "recipes") {
 				const recipe: Recipe = {
 					...(row.data as unknown as Recipe),
@@ -553,32 +554,38 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 					sharedAt: (row.data as unknown as Recipe).sharedAt ?? nowIso,
 				};
 				setRecipes((current) => upsertRecipes(current, [recipe]));
-				return { table: resourceTable, id: recipe.id, title: recipe.title };
-			}
-			if (resourceTable === "grocery_lists") {
+				title = recipe.title;
+			} else if (resourceTable === "grocery_lists") {
 				const list: GroceryList = {
 					...(row.data as unknown as GroceryList),
 					ownerId: row.owner_id,
 					sharedAt: (row.data as unknown as GroceryList).sharedAt ?? nowIso,
 				};
 				setGroceryLists((current) => upsertGroceryLists(current, [list]));
-				return { table: resourceTable, id: list.id, title: list.name };
-			}
-			const plan: MealPlan = {
-				...(row.data as unknown as MealPlan),
-				ownerId: row.owner_id,
-				sharedAt: (row.data as unknown as MealPlan).sharedAt ?? nowIso,
-			};
-			setMealPlans((current) => upsertMealPlans(current, [plan]));
-			return {
-				table: resourceTable,
-				id: plan.id,
-				title:
+				title = list.name;
+			} else {
+				const plan: MealPlan = {
+					...(row.data as unknown as MealPlan),
+					ownerId: row.owner_id,
+					sharedAt: (row.data as unknown as MealPlan).sharedAt ?? nowIso,
+				};
+				setMealPlans((current) => upsertMealPlans(current, [plan]));
+				title =
 					plan.description ||
-					`${formatMealPlanDateRange(plan.startDate, plan.endDate)} meal plan`,
-			};
+					`${formatMealPlanDateRange(plan.startDate, plan.endDate)} meal plan`;
+			}
+			// Redeeming a grocery-list/meal-plan share also cascades grants for
+			// everything it references (recipes, and a meal plan's linked
+			// grocery list — see resource-share-registry.ts's cascadeGrants),
+			// but only mints the grants; it doesn't fetch them. A full sync
+			// picks those up right away via sync-engine.ts's grant
+			// reconciliation, so the recipient sees the referenced recipes
+			// immediately instead of on whatever the next incidental sync
+			// happens to be.
+			await syncNow();
+			return { table: resourceTable, id: resourceId, title };
 		},
-		[],
+		[syncNow],
 	);
 
 	const value: AppDataContextValue = {

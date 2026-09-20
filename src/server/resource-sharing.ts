@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
+	cascadeResourceSharesForOwner as cascadeResourceSharesForOwnerCore,
 	createResourceShareCode as createResourceShareCodeCore,
 	redeemResourceShareCode as redeemResourceShareCodeCore,
 } from "#/lib/identity/resource-share-registry";
@@ -21,3 +22,14 @@ export const redeemResourceShareCode = createServerFn({ method: "POST" })
 		(data: { deviceId: string; deviceSecret: string; code: string }) => data,
 	)
 	.handler(({ data }) => redeemResourceShareCodeCore(data));
+
+export const cascadeResourceShares = createServerFn({ method: "POST" })
+	.validator(
+		(data: {
+			deviceId: string;
+			deviceSecret: string;
+			table: SyncTable;
+			id: string;
+		}) => data,
+	)
+	.handler(({ data }) => cascadeResourceSharesForOwnerCore(data));

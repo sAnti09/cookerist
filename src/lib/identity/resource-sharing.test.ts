@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const registerDeviceMock = vi.fn();
 const createResourceShareCodeMock = vi.fn();
 const redeemResourceShareCodeMock = vi.fn();
+const cascadeResourceSharesMock = vi.fn();
 
 vi.mock("#/server/identity", () => ({
 	registerDevice: (...args: unknown[]) => registerDeviceMock(...args),
@@ -16,6 +17,8 @@ vi.mock("#/server/resource-sharing", () => ({
 		createResourceShareCodeMock(...args),
 	redeemResourceShareCode: (...args: unknown[]) =>
 		redeemResourceShareCodeMock(...args),
+	cascadeResourceShares: (...args: unknown[]) =>
+		cascadeResourceSharesMock(...args),
 }));
 
 const SAMPLE_IDENTITY = {
@@ -30,6 +33,7 @@ beforeEach(() => {
 	registerDeviceMock.mockReset();
 	createResourceShareCodeMock.mockReset();
 	redeemResourceShareCodeMock.mockReset();
+	cascadeResourceSharesMock.mockReset();
 });
 
 describe("createShareCodeForResource", () => {
@@ -88,6 +92,36 @@ describe("redeemShareCode", () => {
 				deviceId: "device-1",
 				deviceSecret: "secret-1",
 				code: "ABCD1234",
+			},
+		});
+	});
+});
+
+describe("cascadeSharesForResource", () => {
+	it("does nothing when this device has no identity yet", async () => {
+		const { cascadeSharesForResource } = await import("./resource-sharing");
+
+		await cascadeSharesForResource("grocery_lists", "list-1");
+
+		expect(cascadeResourceSharesMock).not.toHaveBeenCalled();
+	});
+
+	it("re-derives cascaded grants using this device's existing identity", async () => {
+		window.localStorage.setItem(
+			"cookerist:device-identity",
+			JSON.stringify(SAMPLE_IDENTITY),
+		);
+		cascadeResourceSharesMock.mockResolvedValueOnce(undefined);
+		const { cascadeSharesForResource } = await import("./resource-sharing");
+
+		await cascadeSharesForResource("grocery_lists", "list-1");
+
+		expect(cascadeResourceSharesMock).toHaveBeenCalledWith({
+			data: {
+				deviceId: "device-1",
+				deviceSecret: "secret-1",
+				table: "grocery_lists",
+				id: "list-1",
 			},
 		});
 	});

@@ -145,6 +145,27 @@ export async function pushTombstone(
 	}
 }
 
+// Every resource id this account has been granted access to on `table` via
+// per-resource sharing (see CLAUDE.md's "Per-resource sharing" section) --
+// used by sync-engine.ts to discover a grant whose resource is still missing
+// locally. Deliberately independent of any watermark: a grant can be minted
+// for an already-existing, untouched row (e.g. cascading a grocery-list
+// share into the recipes it references — see resource-share-registry.ts's
+// cascadeResourceSharesForOwner) whose own `updated_at` predates this
+// device's watermark, which pullChangedSince alone would permanently miss.
+export async function pullGrantedResourceIds(
+	table: SyncTable,
+	granteeId: string,
+): Promise<string[]> {
+	const { data, error } = await supabase
+		.from("resource_shares")
+		.select("resource_id")
+		.eq("resource_table", table)
+		.eq("grantee_id", granteeId);
+	if (error) throw error;
+	return (data ?? []).map((row) => row.resource_id);
+}
+
 // Every row (including a tombstoned one — deleted_at is part of the select,
 // never filtered out) whose Postgres `updated_at` is newer than the given
 // watermark. The (owner_id, updated_at) index this table already has (see

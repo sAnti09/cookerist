@@ -164,6 +164,43 @@ export async function claimResourceShareCode(codeHash: string): Promise<{
 		: null;
 }
 
+// Like findResourceOwner, but also hands back the row's own `data` jsonb —
+// used by resource-share-registry.ts's referencedResources to discover which
+// recipes/grocery-list a grocery-list/meal-plan share needs to cascade into
+// (see CLAUDE.md's "Per-resource sharing" section: a grant on the parent
+// resource alone leaves everything it references unreadable, since those are
+// bare id references with no embedded content).
+export async function findResourceRow(
+	table: SyncTable,
+	id: string,
+): Promise<{ ownerId: string; data: unknown } | null> {
+	const { data, error } = await getClient()
+		.from(table)
+		.select("owner_id, data")
+		.eq("id", id)
+		.maybeSingle();
+	if (error) throw new Error(error.message);
+	return data ? { ownerId: data.owner_id, data: data.data } : null;
+}
+
+// Every account this resource has already been granted to (by this owner) —
+// used to re-derive cascaded grants (e.g. a new recipe added to an
+// already-shared grocery list) without needing a fresh share-code redemption.
+export async function listResourceShareGrantees(
+	table: SyncTable,
+	id: string,
+	ownerId: string,
+): Promise<string[]> {
+	const { data, error } = await getClient()
+		.from("resource_shares")
+		.select("grantee_id")
+		.eq("resource_table", table)
+		.eq("resource_id", id)
+		.eq("owner_id", ownerId);
+	if (error) throw new Error(error.message);
+	return (data ?? []).map((row) => row.grantee_id);
+}
+
 // Idempotent: redeeming a second code for a resource this account was
 // already granted just no-ops instead of erroring (the unique constraint
 // on (resource_table, resource_id, grantee_id) would otherwise conflict).

@@ -5,6 +5,7 @@ import {
 	upsertGroceryLists,
 } from "#/lib/grocery-storage";
 import { getDeviceIdentity } from "#/lib/identity/device";
+import { cascadeSharesForResource } from "#/lib/identity/resource-sharing";
 import type { MealPlan } from "#/lib/meal-plan";
 import {
 	loadMealPlans,
@@ -27,6 +28,8 @@ import {
 } from "#/lib/sync/pending-tombstones";
 import {
 	pullChangedSince,
+	pullGrantedResourceIds,
+	pullOne,
 	pushEntities,
 	pushShareRevocation,
 	pushTombstone,
@@ -166,6 +169,33 @@ async function syncTable<T extends Syncable>(
 	}
 
 	let merged = load();
+
+	// Discover a resource this account has been granted access to (per-
+	// resource sharing — see CLAUDE.md) but hasn't fetched yet. Needed
+	// because pullChangedSince above only catches a row whose own
+	// `updated_at` moved past the watermark — a grant minted for an
+	// already-existing, untouched row (cascading a grocery-list/meal-plan
+	// share into the recipes/grocery-list it references — see
+	// resource-share-registry.ts's cascadeResourceSharesForOwner, and the
+	// same cascade run once at redemption time) would otherwise never
+	// surface here. This is the same "first arrival" gap pullOne already
+	// solves for a freshly-redeemed share code, just not limited to the
+	// exact redemption moment.
+	try {
+		const grantedIds = await pullGrantedResourceIds(table, myUserId);
+		const knownIds = new Set([
+			...merged.map((entity) => entity.id),
+			...rows.map((row) => row.id),
+		]);
+		for (const id of grantedIds) {
+			if (knownIds.has(id)) continue;
+			const row = await pullOne(table, id);
+			if (row) rows.push(row);
+		}
+	} catch (error) {
+		console.error(`Grant reconciliation failed for ${table}:`, error);
+	}
+
 	if (rows.length > 0) {
 		const byId = new Map(merged.map((entity) => [entity.id, entity]));
 		let maxUpdatedAt = since;
@@ -236,6 +266,29 @@ async function syncTable<T extends Syncable>(
 				(newlyStampedIds.has(entity.id) || entity.updatedAt > pushWatermark),
 		);
 		await pushEntities(table, toPush);
+		// Re-derive cascaded grants for anything this device just pushed and
+		// actually owns (see resource-share-registry.ts's
+		// cascadeResourceSharesForOwner) -- covers a recipe added to an
+		// already-shared grocery list/meal plan after the original share code
+		// was redeemed. A no-op, server-side, for a resource nobody has ever
+		// shared (no existing grantees to cascade to). Never called for a
+		// resource shared *to* this account (ownerId !== myUserId) -- there'd
+		// be nothing to cascade, and the server's own ownership check would
+		// reject it anyway.
+		if (table !== "recipes") {
+			await Promise.all(
+				toPush
+					.filter((entity) => entity.ownerId === myUserId)
+					.map((entity) =>
+						cascadeSharesForResource(table, entity.id).catch((error) => {
+							console.error(
+								`Cascade share grants failed for ${table}/${entity.id}:`,
+								error,
+							);
+						}),
+					),
+			);
+		}
 		// Advance the watermark to the max `updatedAt` across every currently
 		// shared entity, not just the ones actually pushed this cycle — an
 		// entity already below the old watermark contributes nothing new to

@@ -22,9 +22,15 @@ const upsertMock = vi.fn(() => {
 const gtMock = vi.fn();
 // Same shape a real supabase-js query builder has: pullChangedSince chains
 // .gt() off select(), pullOne chains .eq().maybeSingle() off the same
-// select() call — both need to be available on whatever select() returns.
+// select() call, and pullGrantedResourceIds chains .eq().eq() (resolving
+// directly, no .maybeSingle()) off it too — all three need to be available
+// on whatever the first .eq() call returns.
 const maybeSingleMock = vi.fn();
-const singleEqMock = vi.fn(() => ({ maybeSingle: maybeSingleMock }));
+const grantedIdsSecondEqMock = vi.fn();
+const singleEqMock = vi.fn(() => ({
+	maybeSingle: maybeSingleMock,
+	eq: grantedIdsSecondEqMock,
+}));
 const selectMock = vi.fn(() => ({ gt: gtMock, eq: singleEqMock }));
 // resource_shares delete chain: .delete().eq().eq().eq().select() — three
 // chained eq() calls (resource_table, resource_id, grantee_id) before the
@@ -51,6 +57,7 @@ beforeEach(() => {
 	upsertSelectMock.mockReset();
 	gtMock.mockReset();
 	maybeSingleMock.mockReset();
+	grantedIdsSecondEqMock.mockReset();
 	singleEqMock.mockClear();
 	selectMock.mockClear();
 	fromMock.mockClear();
@@ -62,6 +69,7 @@ beforeEach(() => {
 	upsertSelectMock.mockResolvedValue({ data: [{ id: "r1" }], error: null });
 	gtMock.mockResolvedValue({ data: [], error: null });
 	maybeSingleMock.mockResolvedValue({ data: null, error: null });
+	grantedIdsSecondEqMock.mockResolvedValue({ data: [], error: null });
 	deleteEqSelectMock.mockResolvedValue({
 		data: [{ id: "share-1" }],
 		error: null,
@@ -296,6 +304,45 @@ describe("pullChangedSince", () => {
 
 		await expect(
 			pullChangedSince("recipes", "2026-01-01T00:00:00.000Z"),
+		).rejects.toThrow("boom");
+	});
+});
+
+describe("pullGrantedResourceIds", () => {
+	it("selects every resource id granted to this account on the given table", async () => {
+		grantedIdsSecondEqMock.mockResolvedValue({
+			data: [{ resource_id: "recipe-1" }, { resource_id: "recipe-2" }],
+			error: null,
+		});
+		const { pullGrantedResourceIds } = await import("./sync-client");
+
+		const ids = await pullGrantedResourceIds("recipes", "grantee-1");
+
+		expect(fromMock).toHaveBeenCalledWith("resource_shares");
+		expect(singleEqMock).toHaveBeenCalledWith("resource_table", "recipes");
+		expect(grantedIdsSecondEqMock).toHaveBeenCalledWith(
+			"grantee_id",
+			"grantee-1",
+		);
+		expect(ids).toEqual(["recipe-1", "recipe-2"]);
+	});
+
+	it("returns an empty array when nothing has been granted", async () => {
+		grantedIdsSecondEqMock.mockResolvedValue({ data: null, error: null });
+		const { pullGrantedResourceIds } = await import("./sync-client");
+
+		expect(await pullGrantedResourceIds("recipes", "grantee-1")).toEqual([]);
+	});
+
+	it("throws when Supabase returns an error", async () => {
+		grantedIdsSecondEqMock.mockResolvedValue({
+			data: null,
+			error: new Error("boom"),
+		});
+		const { pullGrantedResourceIds } = await import("./sync-client");
+
+		await expect(
+			pullGrantedResourceIds("recipes", "grantee-1"),
 		).rejects.toThrow("boom");
 	});
 });
