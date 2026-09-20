@@ -132,6 +132,13 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 				href: SITE_URL,
 			},
 		],
+		scripts: [
+			{
+				type: "module",
+				src: "https://static.cloudflareinsights.com/beacon.min.js",
+				"data-cf-beacon": '{"token": "8f4009aedfcd4d4bb9069c55df8a9734"}',
+			},
+		],
 	}),
 	shellComponent: RootDocument,
 });
