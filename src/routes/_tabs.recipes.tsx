@@ -72,6 +72,7 @@ function RecipesScreen() {
 		deleteRecipe,
 		openAccountDrawer,
 		isSharedWithMe,
+		generateThumbnailForRecipe,
 	} = useAppData();
 	const [pending, setPending] = useState<PendingRow[]>([]);
 	const [promptValue, setPromptValue] = useState("");
@@ -190,7 +191,17 @@ function RecipesScreen() {
 			.mutateAsync({ prompt, timezone: getUserTimezone() })
 			.then((result) => {
 				if (result.type === "success") {
-					createRecipe(toStoredRecipe(prompt, result.recipe, result.truncated));
+					const recipe = toStoredRecipe(
+						prompt,
+						result.recipe,
+						result.truncated,
+					);
+					createRecipe(recipe);
+					// Fire-and-forget: the recipe is already saved and visible with
+					// thumbnailUrl null, so a slow/failed image generation never
+					// blocks or fails recipe creation itself — see
+					// app-data-context.tsx's generateThumbnailForRecipe.
+					generateThumbnailForRecipe(recipe);
 					setPending((rows) => {
 						const row = rows.find((r) => r.localId === localId);
 						if (row?.photo) URL.revokeObjectURL(row.photo.previewUrl);

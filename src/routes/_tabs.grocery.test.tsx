@@ -12,6 +12,17 @@ vi.mock("#/server/generate-recipe", () => ({
 	modifyRecipe: vi.fn(),
 }));
 
+// AppDataProvider imports this transitively (generateThumbnailForRecipe) —
+// stubbed so it never hits the real DeepInfra/R2 modules, which pull in
+// cloudflare:workers (unavailable outside a Workers/Miniflare runtime).
+vi.mock("#/server/generate-recipe-thumbnail", () => ({
+	// Never resolves — harmless no-op for the backfill migration (see
+	// generate-recipe-thumbnails.ts), which every seeded-recipe mount here is
+	// a candidate for; a resolved/rejected value would let the migration
+	// write thumbnailAttempts changes into localStorage mid-test.
+	generateRecipeThumbnail: vi.fn(() => new Promise(() => {})),
+}));
+
 const pushShareRevocationMock = vi.fn();
 vi.mock("#/lib/sync/sync-client", () => ({
 	pushTombstone: vi.fn(),

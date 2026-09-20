@@ -31,6 +31,7 @@ class MockIntersectionObserver {
 const generateRecipeMock = vi.fn();
 const identifyDishMock = vi.fn();
 const categorizeIngredientsMock = vi.fn();
+const generateRecipeThumbnailMock = vi.fn();
 
 vi.mock("#/server/generate-recipe", () => ({
 	generateRecipe: (...args: unknown[]) => generateRecipeMock(...args),
@@ -40,6 +41,15 @@ vi.mock("#/server/generate-recipe", () => ({
 
 vi.mock("#/server/identify-dish", () => ({
 	identifyDish: (...args: unknown[]) => identifyDishMock(...args),
+}));
+
+// A real (unmocked) request here would hit DeepInfra/R2 via cloudflare:workers
+// (unavailable outside a Workers/Miniflare runtime) — never resolved by
+// default so a row's placeholder state is easy to assert on before a test
+// explicitly resolves it.
+vi.mock("#/server/generate-recipe-thumbnail", () => ({
+	generateRecipeThumbnail: (...args: unknown[]) =>
+		generateRecipeThumbnailMock(...args),
 }));
 
 // The categorize-recipe-ingredients migration calls this in the background
@@ -136,6 +146,8 @@ beforeEach(() => {
 	identifyDishMock.mockReset();
 	categorizeIngredientsMock.mockReset();
 	categorizeIngredientsMock.mockResolvedValue({ type: "success", items: [] });
+	generateRecipeThumbnailMock.mockReset();
+	generateRecipeThumbnailMock.mockReturnValue(new Promise(() => {}));
 	window.localStorage.clear();
 	window.sessionStorage.clear();
 	pushShareRevocationMock.mockReset();
@@ -704,6 +716,77 @@ describe("Recipes screen", () => {
 
 			expect(await screen.findByText("Pancakes")).toBeInTheDocument();
 			expect(identifyDishMock).toHaveBeenCalledTimes(2);
+		});
+	});
+
+	describe("thumbnail generation", () => {
+		it("fires a thumbnail request for the new recipe right after it's created, without blocking the saved result", async () => {
+			generateRecipeMock.mockResolvedValueOnce({
+				type: "success",
+				recipe: validRecipe,
+			});
+			await renderApp("/recipes");
+
+			await submitPrompt("shrimp pasta for 2");
+
+			expect(await screen.findByText(validRecipe.title)).toBeInTheDocument();
+			expect(generateRecipeThumbnailMock).toHaveBeenCalledTimes(1);
+			expect(generateRecipeThumbnailMock).toHaveBeenCalledWith({
+				data: expect.objectContaining({
+					title: validRecipe.title,
+					overview: validRecipe.overview,
+				}),
+			});
+		});
+
+		it("shows a placeholder for a recipe with no thumbnail yet, then the real image once generation resolves", async () => {
+			let resolveThumbnail!: (value: unknown) => void;
+			generateRecipeThumbnailMock.mockReturnValueOnce(
+				new Promise((r) => {
+					resolveThumbnail = r;
+				}),
+			);
+			generateRecipeMock.mockResolvedValueOnce({
+				type: "success",
+				recipe: validRecipe,
+			});
+			await renderApp("/recipes");
+
+			await submitPrompt("shrimp pasta for 2");
+			const row = (await screen.findByText(validRecipe.title)).closest("a");
+			if (!row) throw new Error("row not found");
+			expect(row.querySelector("img")).not.toBeInTheDocument();
+
+			await act(async () => {
+				resolveThumbnail({
+					type: "success",
+					url: "https://example.com/recipes/r1.png",
+				});
+				await Promise.resolve();
+			});
+
+			expect(row.querySelector("img")).toHaveAttribute(
+				"src",
+				"https://example.com/recipes/r1.png",
+			);
+		});
+
+		it("keeps showing the placeholder (never a broken image) when thumbnail generation fails", async () => {
+			generateRecipeThumbnailMock.mockResolvedValueOnce({
+				type: "error",
+				message: "DeepInfra image generation failed: 500 Internal Server Error",
+			});
+			generateRecipeMock.mockResolvedValueOnce({
+				type: "success",
+				recipe: validRecipe,
+			});
+			await renderApp("/recipes");
+
+			await submitPrompt("shrimp pasta for 2");
+			const row = await screen.findByText(validRecipe.title);
+
+			await waitFor(() => expect(generateRecipeThumbnailMock).toHaveResolved());
+			expect(row.closest("a")?.querySelector("img")).not.toBeInTheDocument();
 		});
 	});
 });

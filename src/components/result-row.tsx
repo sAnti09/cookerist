@@ -169,40 +169,62 @@ export function RecipeResultRow({
 				id={`recipe-${recipe.id}`}
 				data-testid={`recipe-row-${recipe.id}`}
 				{...swipe.handlers}
-				className="card block translate-x-0 scroll-mt-6 bg-card p-4 text-ink no-underline transition-transform duration-200"
+				className="card flex translate-x-0 scroll-mt-6 items-center gap-3 bg-card p-4 text-ink no-underline transition-transform duration-200"
 			>
-				<div className="flex items-center gap-1.5">
-					<h3 className="display-title text-lg text-ink">{recipe.title}</h3>
-					{shared ? (
-						<Users
-							className="size-[15px] shrink-0 text-ink-dim"
-							aria-label="Shared with you"
-						/>
-					) : null}
-				</div>
-				<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
-					<span>{date}</span>
-					{recipe.difficulty ? (
-						<DifficultyBadge difficulty={recipe.difficulty} />
-					) : null}
-					{recipe.estimatedMinutes != null ? (
-						<span className="inline-flex items-center gap-1 tabular-nums">
-							<Clock className="size-3" aria-hidden="true" />
-							{formatEstimatedTime(recipe.estimatedMinutes)}
-						</span>
-					) : null}
-					{recipe.caloriesPerServing != null ? (
-						<span className="inline-flex items-center gap-1 tabular-nums">
-							<Flame className="size-3" aria-hidden="true" />
-							{formatCaloriesPerServing(recipe.caloriesPerServing)}
-						</span>
-					) : null}
-					{recipe.favorite ? (
-						<Star
-							className="size-3 fill-accent text-accent"
-							aria-label="Favorited"
-						/>
-					) : null}
+				{recipe.thumbnailUrl ? (
+					<img
+						src={recipe.thumbnailUrl}
+						alt=""
+						className="size-10 shrink-0 rounded-[10px] object-cover"
+					/>
+				) : (
+					// Placeholder while a thumbnail is pending/never generated — never
+					// a broken-image icon, and never collapses away (would cause
+					// layout shift the moment a real thumbnail does arrive). No retry
+					// affordance here — that lives on the detail screen (see
+					// _tabs.recipes_.$recipeId.tsx) rather than competing with this
+					// row's own tap/swipe gestures.
+					<div
+						aria-hidden="true"
+						className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-bg2"
+					>
+						<Flame className="size-4 text-ink-dim" aria-hidden="true" />
+					</div>
+				)}
+				<div className="min-w-0 flex-1">
+					<div className="flex items-center gap-1.5">
+						<h3 className="display-title text-lg text-ink">{recipe.title}</h3>
+						{shared ? (
+							<Users
+								className="size-[15px] shrink-0 text-ink-dim"
+								aria-label="Shared with you"
+							/>
+						) : null}
+					</div>
+					<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
+						<span>{date}</span>
+						{recipe.difficulty ? (
+							<DifficultyBadge difficulty={recipe.difficulty} />
+						) : null}
+						{recipe.estimatedMinutes != null ? (
+							<span className="inline-flex items-center gap-1 tabular-nums">
+								<Clock className="size-3" aria-hidden="true" />
+								{formatEstimatedTime(recipe.estimatedMinutes)}
+							</span>
+						) : null}
+						{recipe.caloriesPerServing != null ? (
+							<span className="inline-flex items-center gap-1 tabular-nums">
+								<Flame className="size-3" aria-hidden="true" />
+								{formatCaloriesPerServing(recipe.caloriesPerServing)}
+							</span>
+						) : null}
+						{recipe.favorite ? (
+							<Star
+								className="size-3 fill-accent text-accent"
+								aria-label="Favorited"
+							/>
+						) : null}
+					</div>
 				</div>
 			</Link>
 		</div>

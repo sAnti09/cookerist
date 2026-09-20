@@ -1,8 +1,19 @@
+import { fileURLToPath } from "node:url";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-	resolve: { tsconfigPaths: true },
+	resolve: {
+		tsconfigPaths: true,
+		alias: {
+			// "cloudflare:workers" (src/lib/r2/client.ts) only resolves inside a
+			// real Workers/Miniflare runtime -- see the stub file's own comment
+			// for why vi.mock() alone can't stand in for this.
+			"cloudflare:workers": fileURLToPath(
+				new URL("./src/test-utils/cloudflare-workers-stub.ts", import.meta.url),
+			),
+		},
+	},
 	plugins: [viteReact()],
 	test: {
 		environment: "jsdom",

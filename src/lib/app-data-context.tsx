@@ -34,11 +34,13 @@ import {
 	upsertMealPlans,
 } from "#/lib/meal-plan-storage";
 import { MIGRATIONS, runMigrations } from "#/lib/migrations";
-import type { Recipe } from "#/lib/recipe";
+import { MAX_THUMBNAIL_ATTEMPTS, type Recipe } from "#/lib/recipe";
 import {
 	deleteRecipe,
 	loadRecipes,
+	recordThumbnailAttemptFailure,
 	saveRecipe,
+	setRecipeThumbnail,
 	toggleFavoriteRecipe,
 	updateRecipe,
 	updateRecipes,
@@ -60,6 +62,7 @@ import {
 	type SyncTable,
 } from "#/lib/sync/sync-client";
 import { runSync } from "#/lib/sync/sync-engine";
+import { generateRecipeThumbnail } from "#/server/generate-recipe-thumbnail";
 
 // The shared source of truth for recipes/grocery lists across every route —
 // the old single-page app kept this as local useState in routes/index.tsx,
@@ -92,6 +95,21 @@ type AppDataContextValue = {
 	createMealPlan: (plan: MealPlan) => void;
 	updateMealPlan: (plan: MealPlan) => void;
 	deleteMealPlan: (id: string) => void;
+	// Generates (or retries) a thumbnail image for a recipe — fired once
+	// automatically right after creation (see _tabs.recipes.tsx's submit()),
+	// and again via the detail screen's "Generate image" button while
+	// thumbnailAttempts < MAX_THUMBNAIL_ATTEMPTS. Takes the full Recipe
+	// (rather than just an id looked up from context state) specifically so
+	// the creation-time caller can invoke it in the same tick as createRecipe
+	// without racing that state update's own re-render — is a no-op if the
+	// passed recipe already has a thumbnail or is already at the attempt cap,
+	// so it's always safe to call regardless of what the caller currently has
+	// rendered.
+	generateThumbnailForRecipe: (recipe: Recipe) => void;
+	// True while a generateThumbnailForRecipe call for this id is in flight —
+	// transient, in-memory only (never persisted), so the detail screen can
+	// show a loading state and the button can't be double-tapped mid-request.
+	isGeneratingThumbnail: (id: string) => boolean;
 	// See CLAUDE.md's "Sharing feature" roadmap item / src/lib/sync/. There's
 	// no per-item opt-in anymore — every recipe/grocery-list/meal-plan syncs
 	// automatically once this device has an identity (see sync-engine.ts's
@@ -388,6 +406,67 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		[scheduleSync],
 	);
 
+	// Transient (never persisted) — which recipe ids currently have a
+	// thumbnail-generation request in flight. See generateThumbnailForRecipe.
+	const [generatingThumbnailIds, setGeneratingThumbnailIds] = useState<
+		Set<string>
+	>(new Set());
+
+	const isGeneratingThumbnail = useCallback(
+		(id: string) => generatingThumbnailIds.has(id),
+		[generatingThumbnailIds],
+	);
+
+	// The one place the 2-attempt cap is enforced — both the automatic
+	// trigger (right after creation) and the manual "Generate image" button
+	// call this, so neither can bypass it. A no-op if the passed recipe
+	// already has a thumbnail, is already at the cap, or a request for it is
+	// already in flight — callers don't need to check any of that themselves
+	// first, though the detail screen still does so it can hide the button
+	// entirely once the cap is reached rather than rendering a button that
+	// no-ops. Takes the full recipe rather than looking one up from `recipes`
+	// state so the creation-time caller can invoke this in the same tick as
+	// createRecipe without racing that state update's own re-render (a
+	// state-lookup version would still see the pre-creation array here).
+	const generateThumbnailForRecipe = useCallback(
+		(recipe: Recipe) => {
+			const id = recipe.id;
+			if (
+				recipe.thumbnailUrl ||
+				(recipe.thumbnailAttempts ?? 0) >= MAX_THUMBNAIL_ATTEMPTS ||
+				generatingThumbnailIds.has(id)
+			) {
+				return;
+			}
+			setGeneratingThumbnailIds((current) => new Set(current).add(id));
+			generateRecipeThumbnail({
+				data: { recipeId: id, title: recipe.title, overview: recipe.overview },
+			})
+				.then((result) => {
+					if (result.type === "success") {
+						setRecipes((current) =>
+							setRecipeThumbnail(current, id, result.url),
+						);
+					} else {
+						setRecipes((current) => recordThumbnailAttemptFailure(current, id));
+					}
+				})
+				.catch(() => {
+					setRecipes((current) => recordThumbnailAttemptFailure(current, id));
+				})
+				.finally(() => {
+					setGeneratingThumbnailIds((current) => {
+						if (!current.has(id)) return current;
+						const next = new Set(current);
+						next.delete(id);
+						return next;
+					});
+					scheduleSync(["recipes"]);
+				});
+		},
+		[generatingThumbnailIds, scheduleSync],
+	);
+
 	const handleDeleteGroceryList = useCallback(
 		(id: string) => {
 			const list = groceryLists.find((l) => l.id === id);
@@ -609,6 +688,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		createMealPlan: handleCreateMealPlan,
 		updateMealPlan: handleUpdateMealPlan,
 		deleteMealPlan: handleDeleteMealPlan,
+		generateThumbnailForRecipe,
+		isGeneratingThumbnail,
 		hasDeviceIdentity,
 		createPairingCode: handleCreatePairingCode,
 		linkDevice: handleLinkDevice,

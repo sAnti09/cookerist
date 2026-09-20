@@ -8,6 +8,10 @@ import {
 	categorizeRecipeIngredients,
 } from "./categorize-recipe-ingredients";
 import {
+	GENERATE_RECIPE_THUMBNAILS_MIGRATION_ID,
+	generateRecipeThumbnails,
+} from "./generate-recipe-thumbnails";
+import {
 	METRIC_GROCERY_UNITS_MIGRATION_ID,
 	migrateGroceryListsToMetricUnits,
 } from "./metric-grocery-units";
@@ -85,5 +89,11 @@ export const MIGRATIONS: readonly Migration[] = [
 	{
 		id: ADD_SYNC_METADATA_MIGRATION_ID,
 		run: addSyncMetadata,
+	},
+	// One-time backfill of a thumbnail image for every recipe saved before
+	// thumbnails existed — see generate-recipe-thumbnails.ts.
+	{
+		id: GENERATE_RECIPE_THUMBNAILS_MIGRATION_ID,
+		run: generateRecipeThumbnails,
 	},
 ];

@@ -1,6 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { GENERATE_RECIPE_THUMBNAILS_MIGRATION_ID } from "#/lib/migrations/generate-recipe-thumbnails";
 import { loadRecipes, saveRecipe, toStoredRecipe } from "#/lib/recipes-storage";
 import { renderApp } from "#/test-utils/render-app";
 
@@ -10,6 +11,14 @@ vi.mock("#/server/generate-recipe", () => ({
 	generateRecipe: vi.fn(),
 	continueRecipe: vi.fn(),
 	modifyRecipe: (...args: unknown[]) => modifyRecipeMock(...args),
+}));
+
+const generateRecipeThumbnailMock = vi.fn();
+// A real (unmocked) request here would hit DeepInfra/R2 via cloudflare:workers
+// (unavailable outside a Workers/Miniflare runtime).
+vi.mock("#/server/generate-recipe-thumbnail", () => ({
+	generateRecipeThumbnail: (...args: unknown[]) =>
+		generateRecipeThumbnailMock(...args),
 }));
 
 const getDeviceIdentityMock = vi.fn();
@@ -54,12 +63,24 @@ const validRecipe = {
 beforeEach(() => {
 	modifyRecipeMock.mockReset();
 	window.localStorage.clear();
+	// Every seeded recipe here starts without a thumbnail, which makes it a
+	// candidate for the generate-recipe-thumbnails backfill migration — mark
+	// it already-run so it doesn't fire in the background on mount and
+	// consume generateRecipeThumbnailMock's queued return values ahead of
+	// this file's own explicit calls (the migration gets its own dedicated
+	// test file).
+	window.localStorage.setItem(
+		"cookerist:completed-migrations",
+		JSON.stringify([GENERATE_RECIPE_THUMBNAILS_MIGRATION_ID]),
+	);
 	getDeviceIdentityMock.mockReset();
 	ensureDeviceIdentityMock.mockReset();
 	runSyncMock.mockReset();
 	createResourceShareCodeMock.mockReset();
 	getDeviceIdentityMock.mockReturnValue(null);
 	runSyncMock.mockResolvedValue(null);
+	generateRecipeThumbnailMock.mockReset();
+	generateRecipeThumbnailMock.mockReturnValue(new Promise(() => {}));
 });
 
 function seedRecipe(
@@ -68,6 +89,8 @@ function seedRecipe(
 		favorite?: boolean;
 		sharedAt?: string | null;
 		ownerId?: string | null;
+		thumbnailUrl?: string | null;
+		thumbnailAttempts?: number;
 	} = {},
 ) {
 	const recipe = toStoredRecipe("shrimp pasta for 2", {
@@ -79,6 +102,8 @@ function seedRecipe(
 		favorite: overrides.favorite ?? false,
 		sharedAt: overrides.sharedAt ?? null,
 		ownerId: overrides.ownerId ?? null,
+		thumbnailUrl: overrides.thumbnailUrl ?? null,
+		thumbnailAttempts: overrides.thumbnailAttempts ?? 0,
 	});
 	return saved[0];
 }
@@ -316,5 +341,82 @@ describe("Recipe detail screen", () => {
 		expect(
 			screen.getByRole("button", { name: `Remove ${recipe.title}` }),
 		).toBeInTheDocument();
+	});
+
+	describe("thumbnail", () => {
+		it("shows the generated image directly when a thumbnail already exists", async () => {
+			const recipe = seedRecipe({
+				thumbnailUrl: "https://example.com/recipes/r1.png",
+			});
+			await renderApp(`/recipes/${recipe.id}`);
+
+			expect(
+				screen.getByRole("heading", { name: recipe.title }),
+			).toBeInTheDocument();
+			const hero = document.querySelector(
+				`img[src="https://example.com/recipes/r1.png"]`,
+			);
+			expect(hero).toBeInTheDocument();
+			expect(
+				screen.queryByRole("button", { name: "Generate image" }),
+			).not.toBeInTheDocument();
+		});
+
+		it("offers a Generate image button when there's no thumbnail yet, and shows the result once it resolves", async () => {
+			let resolveThumbnail!: (value: unknown) => void;
+			generateRecipeThumbnailMock.mockReturnValueOnce(
+				new Promise((r) => {
+					resolveThumbnail = r;
+				}),
+			);
+			const recipe = seedRecipe({ thumbnailAttempts: 1 });
+			await renderApp(`/recipes/${recipe.id}`);
+			const user = userEvent.setup();
+
+			const button = screen.getByRole("button", { name: "Generate image" });
+			await user.click(button);
+
+			expect(generateRecipeThumbnailMock).toHaveBeenCalledWith({
+				data: expect.objectContaining({
+					recipeId: recipe.id,
+					title: recipe.title,
+					overview: recipe.overview,
+				}),
+			});
+			expect(
+				screen.queryByRole("button", { name: "Generate image" }),
+			).not.toBeInTheDocument();
+
+			resolveThumbnail({
+				type: "success",
+				url: "https://example.com/recipes/r1.png",
+			});
+
+			// A decorative thumbnail (alt="") isn't exposed with role "img" —
+			// queried directly, same as result-row.test.tsx's photo previews.
+			await waitFor(() => {
+				expect(
+					document.querySelector(
+						'img[src="https://example.com/recipes/r1.png"]',
+					),
+				).toBeInTheDocument();
+			});
+		});
+
+		it("shows a 'could not be generated' message with no button once the attempt cap is reached", async () => {
+			// MAX_THUMBNAIL_ATTEMPTS is 2 (see src/lib/recipe.ts) — both the
+			// automatic creation-time attempt and one manual retry have already
+			// been spent.
+			const recipe = seedRecipe({ thumbnailAttempts: 2 });
+			await renderApp(`/recipes/${recipe.id}`);
+
+			expect(
+				screen.getByText(/image could not be generated for this recipe/i),
+			).toBeInTheDocument();
+			expect(
+				screen.queryByRole("button", { name: "Generate image" }),
+			).not.toBeInTheDocument();
+			expect(generateRecipeThumbnailMock).not.toHaveBeenCalled();
+		});
 	});
 });

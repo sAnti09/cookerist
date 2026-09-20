@@ -14,11 +14,16 @@ import { CookMode } from "#/components/cook-mode";
 import { RecipeDetail } from "#/components/recipe-detail";
 import { RecipeModificationDialog } from "#/components/recipe-modification-dialog";
 import { ShareResourceDialog } from "#/components/share-resource-dialog";
+import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DifficultyBadge } from "#/components/ui/difficulty-badge";
 import { IconButton } from "#/components/ui/icon-button";
 import { useAppData } from "#/lib/app-data-context";
-import { formatCaloriesPerServing, formatEstimatedTime } from "#/lib/recipe";
+import {
+	formatCaloriesPerServing,
+	formatEstimatedTime,
+	MAX_THUMBNAIL_ATTEMPTS,
+} from "#/lib/recipe";
 import { useGoBack } from "#/lib/use-go-back";
 import { cn } from "#/lib/utils";
 
@@ -57,6 +62,8 @@ function RecipeDetailScreen() {
 		updateRecipe,
 		createRecipe,
 		isSharedWithMe,
+		generateThumbnailForRecipe,
+		isGeneratingThumbnail,
 	} = useAppData();
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const [modifyDialogOpen, setModifyDialogOpen] = useState(false);
@@ -153,6 +160,35 @@ function RecipeDetailScreen() {
 			<div
 				className={cn("px-5 pt-5", recipe.steps.length > 0 ? "pb-28" : "pb-6")}
 			>
+				{recipe.thumbnailUrl ? (
+					<img
+						src={recipe.thumbnailUrl}
+						alt=""
+						className="mb-4 aspect-[16/9] w-full rounded-[18px] object-cover"
+					/>
+				) : (
+					<div
+						aria-hidden={isGeneratingThumbnail(recipe.id)}
+						className="mb-4 flex aspect-[16/9] w-full flex-col items-center justify-center gap-2 rounded-[18px] bg-bg2 px-4 text-center"
+					>
+						<Flame className="size-6 text-ink-dim" aria-hidden="true" />
+						{isGeneratingThumbnail(recipe.id) ? (
+							<p className="text-xs text-ink-dim">Generating image…</p>
+						) : (recipe.thumbnailAttempts ?? 0) < MAX_THUMBNAIL_ATTEMPTS ? (
+							<Button
+								variant="secondary"
+								className="h-auto px-3 py-1.5 text-xs"
+								onClick={() => generateThumbnailForRecipe(recipe)}
+							>
+								Generate image
+							</Button>
+						) : (
+							<p className="text-xs text-ink-dim">
+								Image could not be generated for this recipe
+							</p>
+						)}
+					</div>
+				)}
 				<h1 className="display-title text-2xl font-semibold leading-tight">
 					{recipe.title}
 				</h1>
