@@ -1,13 +1,18 @@
+import { Monitor, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "#/lib/utils";
 
 type ThemeMode = "system" | "light" | "dark";
 
 const STORAGE_KEY = "cookerist:theme";
-const OPTIONS: Array<{ value: ThemeMode; label: string }> = [
-	{ value: "system", label: "System" },
-	{ value: "light", label: "Light" },
-	{ value: "dark", label: "Dark" },
+const OPTIONS: Array<{
+	value: ThemeMode;
+	label: string;
+	icon: typeof Monitor;
+}> = [
+	{ value: "system", label: "System", icon: Monitor },
+	{ value: "light", label: "Light", icon: Sun },
+	{ value: "dark", label: "Dark", icon: Moon },
 ];
 
 function applyTheme(mode: ThemeMode) {
@@ -50,15 +55,18 @@ export function ThemeToggle() {
 					key={option.value}
 					type="button"
 					aria-pressed={mode === option.value}
+					aria-label={option.label}
+					title={option.label}
 					onClick={() => handleSelect(option.value)}
 					className={cn(
-						"rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+						"flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3",
 						mode === option.value
 							? "bg-primary text-primary-foreground"
 							: "text-ink-dim hover:bg-secondary",
 					)}
 				>
-					{option.label}
+					<option.icon className="size-3.5" aria-hidden="true" />
+					<span className="hidden sm:inline">{option.label}</span>
 				</button>
 			))}
 		</div>
