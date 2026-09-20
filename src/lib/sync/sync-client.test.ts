@@ -5,10 +5,20 @@ vi.mock("#/lib/identity/device", () => ({
 	getDeviceIdentity: () => getDeviceIdentityMock(),
 }));
 
-const upsertMock = vi.fn();
-const eqSelectMock = vi.fn();
-const eqMock = vi.fn(() => ({ select: eqSelectMock }));
-const updateMock = vi.fn(() => ({ eq: eqMock }));
+// upsert() is used two ways in sync-client.ts: pushEntities awaits it bare
+// (no further chaining), while pushTombstone chains .select("id") off it
+// before awaiting — so the mock's return value needs to be both directly
+// awaitable (resolving to upsertResolvedValue) *and* expose a chainable
+// .select(), same as the real supabase-js query builder.
+let upsertResolvedValue: { error: unknown } = { error: null };
+const upsertSelectMock = vi.fn();
+const upsertMock = vi.fn(() => {
+	const promise = Promise.resolve(upsertResolvedValue) as Promise<{
+		error: unknown;
+	}> & { select: typeof upsertSelectMock };
+	promise.select = upsertSelectMock;
+	return promise;
+});
 const gtMock = vi.fn();
 // Same shape a real supabase-js query builder has: pullChangedSince chains
 // .gt() off select(), pullOne chains .eq().maybeSingle() off the same
@@ -26,7 +36,6 @@ const deleteEq1Mock = vi.fn(() => ({ eq: deleteEq2Mock }));
 const deleteMock = vi.fn(() => ({ eq: deleteEq1Mock }));
 const fromMock = vi.fn((_table: string) => ({
 	upsert: upsertMock,
-	update: updateMock,
 	delete: deleteMock,
 	select: selectMock,
 }));
@@ -37,10 +46,9 @@ vi.mock("#/lib/supabase/client", () => ({
 beforeEach(() => {
 	vi.resetModules();
 	getDeviceIdentityMock.mockReset();
-	upsertMock.mockReset();
-	eqSelectMock.mockReset();
-	eqMock.mockClear();
-	updateMock.mockClear();
+	upsertMock.mockClear();
+	upsertResolvedValue = { error: null };
+	upsertSelectMock.mockReset();
 	gtMock.mockReset();
 	maybeSingleMock.mockReset();
 	singleEqMock.mockClear();
@@ -51,8 +59,7 @@ beforeEach(() => {
 	deleteEq2Mock.mockClear();
 	deleteEq1Mock.mockClear();
 	deleteMock.mockClear();
-	upsertMock.mockResolvedValue({ error: null });
-	eqSelectMock.mockResolvedValue({ data: [{ id: "r1" }], error: null });
+	upsertSelectMock.mockResolvedValue({ data: [{ id: "r1" }], error: null });
 	gtMock.mockResolvedValue({ data: [], error: null });
 	maybeSingleMock.mockResolvedValue({ data: null, error: null });
 	deleteEqSelectMock.mockResolvedValue({
@@ -95,7 +102,7 @@ describe("pushEntities", () => {
 
 	it("throws when Supabase returns an error", async () => {
 		getDeviceIdentityMock.mockReturnValue({ userId: "u1" });
-		upsertMock.mockResolvedValue({ error: new Error("boom") });
+		upsertResolvedValue = { error: new Error("boom") };
 		const { pushEntities } = await import("./sync-client");
 
 		await expect(pushEntities("recipes", [{ id: "r1" }])).rejects.toThrow(
@@ -210,33 +217,56 @@ describe("pullOne", () => {
 });
 
 describe("pushTombstone", () => {
-	it("soft-deletes the row by id", async () => {
+	it("does nothing when this device has no identity", async () => {
+		getDeviceIdentityMock.mockReturnValue(null);
+		const { pushTombstone } = await import("./sync-client");
+
+		await pushTombstone("recipes", "r1");
+
+		expect(fromMock).not.toHaveBeenCalled();
+	});
+
+	// Upserts (rather than a plain conditional UPDATE) so the tombstone lands
+	// even when the row never actually reached Supabase in the first place —
+	// see the function's own comment in sync-client.ts for the resurrection
+	// bug this fixes. `data` only needs to satisfy the table's own
+	// `(data->>'id')::uuid = id` check; its exact shape is never read back,
+	// since a pulled row with deleted_at set skips straight to removal
+	// (sync-engine.ts) without ever looking at `data`.
+	it("upserts the row already tombstoned, owned by this device's account", async () => {
+		getDeviceIdentityMock.mockReturnValue({ userId: "u1" });
 		const { pushTombstone } = await import("./sync-client");
 
 		await pushTombstone("recipes", "r1");
 
 		expect(fromMock).toHaveBeenCalledWith("recipes");
-		expect(updateMock).toHaveBeenCalledWith(
-			expect.objectContaining({ deleted_at: expect.any(String) }),
-		);
-		expect(eqMock).toHaveBeenCalledWith("id", "r1");
-		expect(eqSelectMock).toHaveBeenCalledWith("id");
+		expect(upsertMock).toHaveBeenCalledWith({
+			id: "r1",
+			owner_id: "u1",
+			data: { id: "r1" },
+			deleted_at: expect.any(String),
+		});
+		expect(upsertSelectMock).toHaveBeenCalledWith("id");
 	});
 
 	it("throws when Supabase returns an error", async () => {
-		eqSelectMock.mockResolvedValue({ data: null, error: new Error("boom") });
+		getDeviceIdentityMock.mockReturnValue({ userId: "u1" });
+		upsertSelectMock.mockResolvedValue({
+			data: null,
+			error: new Error("boom"),
+		});
 		const { pushTombstone } = await import("./sync-client");
 
 		await expect(pushTombstone("recipes", "r1")).rejects.toThrow("boom");
 	});
 
-	// PostgREST returns error: null just as readily when the update's WHERE/RLS
-	// predicate matches zero rows (stale JWT, or the row was never pushed to
-	// Supabase in the first place) as when it succeeds — without this check a
-	// no-op update looked identical to a real tombstone, so the caller deleted
-	// the entity locally while Supabase kept serving it to every paired device.
-	it("throws when the update matches no row, so a silent no-op isn't mistaken for success", async () => {
-		eqSelectMock.mockResolvedValue({ data: [], error: null });
+	// PostgREST returns error: null just as readily on an upsert an RLS policy
+	// silently no-ops as on one that truly succeeded — without this check a
+	// no-op looked identical to a real tombstone, so the caller deleted the
+	// entity locally while Supabase kept serving it to every paired device.
+	it("throws when the upsert matches no row, so a silent no-op isn't mistaken for success", async () => {
+		getDeviceIdentityMock.mockReturnValue({ userId: "u1" });
+		upsertSelectMock.mockResolvedValue({ data: [], error: null });
 		const { pushTombstone } = await import("./sync-client");
 
 		await expect(pushTombstone("recipes", "r1")).rejects.toThrow(

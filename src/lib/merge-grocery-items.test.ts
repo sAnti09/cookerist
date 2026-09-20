@@ -30,6 +30,20 @@ describe("mergeGroceryListItems", () => {
 		});
 	});
 
+	it("reuses a's id for the merged item, rather than minting a fresh one", () => {
+		const a = makeItem({
+			id: "a-id",
+			text: "yellow onion",
+			quantity: 500,
+			unit: "g",
+		});
+		const b = makeItem({ id: "b-id", text: "onion", quantity: 600, unit: "g" });
+
+		const merged = mergeGroceryListItems(a, b, "onion");
+
+		expect(merged?.id).toBe("a-id");
+	});
+
 	it("sums two volume quantities across differently-scaled units", () => {
 		const a = makeItem({ text: "broth", quantity: 1, unit: "cup" });
 		const b = makeItem({ text: "chicken broth", quantity: 2, unit: "tbsp" });

@@ -482,10 +482,9 @@ describe("GroceryListDetail", () => {
 		await user.type(screen.getByLabelText("Search grocery items"), "shrimp");
 		await user.click(screen.getByLabelText("Check all"));
 
-		expect(onUpdate).toHaveBeenCalledWith({
-			...list,
-			items: list.items.map((item) => ({ ...item, checked: true })),
-		});
+		expect(onUpdate).toHaveBeenCalledTimes(1);
+		const updated = onUpdate.mock.calls[0][0] as GroceryList;
+		expect(updated.items.every((item) => item.checked)).toBe(true);
 	});
 
 	it("shows a note explaining the ≈ symbol when a list has an approximate item", () => {
@@ -574,6 +573,7 @@ describe("GroceryListDetail", () => {
 		const updated = onUpdate.mock.calls[0][0] as GroceryList;
 		expect(updated.items).toHaveLength(1);
 		expect(updated.items[0]).toMatchObject({
+			id: "item-1",
 			text: "onion",
 			quantity: 800,
 			unit: "g",

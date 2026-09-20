@@ -517,6 +517,40 @@ export function diffMealPlanEntries(
 	return diffs;
 }
 
+// Strips every entry (in `entries`, and in `preAdjustEntries` if a
+// mid-adjustment snapshot exists) that links to `recipeId`. Needed because a
+// deleted recipe's id is otherwise a plain, uncleaned pointer:
+// entry.recipeId just stops resolving to anything (recipeById.get returns
+// undefined) rather than the entry being removed — harmless for display, but
+// if a Recipe with that id ever exists locally again for any reason, the
+// untouched entry would silently re-link to it. Callers must still bump
+// `updatedAt` (see meal-plan-storage.ts's touch()) so the sync engine's
+// whole-record last-write-wins (sync-merge.ts's mergeMealPlan) actually picks
+// this corrected version over a stale remote copy. Returns the same `plan`
+// reference, unchanged, when nothing referenced `recipeId` — callers rely on
+// this to skip a needless re-render/re-persist.
+export function removeRecipeReferences(
+	plan: MealPlan,
+	recipeId: string,
+): MealPlan {
+	const linksToRecipe = (entry: MealPlanEntry) => entry.recipeId === recipeId;
+	const hasMatch =
+		plan.entries.some(linksToRecipe) ||
+		(plan.preAdjustEntries ?? []).some(linksToRecipe);
+	if (!hasMatch) return plan;
+	return {
+		...plan,
+		entries: plan.entries.filter((entry) => !linksToRecipe(entry)),
+		...(plan.preAdjustEntries != null
+			? {
+					preAdjustEntries: plan.preAdjustEntries.filter(
+						(entry) => !linksToRecipe(entry),
+					),
+				}
+			: {}),
+	};
+}
+
 export type MealPlanEntryDiffDay = {
 	day: string;
 	entries: MealPlanEntryDiff[];

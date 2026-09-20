@@ -1,3 +1,4 @@
+import { carryOverCheckedState } from "./aggregate-grocery-items";
 import type { GroceryListItem } from "./grocery-list";
 import { mergeGroceryListItems } from "./merge-grocery-items";
 
@@ -139,4 +140,21 @@ export function reapplyConfirmedMerges(
 			match.merged,
 		];
 	}
+}
+
+// Every list rebuild runs the same carryOverCheckedState + reapplyConfirmedMerges
+// pipeline (aggregate-grocery-items.ts's carryOverCheckedState preserves an
+// item's identity/checked-state across a fresh aggregation; reapplyConfirmedMerges
+// then re-collapses any pair the user already confirmed as the same item) —
+// wrapped here so every caller that rebuilds a list's `items` shares one
+// definition of what that means.
+export function rebuildGroceryListItems(
+	previousItems: GroceryListItem[],
+	freshItems: GroceryListItem[],
+	confirmedMergeKeys: readonly string[] | undefined,
+): GroceryListItem[] {
+	return reapplyConfirmedMerges(
+		carryOverCheckedState(previousItems, freshItems),
+		confirmedMergeKeys,
+	);
 }

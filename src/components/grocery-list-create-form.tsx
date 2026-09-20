@@ -16,7 +16,6 @@ import {
 	APPROXIMATE_ITEMS_NOTE,
 	aggregateGroceryItems,
 	type CustomGroceryIngredient,
-	carryOverCheckedState,
 	formatGroceryItemQuantity,
 } from "#/lib/aggregate-grocery-items";
 import { filterRecipes } from "#/lib/filter-recipes";
@@ -28,7 +27,7 @@ import {
 import { parseCustomIngredientInput } from "#/lib/parse-custom-ingredient";
 import type { Recipe } from "#/lib/recipe";
 import { formatIngredientQuantity } from "#/lib/scale-servings";
-import { reapplyConfirmedMerges } from "#/lib/suggest-grocery-merges";
+import { rebuildGroceryListItems } from "#/lib/suggest-grocery-merges";
 import { useBodyScrollLock } from "#/lib/use-body-scroll-lock";
 
 // How many search matches to surface at once — enough to scan, not enough to
@@ -221,8 +220,9 @@ export function GroceryListCreateForm({
 				...editingList,
 				name: finalName,
 				recipeIds,
-				items: reapplyConfirmedMerges(
-					carryOverCheckedState(editingList.items, previewItems),
+				items: rebuildGroceryListItems(
+					editingList.items,
+					previewItems,
 					editingList.confirmedMergeKeys,
 				),
 			});

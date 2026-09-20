@@ -168,8 +168,17 @@ export function MealPlanDraft({
 								);
 								if (existing) return existing;
 							}
+							// "edited" reuses the existing entry's id too (not just
+							// "unchanged") — it's still the same conceptual slot, just
+							// with new content, so keeping its identity stable across
+							// the edit is more honest than minting a fresh one. Only a
+							// genuinely new slot ("inserted") gets a fresh id.
+							const existingForEdit =
+								diff.status === "edited"
+									? previousEntriesBySlot.get(mealPlanSlotKey(diff))
+									: undefined;
 							return {
-								id: crypto.randomUUID(),
+								id: existingForEdit?.id ?? crypto.randomUUID(),
 								day: diff.day,
 								mealType: diff.mealType,
 								slotIndex: diff.slotIndex,

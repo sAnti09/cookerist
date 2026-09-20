@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GroceryListItem } from "./grocery-list";
 import {
 	reapplyConfirmedMerges,
+	rebuildGroceryListItems,
 	suggestGroceryMerges,
 	suggestionKey,
 } from "./suggest-grocery-merges";
@@ -160,5 +161,44 @@ describe("reapplyConfirmedMerges", () => {
 		const result = reapplyConfirmedMerges([a, b], ["onion::yellow onion"]);
 
 		expect(result).toEqual([a, b]);
+	});
+});
+
+describe("rebuildGroceryListItems", () => {
+	it("carries a surviving item's id forward (matched by text+unit)", () => {
+		const previous = [makeItem({ id: "old-id", text: "onion", unit: "g" })];
+		const fresh = [makeItem({ id: "new-id", text: "onion", unit: "g" })];
+
+		const items = rebuildGroceryListItems(previous, fresh, undefined);
+
+		expect(items).toHaveLength(1);
+		expect(items[0].id).toBe("old-id");
+	});
+
+	it("drops an item with nothing matching it in the fresh list", () => {
+		const previous = [
+			makeItem({ id: "kept-id", text: "onion", unit: "g" }),
+			makeItem({ id: "dropped-id", text: "celery", unit: "g" }),
+		];
+		const fresh = [makeItem({ id: "new-id", text: "onion", unit: "g" })];
+
+		const items = rebuildGroceryListItems(previous, fresh, undefined);
+
+		expect(items.map((item) => item.id)).toEqual(["kept-id"]);
+	});
+
+	it("re-collapses a confirmed merge pair back into one item", () => {
+		const onion = makeItem({ id: "onion-id", text: "yellow onion", unit: "g" });
+		const onion2 = makeItem({ id: "onion2-id", text: "onion", unit: "g" });
+		const confirmedKey = suggestionKey({ a: onion, b: onion2 });
+
+		const items = rebuildGroceryListItems(
+			[onion, onion2],
+			[onion, onion2],
+			[confirmedKey],
+		);
+
+		expect(items).toHaveLength(1);
+		expect(items[0].id).toBe("onion-id");
 	});
 });

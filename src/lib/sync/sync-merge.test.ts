@@ -71,50 +71,51 @@ function baseList(overrides: Partial<GroceryList> = {}): GroceryList {
 	};
 }
 
+// Whole-record last-write-wins, same as mergeRecipe/mergeMealPlan — see
+// sync-merge.ts's own comment for why grocery lists moved off item-level
+// union-by-id merging (id-churn duplication, removal resurrection, and an
+// unchecked item getting rechecked by a stale remote OR all traced back to
+// it).
 describe("mergeGroceryList", () => {
-	it("unions items present on only one side", () => {
-		const local = baseList({ items: [item({ id: "a" })] });
-		const remote = baseList({ items: [item({ id: "b" })] });
-		const merged = mergeGroceryList(local, remote);
-		expect(merged.items.map((i) => i.id).sort()).toEqual(["a", "b"]);
-	});
-
-	it("ORs checked state for an item present on both sides regardless of recency", () => {
+	it("keeps the local list (and its items) when it's newer", () => {
 		const local = baseList({
 			updatedAt: "2026-01-02T00:00:00.000Z",
-			items: [item({ id: "a", checked: true })],
+			items: [item({ id: "a", checked: false })],
 		});
 		const remote = baseList({
 			updatedAt: "2026-01-01T00:00:00.000Z",
-			items: [item({ id: "a", checked: false })],
+			items: [item({ id: "a", checked: true }), item({ id: "b" })],
 		});
-		const merged = mergeGroceryList(local, remote);
-		expect(merged.items[0]?.checked).toBe(true);
+		expect(mergeGroceryList(local, remote)).toBe(local);
 	});
 
-	it("takes a shared item's other fields from whichever list is newer", () => {
+	it("adopts the remote list (and its items) when it's newer, discarding local's items entirely", () => {
 		const local = baseList({
 			updatedAt: "2026-01-01T00:00:00.000Z",
-			items: [item({ id: "a", quantity: 1 })],
+			items: [item({ id: "a" }), item({ id: "b" })],
 		});
 		const remote = baseList({
 			updatedAt: "2026-01-02T00:00:00.000Z",
 			items: [item({ id: "a", quantity: 5 })],
 		});
-		const merged = mergeGroceryList(local, remote);
-		expect(merged.items[0]?.quantity).toBe(5);
+		expect(mergeGroceryList(local, remote)).toBe(remote);
 	});
 
-	it("takes non-item fields from whichever side is newer", () => {
+	// Regression: this used to be the "unchecked items get rechecked after a
+	// sync" bug — item-level OR meant an intentional uncheck could never
+	// survive against a stale copy that still had it checked. Under
+	// whole-record LWW, whichever side actually unchecked it also bumped its
+	// own `updatedAt` doing so, so it's the newer side and wins outright.
+	it("an intentional uncheck survives, since it's the newer side", () => {
 		const local = baseList({
-			name: "Old name",
-			updatedAt: "2026-01-01T00:00:00.000Z",
+			updatedAt: "2026-01-02T00:00:00.000Z",
+			items: [item({ id: "a", checked: false })],
 		});
 		const remote = baseList({
-			name: "New name",
-			updatedAt: "2026-01-02T00:00:00.000Z",
+			updatedAt: "2026-01-01T00:00:00.000Z",
+			items: [item({ id: "a", checked: true })],
 		});
-		expect(mergeGroceryList(local, remote).name).toBe("New name");
+		expect(mergeGroceryList(local, remote).items[0]?.checked).toBe(false);
 	});
 });
 
@@ -149,36 +150,50 @@ function basePlan(overrides: Partial<MealPlan> = {}): MealPlan {
 	};
 }
 
+// Whole-record last-write-wins, same as mergeRecipe — see sync-merge.ts's
+// own comment for why meal plans moved off entry-level union-by-id merging
+// (three separate resurrection/duplication bugs all traced back to it).
 describe("mergeMealPlan", () => {
-	it("unions entries present on only one side (e.g. added while the other device was offline)", () => {
-		const local = basePlan({ entries: [entry({ id: "a" })] });
-		const remote = basePlan({ entries: [entry({ id: "b" })] });
-		const merged = mergeMealPlan(local, remote);
-		expect(merged.entries.map((e) => e.id).sort()).toEqual(["a", "b"]);
+	it("keeps the local plan (and its entries) when it's newer", () => {
+		const local = basePlan({
+			updatedAt: "2026-01-02T00:00:00.000Z",
+			entries: [entry({ id: "a" })],
+		});
+		const remote = basePlan({
+			updatedAt: "2026-01-01T00:00:00.000Z",
+			entries: [
+				entry({ id: "a", suggestedTitle: "stale" }),
+				entry({ id: "b" }),
+			],
+		});
+		expect(mergeMealPlan(local, remote)).toBe(local);
 	});
 
-	it("takes a shared entry from whichever plan is newer", () => {
+	it("adopts the remote plan (and its entries) when it's newer, discarding local's entries entirely", () => {
 		const local = basePlan({
 			updatedAt: "2026-01-01T00:00:00.000Z",
-			entries: [entry({ id: "a", suggestedTitle: "old" })],
+			entries: [entry({ id: "a" }), entry({ id: "b" })],
 		});
 		const remote = basePlan({
 			updatedAt: "2026-01-02T00:00:00.000Z",
 			entries: [entry({ id: "a", suggestedTitle: "new" })],
 		});
-		const merged = mergeMealPlan(local, remote);
-		expect(merged.entries[0]?.suggestedTitle).toBe("new");
+		expect(mergeMealPlan(local, remote)).toBe(remote);
 	});
 
-	it("takes non-entry fields from whichever side is newer", () => {
+	// A removed entry never resurrects under whole-record LWW: whichever side
+	// actually removed it also bumped its own `updatedAt` doing so (see
+	// meal-plan-storage.ts's touch()), so it's the newer side and wins
+	// outright — no per-entry union to accidentally carry the old one back.
+	it("a locally-removed entry doesn't resurrect from a stale remote copy that still has it", () => {
 		const local = basePlan({
-			status: "ready",
 			updatedAt: "2026-01-02T00:00:00.000Z",
+			entries: [],
 		});
 		const remote = basePlan({
-			status: "draft",
 			updatedAt: "2026-01-01T00:00:00.000Z",
+			entries: [entry({ id: "a" })],
 		});
-		expect(mergeMealPlan(local, remote).status).toBe("ready");
+		expect(mergeMealPlan(local, remote).entries).toEqual([]);
 	});
 });

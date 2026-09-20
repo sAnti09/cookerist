@@ -1739,7 +1739,9 @@ describe("carryOverCheckedState", () => {
 	}
 
 	it("keeps the checked state of an item whose merged text+unit is unchanged", () => {
-		const previous = [makeItem({ text: "shrimp", unit: "lb", checked: true })];
+		const previous = [
+			makeItem({ id: "old-id", text: "shrimp", unit: "lb", checked: true }),
+		];
 		const next = [
 			makeItem({ id: "new-id", text: "shrimp", unit: "lb", checked: false }),
 		];
@@ -1747,8 +1749,10 @@ describe("carryOverCheckedState", () => {
 		const result = carryOverCheckedState(previous, next);
 
 		expect(result[0].checked).toBe(true);
-		// The new item's own id is preserved, only checked is carried over.
-		expect(result[0].id).toBe("new-id");
+		// The previous item's id is reused, not the fresh one aggregation just
+		// minted — a minor nicety (avoids an unnecessary React remount), not
+		// load-bearing for sync (see the function's own comment).
+		expect(result[0].id).toBe("old-id");
 	});
 
 	it("resets a brand new item (no matching text+unit in the previous list) to unchecked", () => {

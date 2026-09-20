@@ -314,6 +314,43 @@ describe("AppDataProvider delete handlers", () => {
 			expect(pushTombstoneMock).toHaveBeenCalledWith("meal_plans", "p1"),
 		);
 	});
+
+	// Regression: entry.recipeId used to be a plain, uncleaned pointer — if
+	// the recipe it pointed to reappeared locally later (e.g. a sync race),
+	// the untouched entry would silently re-link to it. Deleting the recipe
+	// must scrub any meal-plan entry referencing it.
+	it("strips a deleted recipe's dangling reference from any meal plan that linked to it", async () => {
+		saveRecipe([], makeRecipe());
+		saveMealPlan(
+			[],
+			makeMealPlan({
+				entries: [
+					{
+						id: "e1",
+						day: "2026-01-01",
+						mealType: "breakfast",
+						slotIndex: 0,
+						status: "ready",
+						suggestedTitle: "Recipe",
+						suggestedOverview: "",
+						recipeId: "r1",
+					},
+				],
+			}),
+		);
+		const user = userEvent.setup();
+		renderHarness();
+		await screen.findByTestId("plan-count");
+
+		await user.click(screen.getByRole("button", { name: "delete-recipe" }));
+
+		await waitFor(() => {
+			const stored = JSON.parse(
+				window.localStorage.getItem("cookerist:meal-plans") ?? "[]",
+			) as MealPlan[];
+			expect(stored[0]?.entries).toEqual([]);
+		});
+	});
 });
 
 describe("AppDataProvider per-resource sharing", () => {

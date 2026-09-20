@@ -540,21 +540,31 @@ function checkedStateKey(item: GroceryListItem): string {
 		: `${normalizedText}::unit:${canonicalizeUnitForMerging(normalizedUnit)}`;
 }
 
-// Carries checked state from a list's previous items onto its freshly
-// re-aggregated items (e.g. after an edit) — an item counts as "the same" if
-// its merged text+unit is unchanged; anything new or changed resets to
-// unchecked rather than guessing.
+// Carries an item's identity — its `id`, in addition to its checked state —
+// from a list's previous items onto its freshly re-aggregated items (e.g.
+// after an edit): an item counts as "the same" if its merged text+unit is
+// unchanged; anything new or changed gets a fresh id (aggregateGroceryItems
+// always mints one) and starts unchecked. Reusing the old id for a surviving
+// item is a minor nicety, not load-bearing — it avoids an unnecessary React
+// remount of that row, but the whole list is a single whole-record
+// last-write-wins unit for sync purposes (see sync-merge.ts's
+// mergeGroceryList), so nothing downstream depends on any one item's id
+// staying stable across a rebuild.
 export function carryOverCheckedState(
 	previousItems: GroceryListItem[],
 	newItems: GroceryListItem[],
 ): GroceryListItem[] {
-	const previouslyChecked = new Map(
-		previousItems.map((item) => [checkedStateKey(item), item.checked]),
+	const previousByKey = new Map(
+		previousItems.map((item) => [checkedStateKey(item), item]),
 	);
-	return newItems.map((item) => ({
-		...item,
-		checked: previouslyChecked.get(checkedStateKey(item)) ?? false,
-	}));
+	return newItems.map((item) => {
+		const previous = previousByKey.get(checkedStateKey(item));
+		return {
+			...item,
+			id: previous?.id ?? item.id,
+			checked: previous?.checked ?? false,
+		};
+	});
 }
 
 // Renders just the "quantity [unit]" portion of a grocery item's display

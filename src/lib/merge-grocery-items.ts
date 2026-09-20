@@ -163,8 +163,11 @@ export function mergeGroceryListItems(
 	const combined = tryMergeQuantities(canonicalText, a, b);
 	if (!combined) return null;
 
+	// Reuses `a`'s id rather than minting a fresh one — the merged line is
+	// really "a, edited to absorb b" — keeping an identity across the merge
+	// avoids an unnecessary React remount of that row.
 	return {
-		id: crypto.randomUUID(),
+		id: a.id,
 		text: canonicalText,
 		quantity: combined.quantity,
 		unit: combined.unit,

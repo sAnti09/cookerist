@@ -96,27 +96,51 @@ export async function pullOne(
 // authority check that applies; there's no per-device ownership concept on
 // the client side to also gate on.
 //
-// Explicitly verifies a row was actually touched via `.select("id")` on the
-// update: PostgREST returns `error: null` just as readily when the
-// `WHERE`/RLS predicate matches zero rows (a stale device JWT, or the row
-// simply hasn't reached Supabase yet via pushEntities) as when it succeeds —
-// without this check, a no-op update looked identical to a real tombstone,
-// so the caller happily deleted the entity locally while Supabase kept
-// serving it live to every paired device forever. Throwing here instead lets
-// the pending-tombstones retry loop (see sync-engine.ts) pick it back up.
+// An UPDATE keyed on `WHERE id = X` (this function's original approach)
+// silently assumes the row already exists on Supabase — but an entity can be
+// deleted locally before its own *creation* ever reached Supabase (e.g.
+// deleted right after being created, before the next sync cycle's push of it
+// succeeded). Once that happens, app-data-context.tsx has already removed
+// the entity from local state, so nothing ever retries pushing its creation
+// again either — the UPDATE then permanently matches zero rows on every
+// retry, forever, and the row never actually gets marked deleted remotely
+// (confirmed as the cause of a "deleted recipe resurrects" report: every
+// pull of the table was correctly treating the never-actually-deleted row as
+// still live). An upsert sidesteps the whole ordering assumption: it creates
+// the row — already tombstoned, with just enough `data` to satisfy the
+// table's own `(data->>'id')::uuid = id` check — if it doesn't exist yet, or
+// tombstones the real row if it does. Either way the delete lands on this
+// first attempt, no ordering-dependent retry needed. `owner_id` is safe to
+// set unconditionally to this account's id: pushTombstone is only ever
+// called for a resource this account actually owns (a shared-to-me resource
+// goes through pushShareRevocation instead — see app-data-context.tsx), and
+// the `prevent_owner_id_change` trigger keeps an existing row's owner_id
+// pinned regardless.
+//
+// Still explicitly verifies a row was actually touched via `.select("id")`,
+// same reasoning as before: PostgREST returns `error: null` just as readily
+// on a request an RLS policy silently no-ops as on one that truly succeeded,
+// and a no-op looking identical to a real tombstone is exactly the failure
+// mode that let the row keep serving live forever.
 export async function pushTombstone(
 	table: SyncTable,
 	id: string,
 ): Promise<void> {
+	const identity = getDeviceIdentity();
+	if (!identity) return;
 	const { data, error } = await supabase
 		.from(table)
-		.update({ deleted_at: new Date().toISOString() })
-		.eq("id", id)
+		.upsert({
+			id,
+			owner_id: identity.userId,
+			data: { id } as unknown as Json,
+			deleted_at: new Date().toISOString(),
+		})
 		.select("id");
 	if (error) throw error;
 	if (!data || data.length === 0) {
 		throw new Error(
-			`Tombstone push matched no row for ${table}/${id} (row missing or not owned by this account)`,
+			`Tombstone upsert matched no row for ${table}/${id} (not owned by this account)`,
 		);
 	}
 }

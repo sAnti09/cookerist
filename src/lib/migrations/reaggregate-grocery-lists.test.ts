@@ -111,7 +111,7 @@ describe("reaggregateGroceryLists", () => {
 		expect(list.items[0].category).toBe("Meat & Seafood");
 	});
 
-	it("preserves checked state by matching on text+unit, even though item ids are regenerated", () => {
+	it("preserves checked state and id by matching on text+unit", () => {
 		const recipe = makeRecipe({
 			id: "recipe-1",
 			ingredients: [
@@ -135,7 +135,7 @@ describe("reaggregateGroceryLists", () => {
 
 		const [list] = loadGroceryLists();
 		expect(list.items[0].checked).toBe(true);
-		expect(list.items[0].id).not.toBe(originalItem.id);
+		expect(list.items[0].id).toBe(originalItem.id);
 	});
 
 	it("keeps custom ingredients on a mixed list", () => {

@@ -1,11 +1,10 @@
 import {
 	aggregateGroceryItems,
 	type CustomGroceryIngredient,
-	carryOverCheckedState,
 } from "#/lib/aggregate-grocery-items";
 import { loadGroceryLists, replaceGroceryLists } from "#/lib/grocery-storage";
 import { loadRecipes } from "#/lib/recipes-storage";
-import { reapplyConfirmedMerges } from "#/lib/suggest-grocery-merges";
+import { rebuildGroceryListItems } from "#/lib/suggest-grocery-merges";
 
 export const REAGGREGATE_GROCERY_LISTS_MIGRATION_ID =
 	"reaggregate-grocery-lists-after-ingredient-categorization";
@@ -56,7 +55,7 @@ export const REAGGREGATE_GROCERY_LISTS_LIQUID_HYBRID_FIX_MIGRATION_ID =
 // persisted as-is (see grocery-list.ts) — never re-derived from its recipes
 // on an ordinary page load, only when the user re-opens the list via "Edit"
 // and saves again (grocery-list-create-form.tsx runs this exact same
-// aggregateGroceryItems + carryOverCheckedState pair). So correcting a
+// aggregateGroceryItems + rebuildGroceryListItems pair). So correcting a
 // recipe's ingredients (see categorize-recipe-ingredients.ts, which must run
 // before this one — see the MIGRATIONS order in index.ts) doesn't reach an
 // already-created list on its own; without this, the only way to see the
@@ -68,11 +67,10 @@ export const REAGGREGATE_GROCERY_LISTS_LIQUID_HYBRID_FIX_MIGRATION_ID =
 // since it needs to run again whenever a *later* fix changes what a fresh
 // aggregation would produce, not just the first time.
 //
-// Every item gets a freshly generated id (aggregateGroceryItems always mints
-// new ones), same as a manual edit+save would produce — carryOverCheckedState
-// still preserves each item's checked state by matching on normalized
-// text+unit, not id, so nothing about "what's already been checked off"
-// gets lost.
+// A surviving item keeps its id and checked state across the rebuild (see
+// rebuildGroceryListItems/carryOverCheckedState, matching on normalized
+// text+unit, not id) — only a genuinely new or dropped item gets a fresh id,
+// same as a manual edit+save produces.
 export function reaggregateGroceryLists(): void {
 	const lists = loadGroceryLists();
 	if (lists.length === 0) return;
@@ -104,8 +102,9 @@ export function reaggregateGroceryLists(): void {
 		anyChanged = true;
 		return {
 			...list,
-			items: reapplyConfirmedMerges(
-				carryOverCheckedState(list.items, freshItems),
+			items: rebuildGroceryListItems(
+				list.items,
+				freshItems,
 				list.confirmedMergeKeys,
 			),
 		};

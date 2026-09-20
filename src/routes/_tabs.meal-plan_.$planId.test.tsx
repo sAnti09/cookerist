@@ -726,6 +726,130 @@ describe("Meal plan detail screen — ready", () => {
 		// Changed entry gets a genuinely new recipe, not the old one.
 		expect(rebuiltDinner?.status).toBe("ready");
 		expect(rebuiltDinner?.recipeId).not.toBe("recipe-2");
+		// A changed slot still keeps its original entry id (not a fresh
+		// crypto.randomUUID()) — otherwise the sync engine's union-by-id merge
+		// for meal plans would keep both a stale pre-refine copy (under the old
+		// id) and this edited entry (under a new id) after a sync, showing the
+		// same slot twice.
+		expect(rebuiltDinner?.id).toBe("e2");
+	});
+
+	it("removing a slot during refine drops it from entries", async () => {
+		const breakfastEntry = makeEntry({
+			id: "e1",
+			status: "ready",
+			recipeId: "recipe-1",
+		});
+		const dinnerEntry = makeEntry({
+			id: "e2",
+			mealType: "dinner",
+			status: "ready",
+			recipeId: "recipe-2",
+			suggestedTitle: "Pancakes",
+			suggestedOverview: "Fluffy pancakes with syrup.",
+		});
+		refineMealPlanDraftMock.mockResolvedValueOnce({
+			type: "success",
+			entries: [
+				// Dinner dropped entirely — Groq's response no longer includes it.
+				{
+					day: breakfastEntry.day,
+					mealType: breakfastEntry.mealType,
+					slotIndex: breakfastEntry.slotIndex,
+					title: breakfastEntry.suggestedTitle,
+					overview: breakfastEntry.suggestedOverview,
+				},
+			],
+		});
+		saveRecipe(loadRecipes(), makeRecipe({ id: "recipe-1" }));
+		saveRecipe(
+			loadRecipes(),
+			makeRecipe({ id: "recipe-2", title: "Pancakes" }),
+		);
+		saveMealPlan(
+			loadMealPlans(),
+			makePlan({
+				status: "ready",
+				builtBefore: true,
+				entries: [breakfastEntry, dinnerEntry],
+			}),
+		);
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		await user.click(screen.getByRole("button", { name: "Adjust plan" }));
+		await user.type(
+			screen.getByLabelText("Describe a change to this plan"),
+			"remove dinner",
+		);
+		await user.click(screen.getByRole("button", { name: "Refine plan" }));
+		await screen.findByText(/Deleted/i);
+
+		const stored = JSON.parse(
+			window.localStorage.getItem("cookerist:meal-plans") ?? "[]",
+		) as MealPlan[];
+		expect(stored[0].entries.map((entry) => entry.id)).toEqual(["e1"]);
+	});
+
+	it("restores a removed entry when the adjustment is canceled", async () => {
+		const breakfastEntry = makeEntry({
+			id: "e1",
+			status: "ready",
+			recipeId: "recipe-1",
+		});
+		const dinnerEntry = makeEntry({
+			id: "e2",
+			mealType: "dinner",
+			status: "ready",
+			recipeId: "recipe-2",
+			suggestedTitle: "Pancakes",
+			suggestedOverview: "Fluffy pancakes with syrup.",
+		});
+		refineMealPlanDraftMock.mockResolvedValueOnce({
+			type: "success",
+			entries: [
+				{
+					day: breakfastEntry.day,
+					mealType: breakfastEntry.mealType,
+					slotIndex: breakfastEntry.slotIndex,
+					title: breakfastEntry.suggestedTitle,
+					overview: breakfastEntry.suggestedOverview,
+				},
+			],
+		});
+		saveRecipe(loadRecipes(), makeRecipe({ id: "recipe-1" }));
+		saveRecipe(
+			loadRecipes(),
+			makeRecipe({ id: "recipe-2", title: "Pancakes" }),
+		);
+		saveMealPlan(
+			loadMealPlans(),
+			makePlan({
+				status: "ready",
+				builtBefore: true,
+				entries: [breakfastEntry, dinnerEntry],
+			}),
+		);
+		await renderApp("/meal-plan/plan-1");
+		const user = userEvent.setup();
+
+		await user.click(screen.getByRole("button", { name: "Adjust plan" }));
+		await user.type(
+			screen.getByLabelText("Describe a change to this plan"),
+			"remove dinner",
+		);
+		await user.click(screen.getByRole("button", { name: "Refine plan" }));
+		await screen.findByText(/Deleted/i);
+
+		await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+		const stored = JSON.parse(
+			window.localStorage.getItem("cookerist:meal-plans") ?? "[]",
+		) as MealPlan[];
+		expect(stored[0].entries.map((entry) => entry.id).sort()).toEqual([
+			"e1",
+			"e2",
+		]);
 	});
 });
 
@@ -794,6 +918,9 @@ describe("Meal plan detail screen — ready — stale grocery list", () => {
 		) as GroceryList[];
 		expect(storedLists).toHaveLength(1);
 		expect(storedLists[0].recipeIds).toEqual(["recipe-2"]);
+		// recipe-2 has no ingredients in this test, so refreshing drops the old
+		// recipe-1-derived "oats" item entirely.
+		expect(storedLists[0].items).toEqual([]);
 		const storedPlans = JSON.parse(
 			window.localStorage.getItem("cookerist:meal-plans") ?? "[]",
 		) as MealPlan[];

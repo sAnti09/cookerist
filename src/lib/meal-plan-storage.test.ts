@@ -1,12 +1,26 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { MealPlan } from "#/lib/meal-plan";
+import type { MealPlan, MealPlanEntry } from "#/lib/meal-plan";
 import {
 	deleteMealPlan,
 	loadMealPlans,
+	removeRecipeFromMealPlans,
 	saveMealPlan,
 	updateMealPlan,
 	upsertMealPlans,
 } from "./meal-plan-storage";
+
+function makeEntry(overrides: Partial<MealPlanEntry> = {}): MealPlanEntry {
+	return {
+		id: crypto.randomUUID(),
+		day: "2026-09-15",
+		mealType: "breakfast",
+		slotIndex: 0,
+		status: "ready",
+		suggestedTitle: "x",
+		suggestedOverview: "x",
+		...overrides,
+	};
+}
 
 function makePlan(overrides: Partial<MealPlan> = {}): MealPlan {
 	return {
@@ -198,5 +212,36 @@ describe("upsertMealPlans", () => {
 		const result = upsertMealPlans([older], [newer]);
 
 		expect(result.map((p) => p.id)).toEqual(["newer", "older"]);
+	});
+});
+
+describe("removeRecipeFromMealPlans", () => {
+	it("returns the same array reference when no plan references the recipe", () => {
+		const plans = saveMealPlan(
+			[],
+			makePlan({ entries: [makeEntry({ recipeId: "other" })] }),
+		);
+
+		expect(removeRecipeFromMealPlans(plans, "deleted-recipe")).toBe(plans);
+	});
+
+	it("strips the reference, touches, and persists only the affected plan", () => {
+		const untouched = makePlan({
+			id: "p1",
+			entries: [makeEntry({ recipeId: "other" })],
+		});
+		const affected = makePlan({
+			id: "p2",
+			entries: [makeEntry({ id: "e1", recipeId: "deleted-recipe" })],
+		});
+		const plans = saveMealPlan(saveMealPlan([], untouched), affected);
+
+		const result = removeRecipeFromMealPlans(plans, "deleted-recipe");
+
+		expect(result.find((p) => p.id === "p1")).toBe(untouched);
+		const updated = result.find((p) => p.id === "p2");
+		expect(updated?.entries).toEqual([]);
+		expect((updated?.updatedAt ?? "") >= affected.updatedAt).toBe(true);
+		expect(loadMealPlans()).toEqual(result);
 	});
 });

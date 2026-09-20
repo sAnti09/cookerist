@@ -28,6 +28,7 @@ import { formatMealPlanDateRange, type MealPlan } from "#/lib/meal-plan";
 import {
 	deleteMealPlan,
 	loadMealPlans,
+	removeRecipeFromMealPlans,
 	saveMealPlan,
 	updateMealPlan,
 	upsertMealPlans,
@@ -210,7 +211,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 	// further foreground trigger within the cooldown is just a duplicate
 	// signal for the same "welcome back" moment (e.g. a visibilitychange and
 	// a focus event firing back to back) and is dropped, not queued.
-	const FOREGROUND_SYNC_MIN_INTERVAL_MS = 20_000;
+	const FOREGROUND_SYNC_MIN_INTERVAL_MS = 5_000;
 	const lastForegroundSyncAtRef = useRef(0);
 	const triggerForegroundSync = useCallback(() => {
 		const now = Date.now();
@@ -340,8 +341,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 					});
 			}
 			setRecipes((current) => deleteRecipe(current, id));
+			// A meal-plan entry's recipeId is otherwise a plain, uncleaned
+			// pointer — see removeRecipeReferences (meal-plan.ts) for why leaving
+			// it dangling can make a deleted recipe look "resurrected" later.
+			setMealPlans((current) => removeRecipeFromMealPlans(current, id));
+			scheduleSync(["meal_plans"]);
 		},
-		[recipes],
+		[recipes, scheduleSync],
 	);
 
 	const handleToggleFavoriteRecipe = useCallback(

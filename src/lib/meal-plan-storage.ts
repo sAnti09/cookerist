@@ -1,4 +1,4 @@
-import type { MealPlan } from "#/lib/meal-plan";
+import { type MealPlan, removeRecipeReferences } from "#/lib/meal-plan";
 
 const STORAGE_KEY = "cookerist:meal-plans";
 
@@ -74,6 +74,28 @@ function touch(plan: MealPlan): MealPlan {
 export function updateMealPlan(plans: MealPlan[], plan: MealPlan): MealPlan[] {
 	const touched = touch(plan);
 	const next = plans.map((p) => (p.id === touched.id ? touched : p));
+	persist(next);
+	return next;
+}
+
+// Called by the recipe-delete handler (app-data-context.tsx) so a just-deleted
+// recipe's id never lingers as a dangling MealPlanEntry.recipeId — see
+// removeRecipeReferences (meal-plan.ts) for why that matters. Only touches
+// (and persists) plans that actually referenced the recipe; a no-op leaves
+// `plans` as the same array reference, matching this file's other bulk
+// writers.
+export function removeRecipeFromMealPlans(
+	plans: MealPlan[],
+	recipeId: string,
+): MealPlan[] {
+	let changed = false;
+	const next = plans.map((plan) => {
+		const stripped = removeRecipeReferences(plan, recipeId);
+		if (stripped === plan) return plan;
+		changed = true;
+		return touch(stripped);
+	});
+	if (!changed) return plans;
 	persist(next);
 	return next;
 }

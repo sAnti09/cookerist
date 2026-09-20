@@ -7,10 +7,7 @@ import { MealPlanReady } from "#/components/meal-plan-ready";
 import { ShareResourceDialog } from "#/components/share-resource-dialog";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { IconButton } from "#/components/ui/icon-button";
-import {
-	aggregateGroceryItems,
-	carryOverCheckedState,
-} from "#/lib/aggregate-grocery-items";
+import { aggregateGroceryItems } from "#/lib/aggregate-grocery-items";
 import { useAppData } from "#/lib/app-data-context";
 import type { GroceryList } from "#/lib/grocery-list";
 import {
@@ -20,7 +17,7 @@ import {
 	type MealPlan,
 } from "#/lib/meal-plan";
 import type { Recipe } from "#/lib/recipe";
-import { reapplyConfirmedMerges } from "#/lib/suggest-grocery-merges";
+import { rebuildGroceryListItems } from "#/lib/suggest-grocery-merges";
 import { useBuildMealPlan } from "#/lib/use-build-meal-plan";
 import { useGoBack } from "#/lib/use-go-back";
 
@@ -113,9 +110,9 @@ function MealPlanDetailScreen() {
 
 	// For a brand-new plan's first draft review, Discard deletes it outright
 	// — there's nothing built yet to lose. For an already-built plan being
-	// adjusted, Discard instead cancels the adjustment: restore the entries
-	// as they were right before "Adjust plan" was clicked and go back to
-	// viewing the plan, same as it was before this adjustment started.
+	// adjusted, Discard instead cancels the adjustment: restore the entries as
+	// they were right before "Adjust plan" was clicked and go back to viewing
+	// the plan, same as it was before this adjustment started.
 	function handleDiscard() {
 		if (!plan) return;
 		if (plan.builtBefore) {
@@ -206,8 +203,9 @@ function MealPlanDetailScreen() {
 		updateGroceryList({
 			...existingList,
 			recipeIds: planRecipes.map((recipe) => recipe.id),
-			items: reapplyConfirmedMerges(
-				carryOverCheckedState(existingList.items, newItems),
+			items: rebuildGroceryListItems(
+				existingList.items,
+				newItems,
 				existingList.confirmedMergeKeys,
 			),
 		});

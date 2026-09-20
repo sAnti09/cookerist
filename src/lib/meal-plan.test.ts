@@ -21,6 +21,7 @@ import {
 	type MealPlanDraftLikeEntry,
 	type MealPlanEntry,
 	type MealSlotConfig,
+	removeRecipeReferences,
 	resizeSlotsForDays,
 	summarizeMealPlanEntries,
 	toggleMealTypeColumn,
@@ -434,6 +435,46 @@ describe("diffMealPlanEntries", () => {
 		expect(byMealType.get("lunch")).toBe("edited");
 		expect(byMealType.get("dinner")).toBe("removed");
 		expect(byMealType.get("afternoon_snack")).toBe("inserted");
+	});
+});
+
+describe("removeRecipeReferences", () => {
+	it("returns the same plan reference when nothing links to the recipe", () => {
+		const plan = makePlan({
+			entries: [makeEntry({ id: "e1", recipeId: "other-recipe" })],
+		});
+		expect(removeRecipeReferences(plan, "deleted-recipe")).toBe(plan);
+	});
+
+	it("drops the linked entry", () => {
+		const kept = makeEntry({
+			id: "e1",
+			mealType: "breakfast",
+			recipeId: "keep-me",
+		});
+		const linked = makeEntry({
+			id: "e2",
+			mealType: "dinner",
+			recipeId: "deleted-recipe",
+		});
+		const plan = makePlan({ entries: [kept, linked] });
+
+		const next = removeRecipeReferences(plan, "deleted-recipe");
+
+		expect(next.entries).toEqual([kept]);
+	});
+
+	it("also scrubs preAdjustEntries, so canceling an in-progress adjustment can't restore the stale link", () => {
+		const linked = makeEntry({ id: "e2", recipeId: "deleted-recipe" });
+		const plan = makePlan({
+			entries: [linked],
+			preAdjustEntries: [linked],
+		});
+
+		const next = removeRecipeReferences(plan, "deleted-recipe");
+
+		expect(next.entries).toEqual([]);
+		expect(next.preAdjustEntries).toEqual([]);
 	});
 });
 
