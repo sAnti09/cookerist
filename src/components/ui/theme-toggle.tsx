@@ -23,19 +23,38 @@ function applyTheme(mode: ThemeMode) {
 	}
 }
 
-export function ThemeToggle() {
-	const [mode, setMode] = useState<ThemeMode>("system");
-
-	useEffect(() => {
+function readStoredTheme(): ThemeMode {
+	try {
 		const stored = localStorage.getItem(STORAGE_KEY);
 		if (stored === "light" || stored === "dark" || stored === "system") {
-			setMode(stored);
+			return stored;
+		}
+	} catch {
+		// localStorage unavailable (private browsing, etc.)
+	}
+	return "system";
+}
+
+// Each tab-root screen mounts its own <ThemeToggle/>, so switching tabs
+// remounts it. Caching the resolved theme here (rather than only in React
+// state) lets every mount after the first read it synchronously instead of
+// defaulting to "system" and flashing that before its effect corrects it.
+let cachedMode: ThemeMode | null = null;
+
+export function ThemeToggle() {
+	const [mode, setMode] = useState<ThemeMode>(() => cachedMode ?? "system");
+
+	useEffect(() => {
+		if (cachedMode === null) {
+			cachedMode = readStoredTheme();
+			setMode(cachedMode);
 		}
 	}, []);
 
 	function handleSelect(next: ThemeMode) {
 		setMode(next);
 		applyTheme(next);
+		cachedMode = next;
 		try {
 			localStorage.setItem(STORAGE_KEY, next);
 		} catch {
