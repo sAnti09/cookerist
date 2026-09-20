@@ -1,7 +1,19 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Check, Copy, Share, X } from "lucide-react";
+import {
+	Check,
+	CheckCircle2,
+	ChevronDown,
+	Copy,
+	KeyRound,
+	Link2,
+	RefreshCw,
+	Share,
+	Users,
+	X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
+import { Wordmark } from "#/components/wordmark";
 import { useAppData } from "#/lib/app-data-context";
 import { canShareNatively, shareNatively } from "#/lib/share-native";
 import { RESOURCE_TABLE_LABEL } from "#/lib/sync/share-status";
@@ -13,22 +25,23 @@ type AccountDrawerProps = {
 	onClose: () => void;
 };
 
+type RowKey = "device" | "link" | "redeem";
+
 // The account/pairing UI — a slide-in side panel rather than a settings
 // route or a 4th tab (per the user's own call, matching this codebase's
 // existing preference for an overlay over a new nav destination — see
 // cook-mode.tsx). No device roster/unlinking UI yet.
 //
-// One sync model, deliberately kept simple after an earlier, more granular
-// design (a per-item "Share" toggle plus a separate "sync everything"
-// action) turned out to be confusing in practice and didn't match how
-// people actually think about syncing two of their own devices — see
-// CLAUDE.md's "Sharing feature" section. Once this device has an identity,
-// every recipe/grocery-list/meal-plan syncs automatically, both ways — the
-// only two things left to configure here are how a device gets an identity
-// in the first place (pairing) and a manual "do it now" button. "Link this
-// device" is hidden once this device already has an identity — re-linking
-// to a different account isn't supported yet (see
-// linkDeviceWithPairingCode's own comment in src/lib/identity/device.ts).
+// Redesigned (TEST-post-per-resource-sharing session) from four
+// always-expanded cards — each with its own heading and paragraph, all
+// visible at once — into one status line plus a single grouped accordion
+// list, one row per action, expanding in place like this app's own recipe
+// rows: only one row's explanation is on screen at a time, and only one row
+// is open at once (opening a second closes whichever was open). "Link this
+// device" doesn't replace "Add another device" — a device with no identity
+// yet can start from either (generating a code lazily creates an identity
+// too, same as linking does), so both rows coexist until this device has
+// one, then "Link this device" drops out.
 export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 	const navigate = useNavigate();
 	const {
@@ -38,6 +51,7 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 		syncNow,
 		redeemShareCode,
 	} = useAppData();
+	const [openRow, setOpenRow] = useState<RowKey | null>(null);
 	const [pairingCode, setPairingCode] = useState<{
 		code: string;
 		expiresAt: string;
@@ -71,6 +85,10 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 	}, [open, onClose]);
 
 	if (!open) return null;
+
+	function toggleRow(row: RowKey) {
+		setOpenRow((current) => (current === row ? null : row));
+	}
 
 	async function handleGenerateCode() {
 		setGenerating(true);
@@ -174,12 +192,16 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="account-drawer-title"
-				className="relative flex h-full w-full max-w-xs flex-col gap-5 overflow-y-auto bg-surface p-5 shadow-xl"
+				className="relative flex h-full w-full max-w-xs flex-col gap-4 overflow-y-auto bg-surface p-5 shadow-xl"
 				style={{ paddingTop: "calc(1.25rem + env(safe-area-inset-top, 0px))" }}
 			>
 				<div className="flex items-center justify-between">
-					<h2 id="account-drawer-title" className="display-title text-lg">
-						Account & sync
+					<h2
+						id="account-drawer-title"
+						className="text-lg"
+						aria-label="Account & sync"
+					>
+						<Wordmark />
 					</h2>
 					<button
 						type="button"
@@ -191,170 +213,235 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 					</button>
 				</div>
 
-				<p className="text-sm text-ink-dim">
-					{hasDeviceIdentity
-						? "Everything on this device — recipes, grocery lists, meal plans — syncs automatically with any device linked to this account."
-						: "Link a second device to sync everything between them automatically — or tap a recipe/grocery list/meal plan's sync icon to get started from there instead."}
-				</p>
-
-				<section className="card bg-card p-4">
-					<h3 className="font-semibold text-sm">
-						Get a code for another device
-					</h3>
-					<p className="mt-1 text-ink-dim text-xs">
-						Generate a code here, then enter it on the other device to link it —
-						from then on, everything syncs both ways automatically.
-					</p>
-					<Button
-						variant="secondary"
-						className="mt-3 w-full"
-						onClick={handleGenerateCode}
-						disabled={generating}
-					>
-						{generating ? "Generating…" : "Generate pairing code"}
-					</Button>
-					{pairingCode ? (
-						<div className="mt-3 text-center">
-							<span className="display-title block text-2xl tracking-widest">
-								{pairingCode.code}
-							</span>
-							<span className="text-ink-dim text-xs">
-								Expires{" "}
-								{new Date(pairingCode.expiresAt).toLocaleTimeString(undefined, {
-									hour: "numeric",
-									minute: "2-digit",
-								})}
-							</span>
-							<div className="mt-3 flex gap-2">
-								<Button
-									variant="secondary"
-									className="flex-1"
-									onClick={handleCopyPairingCode}
-								>
-									{pairingCodeCopied ? (
-										<>
-											<Check className="size-4" aria-hidden="true" /> Copied
-										</>
-									) : (
-										<>
-											<Copy className="size-4" aria-hidden="true" /> Copy code
-										</>
-									)}
-								</Button>
-								{canShareNatively() ? (
-									<Button
-										variant="secondary"
-										className="flex-1"
-										onClick={handleSharePairingCode}
-									>
-										<Share className="size-4" aria-hidden="true" /> Share
-									</Button>
-								) : null}
-							</div>
+				<div className="flex items-center gap-2.5 rounded-[14px] bg-bg2 px-3.5 py-3">
+					{hasDeviceIdentity ? (
+						<CheckCircle2
+							className="size-[18px] shrink-0 text-sage"
+							aria-hidden="true"
+						/>
+					) : (
+						<Link2
+							className="size-[18px] shrink-0 text-ink-dim"
+							aria-hidden="true"
+						/>
+					)}
+					<div className="min-w-0">
+						<div className="text-sm">
+							{hasDeviceIdentity ? "Syncs automatically" : "Not synced yet"}
 						</div>
+						<div className="text-ink-dim text-xs">
+							{syncMessage ??
+								(hasDeviceIdentity
+									? "Recipes, grocery lists, and meal plans stay in sync."
+									: "Pick an option below to start.")}
+						</div>
+					</div>
+					{hasDeviceIdentity ? (
+						<button
+							type="button"
+							aria-label="Sync now"
+							onClick={handleSyncNow}
+							disabled={syncing}
+							className="ml-auto flex size-[30px] shrink-0 items-center justify-center rounded-[10px] text-ink-dim hover:bg-line disabled:opacity-60"
+						>
+							<RefreshCw
+								className={`size-4 ${syncing ? "animate-spin" : ""}`}
+								aria-hidden="true"
+							/>
+						</button>
 					) : null}
-					{generateError ? (
-						<p className="mt-2 text-warn text-xs">{generateError}</p>
-					) : null}
-				</section>
+				</div>
 
-				{hasDeviceIdentity ? (
-					<p className="text-ink-dim text-xs">
-						This device is already linked to an account, so it can't link to a
-						different one here yet.
-					</p>
-				) : (
-					<section className="card bg-card p-4">
-						<h3 className="font-semibold text-sm">Have a code?</h3>
-						<p className="mt-1 text-ink-dim text-xs">
-							Enter a code generated on another device to link this one to it.
-						</p>
+				<div className="card overflow-hidden">
+					<AccordionRow
+						icon={<Link2 className="size-[17px]" aria-hidden="true" />}
+						title="Add another device"
+						subtitle="Get a code to enter on your other device"
+						open={openRow === "device"}
+						onToggle={() => toggleRow("device")}
+						bordered
+					>
+						{pairingCode ? (
+							<div className="text-center">
+								<span className="display-title block text-2xl tracking-widest">
+									{pairingCode.code}
+								</span>
+								<span className="text-ink-dim text-xs">
+									Expires{" "}
+									{new Date(pairingCode.expiresAt).toLocaleTimeString(
+										undefined,
+										{ hour: "numeric", minute: "2-digit" },
+									)}
+								</span>
+								<div className="mt-2.5 flex flex-col items-center gap-1.5">
+									<div className="flex gap-2">
+										<button
+											type="button"
+											aria-label="Copy code"
+											onClick={handleCopyPairingCode}
+											className="flex size-9 items-center justify-center rounded-full border border-line bg-bg2 text-ink hover:bg-line"
+										>
+											{pairingCodeCopied ? (
+												<Check className="size-4" aria-hidden="true" />
+											) : (
+												<Copy className="size-4" aria-hidden="true" />
+											)}
+										</button>
+										{canShareNatively() ? (
+											<button
+												type="button"
+												aria-label="Share"
+												onClick={handleSharePairingCode}
+												className="flex size-9 items-center justify-center rounded-full border border-line bg-bg2 text-ink hover:bg-line"
+											>
+												<Share className="size-4" aria-hidden="true" />
+											</button>
+										) : null}
+									</div>
+									{pairingCodeCopied ? (
+										<span className="text-sage text-xs">Copied</span>
+									) : null}
+								</div>
+							</div>
+						) : (
+							<Button
+								variant="secondary"
+								className="w-full"
+								onClick={handleGenerateCode}
+								disabled={generating}
+							>
+								{generating ? "Generating…" : "Generate pairing code"}
+							</Button>
+						)}
+						{generateError ? (
+							<p className="mt-2 text-warn text-xs">{generateError}</p>
+						) : null}
+					</AccordionRow>
+
+					{!hasDeviceIdentity ? (
+						<AccordionRow
+							icon={<KeyRound className="size-[17px]" aria-hidden="true" />}
+							title="Link this device"
+							subtitle="Paste a code from your other device"
+							open={openRow === "link"}
+							onToggle={() => toggleRow("link")}
+							bordered
+						>
+							<input
+								value={codeInput}
+								onChange={(event) =>
+									setCodeInput(event.target.value.toUpperCase())
+								}
+								placeholder="Enter code"
+								aria-label="Pairing code"
+								className="w-full rounded-full border border-line bg-bg px-4 py-2 text-center text-sm tracking-widest outline-none"
+							/>
+							<Button
+								className="mt-2 w-full"
+								onClick={handleLinkDevice}
+								disabled={linking || codeInput.trim().length === 0}
+							>
+								{linking ? "Linking…" : "Link this device"}
+							</Button>
+							{linkError ? (
+								<p className="mt-2 text-warn text-xs">{linkError}</p>
+							) : null}
+						</AccordionRow>
+					) : null}
+
+					<AccordionRow
+						icon={<Users className="size-[17px]" aria-hidden="true" />}
+						title="Redeem a share code"
+						subtitle="Add something someone shared with you"
+						open={openRow === "redeem"}
+						onToggle={() => toggleRow("redeem")}
+					>
 						<input
-							value={codeInput}
+							value={shareCodeInput}
 							onChange={(event) =>
-								setCodeInput(event.target.value.toUpperCase())
+								setShareCodeInput(event.target.value.toUpperCase())
 							}
 							placeholder="Enter code"
-							aria-label="Pairing code"
-							className="mt-3 w-full rounded-full border border-line bg-bg px-4 py-2 text-center text-sm tracking-widest outline-none"
+							aria-label="Share code"
+							className="w-full rounded-full border border-line bg-bg px-4 py-2 text-center text-sm tracking-widest outline-none"
 						/>
 						<Button
 							className="mt-2 w-full"
-							onClick={handleLinkDevice}
-							disabled={linking || codeInput.trim().length === 0}
+							onClick={handleRedeemShareCode}
+							disabled={redeeming || shareCodeInput.trim().length === 0}
 						>
-							{linking ? "Linking…" : "Link this device"}
+							{redeeming ? "Redeeming…" : "Redeem code"}
 						</Button>
-						{linkError ? (
-							<p className="mt-2 text-warn text-xs">{linkError}</p>
-						) : null}
-					</section>
-				)}
-
-				<section className="card bg-card p-4">
-					<h3 className="font-semibold text-sm">Redeem a share code</h3>
-					<p className="mt-1 text-ink-dim text-xs">
-						Have a code someone shared a recipe, grocery list, or meal plan with
-						you? Enter it here — you'll be able to view and edit it, but not
-						re-share it or delete it for them.
-					</p>
-					<input
-						value={shareCodeInput}
-						onChange={(event) =>
-							setShareCodeInput(event.target.value.toUpperCase())
-						}
-						placeholder="Enter code"
-						aria-label="Share code"
-						className="mt-3 w-full rounded-full border border-line bg-bg px-4 py-2 text-center text-sm tracking-widest outline-none"
-					/>
-					<Button
-						className="mt-2 w-full"
-						onClick={handleRedeemShareCode}
-						disabled={redeeming || shareCodeInput.trim().length === 0}
-					>
-						{redeeming ? "Redeeming…" : "Redeem code"}
-					</Button>
-					{redeemError ? (
-						<p className="mt-2 text-warn text-xs">{redeemError}</p>
-					) : null}
-					{redeemed ? (
-						<div className="mt-2 flex items-center justify-between gap-2 text-xs">
-							<p className="text-ink-dim">
-								Added the {RESOURCE_TABLE_LABEL[redeemed.table]} "
-								{redeemed.title}".
-							</p>
-							<button
-								type="button"
-								onClick={handleViewRedeemed}
-								className="shrink-0 font-medium text-accent underline underline-offset-2"
-							>
-								View
-							</button>
-						</div>
-					) : null}
-				</section>
-
-				{hasDeviceIdentity ? (
-					<section className="card bg-card p-4">
-						<h3 className="font-semibold text-sm">Sync</h3>
-						<p className="mt-1 text-ink-dim text-xs">
-							Cookerist syncs automatically whenever you open the app — use this
-							if you don't want to wait.
+						<p className="mt-2 text-ink-dim text-xs">
+							You'll be able to view and edit it, but not re-share or delete it.
 						</p>
-						<Button
-							variant="secondary"
-							className="mt-3 w-full"
-							onClick={handleSyncNow}
-							disabled={syncing}
-						>
-							{syncing ? "Syncing…" : "Sync now"}
-						</Button>
-						{syncMessage ? (
-							<p className="mt-2 text-ink-dim text-xs">{syncMessage}</p>
+						{redeemError ? (
+							<p className="mt-2 text-warn text-xs">{redeemError}</p>
 						) : null}
-					</section>
-				) : null}
+						{redeemed ? (
+							<div className="mt-2 flex items-center justify-between gap-2 text-xs">
+								<p className="text-ink-dim">
+									Added the {RESOURCE_TABLE_LABEL[redeemed.table]} "
+									{redeemed.title}".
+								</p>
+								<button
+									type="button"
+									onClick={handleViewRedeemed}
+									className="shrink-0 font-medium text-accent underline underline-offset-2"
+								>
+									View
+								</button>
+							</div>
+						) : null}
+					</AccordionRow>
+				</div>
 			</div>
+		</div>
+	);
+}
+
+type AccordionRowProps = {
+	icon: React.ReactNode;
+	title: string;
+	subtitle: string;
+	open: boolean;
+	onToggle: () => void;
+	bordered?: boolean;
+	children: React.ReactNode;
+};
+
+function AccordionRow({
+	icon,
+	title,
+	subtitle,
+	open,
+	onToggle,
+	bordered,
+	children,
+}: AccordionRowProps) {
+	return (
+		<div className={bordered ? "border-b border-line px-3.5" : "px-3.5"}>
+			<button
+				type="button"
+				onClick={onToggle}
+				aria-expanded={open}
+				className="flex w-full items-center gap-3 py-3.5 text-left"
+			>
+				<span className="flex size-[34px] shrink-0 items-center justify-center rounded-[10px] bg-bg2 text-accent">
+					{icon}
+				</span>
+				<span className="min-w-0">
+					<div className="font-semibold text-sm">{title}</div>
+					<div className="text-ink-dim text-xs">{subtitle}</div>
+				</span>
+				<ChevronDown
+					className={`ml-auto size-4 shrink-0 text-ink-dim transition-transform duration-200 ${
+						open ? "rotate-180" : ""
+					}`}
+					aria-hidden="true"
+				/>
+			</button>
+			{open ? <div className="pb-4 pl-[46px]">{children}</div> : null}
 		</div>
 	);
 }

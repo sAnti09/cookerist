@@ -48,6 +48,9 @@ describe("AccountDrawer", () => {
 		render(<AccountDrawer open={true} onClose={vi.fn()} />);
 
 		await user.click(
+			screen.getByRole("button", { name: /add another device/i }),
+		);
+		await user.click(
 			screen.getByRole("button", { name: /generate pairing code/i }),
 		);
 
@@ -70,6 +73,9 @@ describe("AccountDrawer", () => {
 		});
 		render(<AccountDrawer open={true} onClose={vi.fn()} />);
 		await user.click(
+			screen.getByRole("button", { name: /add another device/i }),
+		);
+		await user.click(
 			screen.getByRole("button", { name: /generate pairing code/i }),
 		);
 		await screen.findByText("ABC12345");
@@ -87,6 +93,9 @@ describe("AccountDrawer", () => {
 			expiresAt: new Date(Date.now() + 600_000).toISOString(),
 		});
 		render(<AccountDrawer open={true} onClose={vi.fn()} />);
+		await user.click(
+			screen.getByRole("button", { name: /add another device/i }),
+		);
 		await user.click(
 			screen.getByRole("button", { name: /generate pairing code/i }),
 		);
@@ -110,6 +119,9 @@ describe("AccountDrawer", () => {
 		});
 		render(<AccountDrawer open={true} onClose={vi.fn()} />);
 		await user.click(
+			screen.getByRole("button", { name: /add another device/i }),
+		);
+		await user.click(
 			screen.getByRole("button", { name: /generate pairing code/i }),
 		);
 		await screen.findByText("ABC12345");
@@ -130,6 +142,9 @@ describe("AccountDrawer", () => {
 		render(<AccountDrawer open={true} onClose={vi.fn()} />);
 
 		await user.click(
+			screen.getByRole("button", { name: /add another device/i }),
+		);
+		await user.click(
 			screen.getByRole("button", { name: /generate pairing code/i }),
 		);
 
@@ -138,13 +153,35 @@ describe("AccountDrawer", () => {
 		).toBeInTheDocument();
 	});
 
+	it("closes the 'Add another device' row when 'Link this device' is opened", async () => {
+		const user = userEvent.setup();
+		render(<AccountDrawer open={true} onClose={vi.fn()} />);
+
+		await user.click(
+			screen.getByRole("button", { name: /add another device/i }),
+		);
+		expect(
+			screen.getByRole("button", { name: /generate pairing code/i }),
+		).toBeInTheDocument();
+
+		await user.click(screen.getByRole("button", { name: /link this device/i }));
+
+		expect(
+			screen.queryByRole("button", { name: /generate pairing code/i }),
+		).not.toBeInTheDocument();
+		expect(screen.getByLabelText(/pairing code/i)).toBeInTheDocument();
+	});
+
 	it("links this device with an entered code", async () => {
 		const user = userEvent.setup();
 		linkDeviceMock.mockResolvedValue(undefined);
 		render(<AccountDrawer open={true} onClose={vi.fn()} />);
 
-		await user.type(screen.getByLabelText(/pairing code/i), "xyz789");
 		await user.click(screen.getByRole("button", { name: /link this device/i }));
+		await user.type(screen.getByLabelText(/pairing code/i), "xyz789");
+		await user.click(
+			screen.getByRole("button", { name: /^link this device$/i }),
+		);
 
 		await waitFor(() => {
 			expect(linkDeviceMock).toHaveBeenCalledWith("XYZ789");
@@ -156,13 +193,16 @@ describe("AccountDrawer", () => {
 		linkDeviceMock.mockRejectedValue(new Error("bad code"));
 		render(<AccountDrawer open={true} onClose={vi.fn()} />);
 
-		await user.type(screen.getByLabelText(/pairing code/i), "BADCODE1");
 		await user.click(screen.getByRole("button", { name: /link this device/i }));
+		await user.type(screen.getByLabelText(/pairing code/i), "BADCODE1");
+		await user.click(
+			screen.getByRole("button", { name: /^link this device$/i }),
+		);
 
 		expect(await screen.findByText(/didn't work/i)).toBeInTheDocument();
 	});
 
-	it("shows the sync section only once this device has an identity", () => {
+	it("shows the sync icon button only once this device has an identity", () => {
 		render(<AccountDrawer open={true} onClose={vi.fn()} />);
 		expect(
 			screen.queryByRole("button", { name: /sync now/i }),
@@ -196,7 +236,7 @@ describe("AccountDrawer", () => {
 		expect(await screen.findByText("Synced.")).toBeInTheDocument();
 	});
 
-	it("hides the 'Link this device' section once this device already has an identity", () => {
+	it("hides the 'Link this device' row once this device already has an identity", () => {
 		const first = render(<AccountDrawer open={true} onClose={vi.fn()} />);
 		expect(
 			screen.getByRole("button", { name: /link this device/i }),
@@ -224,6 +264,9 @@ describe("AccountDrawer", () => {
 		});
 		render(<AccountDrawer open={true} onClose={vi.fn()} />);
 
+		await user.click(
+			screen.getByRole("button", { name: /redeem a share code/i }),
+		);
 		await user.type(screen.getByLabelText(/share code/i), "abcd1234");
 		await user.click(screen.getByRole("button", { name: /redeem code/i }));
 
@@ -238,6 +281,9 @@ describe("AccountDrawer", () => {
 		redeemShareCodeMock.mockRejectedValue(new Error("bad code"));
 		render(<AccountDrawer open={true} onClose={vi.fn()} />);
 
+		await user.click(
+			screen.getByRole("button", { name: /redeem a share code/i }),
+		);
 		await user.type(screen.getByLabelText(/share code/i), "BADCODE1");
 		await user.click(screen.getByRole("button", { name: /redeem code/i }));
 
@@ -255,6 +301,9 @@ describe("AccountDrawer", () => {
 		const onClose = vi.fn();
 		render(<AccountDrawer open={true} onClose={onClose} />);
 
+		await user.click(
+			screen.getByRole("button", { name: /redeem a share code/i }),
+		);
 		await user.type(screen.getByLabelText(/share code/i), "ABCD1234");
 		await user.click(screen.getByRole("button", { name: /redeem code/i }));
 		await user.click(await screen.findByRole("button", { name: /view/i }));

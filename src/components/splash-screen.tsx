@@ -1,5 +1,5 @@
-import { Flame } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Wordmark } from "#/components/wordmark";
 
 // Shown once per app open (a fresh full page load — client-side tab
 // navigation never remounts this), before the first tab renders. Brand
@@ -35,18 +35,8 @@ export function SplashScreen({ ready }: { ready: boolean }) {
 			style={done ? { visibility: "hidden" } : undefined}
 		>
 			<div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-bg px-10">
-				<h1
-					className="display-title inline-flex items-baseline text-4xl font-semibold text-ink"
-					aria-label="Cookerist"
-				>
-					<span aria-hidden="true">C</span>
-					<span aria-hidden="true">o</span>
-					<Flame
-						className="flame-flicker-wordmark size-7 shrink-0 text-accent"
-						fill="currentColor"
-						aria-hidden="true"
-					/>
-					<span aria-hidden="true">kerist</span>
+				<h1 className="text-4xl font-semibold text-ink">
+					<Wordmark />
 				</h1>
 				<p className="max-w-[26ch] text-center text-sm leading-relaxed text-ink-dim">
 					Tell us what you want to cook — we'll handle the rest.
