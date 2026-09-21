@@ -101,75 +101,22 @@ function RecipeDetailScreen() {
 		);
 	}
 
+	const overlayIconButtonClassName =
+		"border-white/40 bg-black/35 backdrop-blur-sm hover:bg-black/50";
+
 	return (
 		<div>
-			<div className="sticky top-0 z-10 flex items-center gap-2 border-line border-b bg-bg px-4 py-3.5">
-				<IconButton aria-label="Back to recipes" onClick={handleBack}>
-					<ChevronLeft className="size-[18px]" aria-hidden="true" />
-				</IconButton>
-				<div className="display-title flex-1 truncate text-[15px] font-semibold">
-					Recipe
-				</div>
-				<div className="flex shrink-0 gap-1.5">
-					<IconButton
-						aria-label={
-							recipe.favorite
-								? `Unfavorite ${recipe.title}`
-								: `Favorite ${recipe.title}`
-						}
-						aria-pressed={recipe.favorite}
-						onClick={() => toggleFavoriteRecipe(recipe.id)}
-					>
-						<Star
-							className={cn(
-								"size-4",
-								recipe.favorite ? "fill-accent text-accent" : "text-ink-dim",
-							)}
-						/>
-					</IconButton>
-					<IconButton
-						aria-label={`Modify ${recipe.title}`}
-						onClick={() => setModifyDialogOpen(true)}
-					>
-						<SquarePen
-							className={cn(
-								"size-4",
-								recipe.pendingModification ? "text-accent" : "text-ink-dim",
-							)}
-						/>
-					</IconButton>
-					{shared ? null : (
-						<IconButton
-							aria-label={`Share ${recipe.title}`}
-							onClick={() => setShareDialogOpen(true)}
-						>
-							<UserPlus className="size-4 text-ink-dim" />
-						</IconButton>
-					)}
-					<IconButton
-						aria-label={
-							shared ? `Remove ${recipe.title}` : `Delete ${recipe.title}`
-						}
-						onClick={() => setConfirmingDelete(true)}
-					>
-						<Trash2 className="size-4 text-ink-dim" />
-					</IconButton>
-				</div>
-			</div>
-
-			<div
-				className={cn("px-5 pt-5", recipe.steps.length > 0 ? "pb-28" : "pb-6")}
-			>
+			<div className="relative">
 				{recipe.thumbnailUrl ? (
 					<img
 						src={recipe.thumbnailUrl}
 						alt=""
-						className="mb-4 aspect-[16/9] w-full rounded-[18px] object-cover"
+						className="aspect-[4/3] w-full object-cover"
 					/>
 				) : (
 					<div
 						aria-hidden={isGeneratingThumbnail(recipe.id)}
-						className="mb-4 flex aspect-[16/9] w-full flex-col items-center justify-center gap-2 rounded-[18px] bg-bg2 px-4 text-center"
+						className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 bg-bg2 px-4 text-center"
 					>
 						<Flame className="size-6 text-ink-dim" aria-hidden="true" />
 						{isGeneratingThumbnail(recipe.id) ? (
@@ -189,41 +136,112 @@ function RecipeDetailScreen() {
 						)}
 					</div>
 				)}
-				<h1 className="display-title text-2xl font-semibold leading-tight">
-					{recipe.title}
-				</h1>
-				<div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
-					<span>
-						{new Date(recipe.createdAt).toLocaleDateString(undefined, {
-							year: "numeric",
-							month: "short",
-							day: "numeric",
-						})}
-					</span>
-					{recipe.difficulty ? (
-						<DifficultyBadge difficulty={recipe.difficulty} />
-					) : null}
+
+				<div
+					className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 px-4 pb-6"
+					style={{
+						paddingTop: "calc(1rem + env(safe-area-inset-top, 0px))",
+					}}
+				>
+					<IconButton
+						aria-label="Back to recipes"
+						onClick={handleBack}
+						className={overlayIconButtonClassName}
+					>
+						<ChevronLeft
+							className="size-[18px] text-white"
+							aria-hidden="true"
+						/>
+					</IconButton>
+					<div className="flex shrink-0 gap-1.5">
+						<IconButton
+							aria-label={
+								recipe.favorite
+									? `Unfavorite ${recipe.title}`
+									: `Favorite ${recipe.title}`
+							}
+							aria-pressed={recipe.favorite}
+							onClick={() => toggleFavoriteRecipe(recipe.id)}
+							className={overlayIconButtonClassName}
+						>
+							<Star
+								className={cn(
+									"size-4",
+									recipe.favorite ? "fill-accent text-accent" : "text-white",
+								)}
+							/>
+						</IconButton>
+						<IconButton
+							aria-label={`Modify ${recipe.title}`}
+							onClick={() => setModifyDialogOpen(true)}
+							className={overlayIconButtonClassName}
+						>
+							<SquarePen
+								className={cn(
+									"size-4",
+									recipe.pendingModification ? "text-accent" : "text-white",
+								)}
+							/>
+						</IconButton>
+						{shared ? null : (
+							<IconButton
+								aria-label={`Share ${recipe.title}`}
+								onClick={() => setShareDialogOpen(true)}
+								className={overlayIconButtonClassName}
+							>
+								<UserPlus className="size-4 text-white" />
+							</IconButton>
+						)}
+						<IconButton
+							aria-label={
+								shared ? `Remove ${recipe.title}` : `Delete ${recipe.title}`
+							}
+							onClick={() => setConfirmingDelete(true)}
+							className={overlayIconButtonClassName}
+						>
+							<Trash2 className="size-4 text-white" />
+						</IconButton>
+					</div>
 				</div>
-				{recipe.estimatedMinutes != null ||
-				recipe.caloriesPerServing != null ? (
-					<div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
+
+				<div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent px-5 pt-14 pb-4">
+					<h1 className="display-title text-2xl font-semibold text-white leading-tight [text-shadow:0_1px_4px_rgba(0,0,0,0.45)]">
+						{recipe.title}
+					</h1>
+					<div className="mt-1.5 flex flex-nowrap items-center gap-2 overflow-hidden whitespace-nowrap text-white/85 text-xs">
+						<span className="shrink-0">
+							{new Date(recipe.createdAt).toLocaleDateString(undefined, {
+								year: "numeric",
+								month: "short",
+								day: "numeric",
+							})}
+						</span>
+						{recipe.difficulty ? (
+							<DifficultyBadge
+								difficulty={recipe.difficulty}
+								className="shrink-0 bg-white/20 text-white"
+							/>
+						) : null}
 						{recipe.estimatedMinutes != null ? (
-							<span className="inline-flex items-center gap-1 tabular-nums">
+							<span className="inline-flex shrink-0 items-center gap-1 tabular-nums">
 								<Clock className="size-3" aria-hidden="true" />
 								{formatEstimatedTime(recipe.estimatedMinutes)}
 							</span>
 						) : null}
 						{recipe.caloriesPerServing != null ? (
-							<span className="inline-flex items-center gap-1 tabular-nums">
+							<span className="inline-flex shrink-0 items-center gap-1 tabular-nums">
 								<Flame className="size-3" aria-hidden="true" />
 								{formatCaloriesPerServing(recipe.caloriesPerServing)}
 							</span>
 						) : null}
 					</div>
-				) : null}
-				<div className="mt-5">
-					<RecipeDetail recipe={recipe} onUpdate={updateRecipe} />
 				</div>
+			</div>
+
+			<div
+				className={cn("px-5 pt-5", recipe.steps.length > 0 ? "pb-28" : "pb-6")}
+			>
+				<RecipeDetail recipe={recipe} onUpdate={updateRecipe} />
 			</div>
 
 			<ConfirmDialog
