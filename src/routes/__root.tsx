@@ -7,6 +7,7 @@ import {
 	Scripts,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
+import { NEW_SITE_URL } from "#/lib/site-domain";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import appCss from "../styles.css?url";
 
@@ -14,7 +15,7 @@ interface MyRouterContext {
 	queryClient: QueryClient;
 }
 
-const SITE_URL = "https://cookerist.jameseuangel-limpiado.workers.dev";
+const SITE_URL = NEW_SITE_URL;
 const SITE_DESCRIPTION =
 	"Type a dish — or the ingredients you have — and get a full recipe in seconds. Ingredients, steps, and a grocery list, saved right in your browser.";
 const OG_IMAGE_URL = `${SITE_URL}/og-image.png`;

@@ -4,6 +4,11 @@
   "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
+  "routes": [
+    // Custom domain on top of the default workers.dev route (left enabled --
+    // no `workers_dev: false` here -- so the old link keeps working too).
+    { "pattern": "cookerist.com", "custom_domain": true }
+  ],
   "vars": {
     "AI_PROVIDER": "groq",
     // The R2 bucket's public base URL (r2.dev subdomain or custom domain) --
@@ -11,7 +16,7 @@
     // sensitive, so a var, not a secret -- must stay a plain var here (never
     // `wrangler secret put`), since `vars` is pushed on every deploy and will
     // silently blank out a same-named secret otherwise.
-    "R2_PUBLIC_URL_BASE": "https://pub-38cdfcc564164b3ebca3c3d500d87700.r2.dev"
+    "R2_PUBLIC_URL_BASE": "https://cdn.cookerist.com"
   },
   "r2_buckets": [
     {

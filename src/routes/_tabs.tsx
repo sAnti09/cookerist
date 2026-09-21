@@ -3,6 +3,7 @@ import { AccountDrawer } from "#/components/account-drawer";
 import { BottomTabBar } from "#/components/bottom-tab-bar";
 import { GroceryListCreateForm } from "#/components/grocery-list-create-form";
 import { InAppBrowserBanner } from "#/components/in-app-browser-banner";
+import { OldSiteMigrationNotice } from "#/components/old-site-migration-notice";
 import { SplashScreen } from "#/components/splash-screen";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { AppDataProvider, useAppData } from "#/lib/app-data-context";
@@ -71,6 +72,7 @@ function TabsLayoutContent() {
 			</div>
 			{onDetailRoute ? null : <BottomTabBar />}
 			<AccountDrawer open={accountDrawerOpen} onClose={closeAccountDrawer} />
+			<OldSiteMigrationNotice />
 			{creatingGroceryList || editingGroceryList ? (
 				<GroceryListCreateForm
 					recipes={recipes}

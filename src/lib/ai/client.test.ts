@@ -90,7 +90,7 @@ describe("getAiClient", () => {
 			baseURL: "https://openrouter.ai/api/v1",
 			timeout: 180_000,
 			defaultHeaders: {
-				"HTTP-Referer": "https://cookerist.jameseuangel-limpiado.workers.dev",
+				"HTTP-Referer": "https://cookerist.com",
 				"X-Title": "Cookerist",
 			},
 		});

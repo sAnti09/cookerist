@@ -70,8 +70,7 @@ export function getAiClient(provider: AiProvider = getActiveProvider()): Groq {
 		defaultHeaders:
 			provider === "openrouter"
 				? {
-						"HTTP-Referer":
-							"https://cookerist.jameseuangel-limpiado.workers.dev",
+						"HTTP-Referer": "https://cookerist.com",
 						"X-Title": "Cookerist",
 					}
 				: undefined,
