@@ -13,6 +13,14 @@
     "R2_PUBLIC_URL_BASE": ""
   },
   "r2_buckets": [
-    { "binding": "THUMBNAILS", "bucket_name": "cookerist-thumbnails" }
+    {
+      "binding": "THUMBNAILS",
+      "bucket_name": "cookerist-thumbnails",
+      // Without this, @cloudflare/vite-plugin simulates R2 locally
+      // (.wrangler/state) during `pnpm dev` instead of hitting the real
+      // bucket -- uploads would "succeed" but never actually reach the
+      // bucket R2_PUBLIC_URL_BASE points at, producing a broken image.
+      "remote": true
+    }
   ]
 }
