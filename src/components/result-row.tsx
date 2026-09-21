@@ -169,13 +169,21 @@ export function RecipeResultRow({
 				id={`recipe-${recipe.id}`}
 				data-testid={`recipe-row-${recipe.id}`}
 				{...swipe.handlers}
-				className="card flex translate-x-0 scroll-mt-6 items-center gap-3 bg-card p-4 text-ink no-underline transition-transform duration-200"
+				className="card flex min-h-28 translate-x-0 scroll-mt-6 items-stretch gap-3 overflow-hidden bg-card text-ink no-underline transition-transform duration-200"
 			>
 				{recipe.thumbnailUrl ? (
+					// Full-bleed to the card's own edges (top/bottom/left) rather than
+					// an inset square — the card's overflow-hidden + rounded-[18px]
+					// clips the outer corners to match, so no rounding is needed here.
+					// Width matches the row's min-h-28 floor so it renders as a
+					// consistent square across every row regardless of how much
+					// metadata a given recipe has (see the title's truncate above —
+					// together these keep row height, and thus this crop, predictable
+					// instead of varying per recipe).
 					<img
 						src={recipe.thumbnailUrl}
 						alt=""
-						className="size-10 shrink-0 rounded-[10px] object-cover"
+						className="w-28 shrink-0 object-cover"
 					/>
 				) : (
 					// Placeholder while a thumbnail is pending/never generated — never
@@ -186,14 +194,16 @@ export function RecipeResultRow({
 					// row's own tap/swipe gestures.
 					<div
 						aria-hidden="true"
-						className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-bg2"
+						className="flex w-28 shrink-0 items-center justify-center bg-bg2"
 					>
-						<Flame className="size-4 text-ink-dim" aria-hidden="true" />
+						<Flame className="size-5 text-ink-dim" aria-hidden="true" />
 					</div>
 				)}
-				<div className="min-w-0 flex-1">
+				<div className="flex min-w-0 flex-1 flex-col justify-center py-4 pr-4">
 					<div className="flex items-center gap-1.5">
-						<h3 className="display-title text-lg text-ink">{recipe.title}</h3>
+						<h3 className="display-title min-w-0 truncate text-lg text-ink">
+							{recipe.title}
+						</h3>
 						{shared ? (
 							<Users
 								className="size-[15px] shrink-0 text-ink-dim"
@@ -206,25 +216,31 @@ export function RecipeResultRow({
 						{recipe.difficulty ? (
 							<DifficultyBadge difficulty={recipe.difficulty} />
 						) : null}
-						{recipe.estimatedMinutes != null ? (
-							<span className="inline-flex items-center gap-1 tabular-nums">
-								<Clock className="size-3" aria-hidden="true" />
-								{formatEstimatedTime(recipe.estimatedMinutes)}
-							</span>
-						) : null}
-						{recipe.caloriesPerServing != null ? (
-							<span className="inline-flex items-center gap-1 tabular-nums">
-								<Flame className="size-3" aria-hidden="true" />
-								{formatCaloriesPerServing(recipe.caloriesPerServing)}
-							</span>
-						) : null}
-						{recipe.favorite ? (
-							<Star
-								className="size-3 fill-accent text-accent"
-								aria-label="Favorited"
-							/>
-						) : null}
 					</div>
+					{recipe.estimatedMinutes != null ||
+					recipe.caloriesPerServing != null ||
+					recipe.favorite ? (
+						<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
+							{recipe.estimatedMinutes != null ? (
+								<span className="inline-flex items-center gap-1 tabular-nums">
+									<Clock className="size-3" aria-hidden="true" />
+									{formatEstimatedTime(recipe.estimatedMinutes)}
+								</span>
+							) : null}
+							{recipe.caloriesPerServing != null ? (
+								<span className="inline-flex items-center gap-1 tabular-nums">
+									<Flame className="size-3" aria-hidden="true" />
+									{formatCaloriesPerServing(recipe.caloriesPerServing)}
+								</span>
+							) : null}
+							{recipe.favorite ? (
+								<Star
+									className="size-3 fill-accent text-accent"
+									aria-label="Favorited"
+								/>
+							) : null}
+						</div>
+					) : null}
 				</div>
 			</Link>
 		</div>

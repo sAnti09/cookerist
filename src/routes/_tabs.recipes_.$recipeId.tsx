@@ -203,19 +203,24 @@ function RecipeDetailScreen() {
 					{recipe.difficulty ? (
 						<DifficultyBadge difficulty={recipe.difficulty} />
 					) : null}
-					{recipe.estimatedMinutes != null ? (
-						<span className="inline-flex items-center gap-1 tabular-nums">
-							<Clock className="size-3" aria-hidden="true" />
-							{formatEstimatedTime(recipe.estimatedMinutes)}
-						</span>
-					) : null}
-					{recipe.caloriesPerServing != null ? (
-						<span className="inline-flex items-center gap-1 tabular-nums">
-							<Flame className="size-3" aria-hidden="true" />
-							{formatCaloriesPerServing(recipe.caloriesPerServing)}
-						</span>
-					) : null}
 				</div>
+				{recipe.estimatedMinutes != null ||
+				recipe.caloriesPerServing != null ? (
+					<div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
+						{recipe.estimatedMinutes != null ? (
+							<span className="inline-flex items-center gap-1 tabular-nums">
+								<Clock className="size-3" aria-hidden="true" />
+								{formatEstimatedTime(recipe.estimatedMinutes)}
+							</span>
+						) : null}
+						{recipe.caloriesPerServing != null ? (
+							<span className="inline-flex items-center gap-1 tabular-nums">
+								<Flame className="size-3" aria-hidden="true" />
+								{formatCaloriesPerServing(recipe.caloriesPerServing)}
+							</span>
+						) : null}
+					</div>
+				) : null}
 				<div className="mt-5">
 					<RecipeDetail recipe={recipe} onUpdate={updateRecipe} />
 				</div>
