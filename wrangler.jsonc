@@ -5,10 +5,15 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
   "routes": [
-    // Custom domain on top of the default workers.dev route (left enabled --
-    // no `workers_dev: false` here -- so the old link keeps working too).
+    // Custom domain on top of the default workers.dev route.
     { "pattern": "cookerist.com", "custom_domain": true }
   ],
+  // Wrangler's default for `workers_dev` flips from true to false as soon as
+  // a `routes` array is present at all -- confirmed the hard way (a deploy
+  // with the `routes` entry above but no explicit `workers_dev` silently
+  // disabled the workers.dev route entirely). Must stay explicit here, not
+  // just "absent = enabled" like it was before `routes` existed.
+  "workers_dev": true,
   "vars": {
     "AI_PROVIDER": "groq",
     // The R2 bucket's public base URL (r2.dev subdomain or custom domain) --
