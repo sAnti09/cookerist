@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Book, Calendar, ShoppingCart } from "lucide-react";
+import { Calendar, ShoppingCart, UtensilsCrossed } from "lucide-react";
 import { cn } from "#/lib/utils";
 
 // Fixed bottom navigation replacing the old pill ViewToggle — three tabs
@@ -28,7 +28,7 @@ export function BottomTabBar() {
 					onRecipes ? "font-semibold text-accent" : "text-ink-dim",
 				)}
 			>
-				<Book className="size-[22px]" aria-hidden="true" />
+				<UtensilsCrossed className="size-[22px]" aria-hidden="true" />
 				<span className="text-[11px]">Recipes</span>
 			</Link>
 			<Link

@@ -1,15 +1,13 @@
 import type { LucideIcon } from "lucide-react";
 import {
 	CalendarRange,
-	Camera,
 	ChefHat,
-	ListChecks,
 	Lock,
+	RefreshCw,
 	ShoppingCart,
 	Smartphone,
 	Sparkles,
 	Wand2,
-	WifiOff,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { InstallAppButton } from "#/components/install-app-button";
@@ -28,13 +26,7 @@ function buildFeatures(onResetData: () => void): Feature[] {
 			icon: Sparkles,
 			title: "AI-powered recipes",
 			description:
-				"Describe any dish in plain language and get a full recipe back — measured ingredients and clear steps, scaled instantly to however many servings you need.",
-		},
-		{
-			icon: Camera,
-			title: "Snap a photo to cook it",
-			description:
-				"Not sure what a dish is called? Take or upload a photo and Cookerist identifies it and builds the recipe for you.",
+				"Describe a dish — or snap a photo of one — and Cookerist builds a full recipe: measured ingredients, clear steps, and its own illustrative photo, scaled to however many servings you need.",
 		},
 		{
 			icon: Wand2,
@@ -56,36 +48,31 @@ function buildFeatures(onResetData: () => void): Feature[] {
 		},
 		{
 			icon: ShoppingCart,
-			title: "Smart grocery lists",
+			title: "Grocery lists",
 			description:
-				"Pull ingredients from several recipes into one list, organized by grocery-store aisle — matching quantities merge automatically.",
-		},
-		{
-			icon: ListChecks,
-			title: "Guided shopping mode",
-			description:
-				"A hands-free, checklist-style view for the store, so checking things off while you shop is as easy as checking them off at home.",
-		},
-		{
-			icon: WifiOff,
-			title: "Works offline",
-			description:
-				"Once a recipe is saved, it's yours to cook from with no signal and no connection required.",
+				"Pull ingredients from several recipes into one aisle-organized list — matching quantities merge automatically — then check them off hands-free while you're at the store.",
 		},
 		{
 			icon: Smartphone,
-			title: "Install on any phone",
+			title: "Take it anywhere",
 			description:
-				"Add Cookerist to your home screen and use it like a native app — no app store needed.",
+				"Install Cookerist on your home screen and use it like a native app — once a recipe is saved, it's yours to cook from with no signal required.",
 			action: <InstallAppButton />,
+		},
+		{
+			icon: RefreshCw,
+			title: "Sync & share",
+			description:
+				"Pair your own devices to keep everything in sync, or share a single recipe, grocery list, or meal plan with someone else — no account or sign-up needed.",
 		},
 		{
 			icon: Lock,
 			title: "Private by design",
 			description: (
 				<>
-					Everything lives only in this browser — no accounts, nothing sent to a
-					server. You can also{" "}
+					Your recipes live in this browser by default — nothing syncs anywhere
+					unless you turn it on, and even then it's tied to a private code, not
+					an account. You can also{" "}
 					<button
 						type="button"
 						className="font-medium text-accent underline underline-offset-2 hover:text-ink"

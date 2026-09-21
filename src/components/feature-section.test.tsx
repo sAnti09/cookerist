@@ -9,14 +9,12 @@ describe("FeatureSection", () => {
 
 		for (const title of [
 			"AI-powered recipes",
-			"Snap a photo to cook it",
 			"Refine any recipe",
 			"Cook mode",
 			"Plan your week",
-			"Smart grocery lists",
-			"Guided shopping mode",
-			"Works offline",
-			"Install on any phone",
+			"Grocery lists",
+			"Take it anywhere",
+			"Sync & share",
 			"Private by design",
 		]) {
 			expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
