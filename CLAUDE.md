@@ -92,6 +92,27 @@ Prompt entry, loading (flickering flame + "Simmering your …" copy), off-topic 
 - **Biome over ESLint+Prettier**: greenfield project with no dependency on niche ESLint plugins (e.g. no need for framework-specific rule packs beyond what Biome already covers for React/JSX/a11y). Revisit if we hit a rule Biome doesn't support.
 - **shadcn/ui over daisyUI**: we own the component source directly (no black-box dependency), better long-term customization for a distinctive "modern" look.
 
+## Services
+
+Every external service the running app actually talks to, and what it costs. See "Environment / secrets" below for the exact env var each one needs.
+
+| Service | Used for | Cost | Auth |
+|---|---|---|---|
+| **Groq (GroqCloud)** | Primary AI provider — recipe generation, on-topic check, modification, meal plan draft/refine, ingredient categorization, dish identification | **Free** — no credit card, but rate-limited (~30 req/min, up to ~14,400 req/day, rolling window) | `GROQ_API_KEY` (secret) |
+| **OpenRouter** | Switchable/failover AI provider (same model slugs as Groq) — used as overflow once Groq's free-tier rate limit is actually hit, and as silent automatic failover on any Groq call error | **Paid**, per-token (the free `:free` variant was evaluated and rejected — tighter limits than Groq's own free tier) | `OPENROUTER_API_KEY` (secret), only required once `AI_PROVIDER="openrouter"` |
+| **DeepInfra** | Recipe thumbnail image generation (`black-forest-labs/FLUX-1-schnell`) | **Paid**, ~$0.0005/thumbnail at 512×512, capped at 2 attempts/recipe | `DEEPINFRA_API_KEY` (secret) |
+| **Cloudflare Workers** | App hosting — static assets + the Worker itself | **Free** at current usage (static assets free/unlimited, Worker requests on the free tier) | Wrangler OAuth login (`wrangler login`), no app-level key |
+| **Cloudflare R2** | Object storage for recipe thumbnail images (`cookerist-thumbnails` bucket) | **Free up to 10 GB storage / 10M Class A / 1M Class B ops per month, zero egress fees** — usage beyond that bills the card on file, metered, no cap | Native bucket binding (`THUMBNAILS`), no key; public URL is the `R2_PUBLIC_URL_BASE` var |
+| **Cloudflare Web Analytics** | Page-view beacon, production only | **Free** | Public site token embedded in the page (not a secret) |
+| **Supabase** | Sync backend (project `cookerist-sea`) — Postgres for recipes/grocery lists/meal plans, account-less identity, per-resource sharing | **Free tier** | `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` (public), `SUPABASE_SECRET_KEY` (secret), `DEVICE_JWT_SIGNING_KEY` (secret) |
+| **Google Fonts** | Fraunces + Work Sans web fonts | **Free** | None |
+| **GitHub** | Source control, public repo | **Free** (public repo) | User's own `gh` OAuth login |
+| **Beacon** (beacon.chro.media) | Chromedia's internal ticket tracker — project management only, never called by the running app | N/A (internal tool) | MCP connector token |
+
+**Paid services, summarized**: OpenRouter and DeepInfra are pure pay-per-use (no free allotment, no monthly minimum — cost is proportional to actual usage). Cloudflare R2 is free up to its monthly quota but metered beyond it — worth watching if thumbnail volume grows, since overage bills automatically with no spending cap. Everything else above is free at current scale.
+
+**Planned, not yet integrated** (see "Future features" below): Stripe (subscription billing), Instacart Developer Platform (grocery affiliate "order this list" button), Sign in with Apple/Google (optional account recovery layer).
+
 ## Data model (draft — refine when implementing)
 
 ```ts
