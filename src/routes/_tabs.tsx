@@ -68,11 +68,11 @@ function TabsLayoutContent() {
 				)}
 			>
 				<InAppBrowserBanner />
+				<OldSiteMigrationNotice />
 				<Outlet />
 			</div>
 			{onDetailRoute ? null : <BottomTabBar />}
 			<AccountDrawer open={accountDrawerOpen} onClose={closeAccountDrawer} />
-			<OldSiteMigrationNotice />
 			{creatingGroceryList || editingGroceryList ? (
 				<GroceryListCreateForm
 					recipes={recipes}

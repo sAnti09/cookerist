@@ -10,7 +10,7 @@ vi.mock("#/lib/app-data-context", () => ({
 }));
 
 const createPairingCodeMock = vi.fn();
-const DISMISSED_KEY = "cookerist:old-site-notice-dismissed";
+const SEEN_KEY = "cookerist:old-site-notice-seen";
 
 function setHostname(hostname: string) {
 	Object.defineProperty(window, "location", {
@@ -25,7 +25,7 @@ const originalLocation = window.location;
 beforeEach(() => {
 	createPairingCodeMock.mockReset();
 	useAppDataMock.mockReturnValue({ createPairingCode: createPairingCodeMock });
-	window.localStorage.removeItem(DISMISSED_KEY);
+	window.localStorage.removeItem(SEEN_KEY);
 });
 
 afterEach(() => {
@@ -41,35 +41,48 @@ describe("OldSiteMigrationNotice", () => {
 		setHostname("cookerist.com");
 		render(<OldSiteMigrationNotice />);
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+		expect(screen.queryByText(/has moved/i)).not.toBeInTheDocument();
 	});
 
-	it("shows the notice when visiting the old hostname", () => {
+	it("auto-opens the dialog on the first ever visit to the old hostname", () => {
 		setHostname(OLD_SITE_HOSTNAME);
 		render(<OldSiteMigrationNotice />);
 		expect(
 			screen.getByRole("dialog", { name: /cookerist has moved/i }),
 		).toBeInTheDocument();
+		expect(window.localStorage.getItem(SEEN_KEY)).toBe("1");
 	});
 
-	it("stays hidden after already being dismissed", () => {
+	it("shows the persistent banner instead of the dialog on a later visit", () => {
 		setHostname(OLD_SITE_HOSTNAME);
-		window.localStorage.setItem(DISMISSED_KEY, "1");
+		window.localStorage.setItem(SEEN_KEY, "1");
 		render(<OldSiteMigrationNotice />);
+
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: /move my data/i }),
+		).toBeInTheDocument();
 	});
 
-	it("dismisses and remembers via the Not now link", async () => {
+	it("reopens the dialog from the banner and shows the banner again after closing it", async () => {
 		setHostname(OLD_SITE_HOSTNAME);
+		window.localStorage.setItem(SEEN_KEY, "1");
 		const user = userEvent.setup();
 		render(<OldSiteMigrationNotice />);
 
-		await user.click(screen.getByRole("button", { name: /not now/i }));
+		await user.click(screen.getByRole("button", { name: /move my data/i }));
+		expect(
+			screen.getByRole("dialog", { name: /cookerist has moved/i }),
+		).toBeInTheDocument();
 
+		await user.click(screen.getByRole("button", { name: /not now/i }));
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-		expect(window.localStorage.getItem(DISMISSED_KEY)).toBe("1");
+		expect(
+			screen.getByRole("button", { name: /move my data/i }),
+		).toBeInTheDocument();
 	});
 
-	it("dismisses when the backdrop is clicked", async () => {
+	it("dismisses the dialog when the backdrop is clicked", async () => {
 		setHostname(OLD_SITE_HOSTNAME);
 		const user = userEvent.setup();
 		render(<OldSiteMigrationNotice />);
@@ -79,7 +92,7 @@ describe("OldSiteMigrationNotice", () => {
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
 
-	it("dismisses when Escape is pressed", async () => {
+	it("dismisses the dialog when Escape is pressed", async () => {
 		setHostname(OLD_SITE_HOSTNAME);
 		const user = userEvent.setup();
 		render(<OldSiteMigrationNotice />);

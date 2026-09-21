@@ -1,30 +1,84 @@
 import { ArrowRight, Check, Copy, Share, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { useAppData } from "#/lib/app-data-context";
 import { canShareNatively, shareNatively } from "#/lib/share-native";
 import { NEW_SITE_URL, OLD_SITE_HOSTNAME } from "#/lib/site-domain";
 import { useBodyScrollLock } from "#/lib/use-body-scroll-lock";
 
-const DISMISSED_KEY = "cookerist:old-site-notice-dismissed";
+const SEEN_KEY = "cookerist:old-site-notice-seen";
 
 // Cookerist moved from this workers.dev URL to cookerist.com (see
 // CLAUDE.md's "Custom domain added" note) and this link is slated to be
-// retired eventually. Recipes/grocery lists/meal plans live in this
-// browser's localStorage, scoped to the exact origin they were saved
-// under, so a hard redirect to the new domain would make a visitor's whole
-// library look like it vanished (a different origin is a completely
-// separate localStorage store) and would also kick an installed PWA out of
-// standalone mode (its manifest scope is origin-bound) -- see the
-// conversation that led to this file for the full reasoning. Instead of
-// redirecting, this is a one-time, dismissible, instructions-only popup --
-// shown only when this device is actually visiting the old hostname --
-// that walks the user through the *existing* device-pairing flow (built
-// for syncing two of your own devices) as the sanctioned way to bring this
-// browser's library over to the new domain without losing anything.
+// retired eventually. Both URLs run the exact same deployed Worker, so a
+// visitor here isn't missing any updates -- this is purely about getting
+// people off the old link before it's eventually retired. Recipes/grocery
+// lists/meal plans live in this browser's localStorage, scoped to the
+// exact origin they were saved under, so a hard redirect to the new domain
+// would make a visitor's whole library look like it vanished (a different
+// origin is a completely separate localStorage store) and would also kick
+// an installed PWA out of standalone mode (its manifest scope is
+// origin-bound). Instead of redirecting: the full instructions dialog
+// auto-opens once ever (tracked by SEEN_KEY), then every visit after that
+// shows a persistent, low-key inline banner instead -- deliberately never
+// fully dismissible, since there's no cutover date yet and the whole point
+// is to actually get people to migrate, not to let a single "not now" opt
+// them out forever. Both the auto-opened dialog and the banner's own CTA
+// open the same dialog, which walks the user through the *existing*
+// device-pairing flow (built for syncing two of your own devices) as the
+// sanctioned way to bring this browser's library over without losing
+// anything.
 export function OldSiteMigrationNotice() {
+	const [onOldSite, setOnOldSite] = useState(false);
+	const [dialogOpen, setDialogOpen] = useState(false);
+
+	useEffect(() => {
+		if (window.location.hostname !== OLD_SITE_HOSTNAME) return;
+		setOnOldSite(true);
+		try {
+			if (window.localStorage.getItem(SEEN_KEY) === "1") return;
+			window.localStorage.setItem(SEEN_KEY, "1");
+		} catch {
+			// If localStorage is unavailable, err on the side of showing it --
+			// worse to silently never mention the move than to ask again.
+		}
+		setDialogOpen(true);
+	}, []);
+
+	if (!onOldSite) return null;
+
+	return (
+		<>
+			{dialogOpen ? (
+				<MigrationDialog onClose={() => setDialogOpen(false)} />
+			) : (
+				<MigrationBanner onOpenDialog={() => setDialogOpen(true)} />
+			)}
+		</>
+	);
+}
+
+function MigrationBanner({ onOpenDialog }: { onOpenDialog: () => void }) {
+	return (
+		<output className="card mb-4 flex items-center gap-2.5 border-accent/30 bg-bg2 p-3">
+			<ArrowRight className="size-4 shrink-0 text-accent" aria-hidden="true" />
+			<p className="text-ink-dim text-sm">
+				Cookerist has moved to{" "}
+				<span className="font-medium text-ink">cookerist.com</span>.{" "}
+				<button
+					type="button"
+					onClick={onOpenDialog}
+					className="font-medium text-accent underline underline-offset-2"
+				>
+					Move my data
+				</button>
+			</p>
+		</output>
+	);
+}
+
+function MigrationDialog({ onClose }: { onClose: () => void }) {
 	const { createPairingCode } = useAppData();
-	const [open, setOpen] = useState(false);
 	const [generating, setGenerating] = useState(false);
 	const [result, setResult] = useState<{
 		code: string;
@@ -33,39 +87,15 @@ export function OldSiteMigrationNotice() {
 	const [error, setError] = useState<string | null>(null);
 	const [copied, setCopied] = useState(false);
 
-	useEffect(() => {
-		if (window.location.hostname !== OLD_SITE_HOSTNAME) return;
-		try {
-			if (window.localStorage.getItem(DISMISSED_KEY) === "1") return;
-		} catch {
-			// If localStorage is unavailable, err on the side of showing it --
-			// worse to silently never mention the move than to ask again.
-		}
-		setOpen(true);
-	}, []);
-
-	useBodyScrollLock(open);
-
-	const handleDismiss = useCallback(() => {
-		try {
-			window.localStorage.setItem(DISMISSED_KEY, "1");
-		} catch {
-			// Same tolerance as everywhere else this app touches localStorage --
-			// worst case it just asks again next visit.
-		}
-		setOpen(false);
-	}, []);
+	useBodyScrollLock(true);
 
 	useEffect(() => {
-		if (!open) return;
 		function onKeyDown(event: KeyboardEvent) {
-			if (event.key === "Escape") handleDismiss();
+			if (event.key === "Escape") onClose();
 		}
 		document.addEventListener("keydown", onKeyDown);
 		return () => document.removeEventListener("keydown", onKeyDown);
-	}, [open, handleDismiss]);
-
-	if (!open) return null;
+	}, [onClose]);
 
 	async function handleGenerate() {
 		setGenerating(true);
@@ -106,7 +136,7 @@ export function OldSiteMigrationNotice() {
 				type="button"
 				aria-label="Dismiss"
 				className="absolute inset-0 bg-black/40"
-				onClick={handleDismiss}
+				onClick={onClose}
 			/>
 			<div
 				role="dialog"
@@ -121,7 +151,7 @@ export function OldSiteMigrationNotice() {
 					<button
 						type="button"
 						aria-label="Close"
-						onClick={handleDismiss}
+						onClick={onClose}
 						className="flex size-8 items-center justify-center rounded-[10px] hover:bg-bg2"
 					>
 						<X className="size-4" aria-hidden="true" />
@@ -209,7 +239,7 @@ export function OldSiteMigrationNotice() {
 				{error ? <p className="mt-2 text-warn text-xs">{error}</p> : null}
 				<button
 					type="button"
-					onClick={handleDismiss}
+					onClick={onClose}
 					className="mt-3 w-full text-center text-ink-dim text-xs underline underline-offset-2"
 				>
 					Not now
