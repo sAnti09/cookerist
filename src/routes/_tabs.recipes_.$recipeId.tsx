@@ -275,6 +275,7 @@ function RecipeDetailScreen() {
 				onUpdate={updateRecipe}
 				onCreateRecipe={(newRecipe) => {
 					createRecipe(newRecipe);
+					generateThumbnailForRecipe(newRecipe);
 					navigate({
 						to: "/recipes/$recipeId",
 						params: { recipeId: newRecipe.id },

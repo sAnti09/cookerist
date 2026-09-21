@@ -784,6 +784,9 @@ describe("AppDataProvider thumbnail generation", () => {
 	});
 
 	it("sets the thumbnail URL and clears the generating state on success", async () => {
+		// A recipe missing a thumbnail is a candidate for the mount-time
+		// background sweep (see app-data-context.tsx's sweepMissingThumbnails),
+		// which fires this request on its own — no click needed.
 		let resolveRequest!: (value: unknown) => void;
 		generateRecipeThumbnailMock.mockReturnValueOnce(
 			new Promise((r) => {
@@ -791,17 +794,14 @@ describe("AppDataProvider thumbnail generation", () => {
 			}),
 		);
 		saveRecipe([], makeRecipe());
-		const user = userEvent.setup();
 		renderHarness();
 		await screen.findByTestId("recipe-count");
 
-		await user.click(
-			screen.getByRole("button", { name: "generate-thumbnail" }),
+		await waitFor(() =>
+			expect(generateRecipeThumbnailMock).toHaveBeenCalledWith({
+				data: { recipeId: "r1", title: "Recipe", overview: "" },
+			}),
 		);
-
-		expect(generateRecipeThumbnailMock).toHaveBeenCalledWith({
-			data: { recipeId: "r1", title: "Recipe", overview: "" },
-		});
 		expect(screen.getByTestId("r1-generating-thumbnail")).toHaveTextContent(
 			"true",
 		);
@@ -822,18 +822,18 @@ describe("AppDataProvider thumbnail generation", () => {
 	});
 
 	it("increments thumbnailAttempts and clears the generating state on an error result", async () => {
+		// A recipe missing a thumbnail is also a candidate for the mount-time
+		// background sweep (see app-data-context.tsx's sweepMissingThumbnails),
+		// which fires this request automatically — no click needed, and it's
+		// this automatic request (not a later explicit one) that consumes the
+		// queued error result below.
 		generateRecipeThumbnailMock.mockResolvedValueOnce({
 			type: "error",
 			message: "DeepInfra image generation failed: 500 Internal Server Error",
 		});
 		saveRecipe([], makeRecipe());
-		const user = userEvent.setup();
 		renderHarness();
 		await screen.findByTestId("recipe-count");
-
-		await user.click(
-			screen.getByRole("button", { name: "generate-thumbnail" }),
-		);
 
 		await waitFor(() =>
 			expect(screen.getByTestId("r1-thumbnail-attempts")).toHaveTextContent(
@@ -847,17 +847,14 @@ describe("AppDataProvider thumbnail generation", () => {
 	});
 
 	it("increments thumbnailAttempts when the request rejects", async () => {
+		// Same reasoning as above — the mount-time sweep fires this request on
+		// its own, without any click.
 		generateRecipeThumbnailMock.mockRejectedValueOnce(
 			new Error("network down"),
 		);
 		saveRecipe([], makeRecipe());
-		const user = userEvent.setup();
 		renderHarness();
 		await screen.findByTestId("recipe-count");
-
-		await user.click(
-			screen.getByRole("button", { name: "generate-thumbnail" }),
-		);
 
 		await waitFor(() =>
 			expect(screen.getByTestId("r1-thumbnail-attempts")).toHaveTextContent(

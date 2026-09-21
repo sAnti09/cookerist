@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, Trash2, UserPlus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { MealPlanBuilding } from "#/components/meal-plan-building";
 import { MealPlanDraft } from "#/components/meal-plan-draft";
 import { MealPlanReady } from "#/components/meal-plan-ready";
@@ -65,20 +65,35 @@ function MealPlanDetailScreen() {
 		saveGroceryListForm,
 		updateGroceryList,
 		isSharedWithMe,
+		generateThumbnailForRecipe,
 	} = useAppData();
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const [shareDialogOpen, setShareDialogOpen] = useState(false);
 	const plan = mealPlans.find((p) => p.id === planId);
 	const shared = plan ? isSharedWithMe(plan) : false;
 
+	// Meal-plan-built recipes go through this instead of `createRecipe`
+	// directly — createRecipe alone never fires thumbnail generation (that's
+	// opt-in per call site, see app-data-context.tsx), and the normal
+	// prompt-entry flow's own call to generateThumbnailForRecipe right after
+	// creation was the one call site this route's recipe-creation paths
+	// (build/swap-in-a-new-dish) were missing.
+	const handleCreateRecipe = useCallback(
+		(recipe: Recipe) => {
+			createRecipe(recipe);
+			generateThumbnailForRecipe(recipe);
+		},
+		[createRecipe, generateThumbnailForRecipe],
+	);
+
 	const buildDeps = useMemo(
 		() => ({
 			recipes,
 			onUpdatePlan: updateMealPlan,
-			onCreateRecipe: createRecipe,
+			onCreateRecipe: handleCreateRecipe,
 			onUpdateRecipe: updateRecipe,
 		}),
-		[recipes, updateMealPlan, createRecipe, updateRecipe],
+		[recipes, updateMealPlan, handleCreateRecipe, updateRecipe],
 	);
 	const { retryEntry } = useBuildMealPlan(plan ?? NOT_FOUND_PLAN, buildDeps);
 
@@ -270,7 +285,7 @@ function MealPlanDetailScreen() {
 							recipes={recipes}
 							onUpdatePlan={updateMealPlan}
 							onUpdateRecipes={updateRecipes}
-							onCreateRecipe={createRecipe}
+							onCreateRecipe={handleCreateRecipe}
 							onAdjustPlan={handleAdjustPlan}
 							onBuildGroceryList={handleBuildGroceryList}
 							onRefreshGroceryList={handleRefreshGroceryList}

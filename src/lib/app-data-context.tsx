@@ -284,6 +284,143 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		};
 	}, []);
 
+	// Transient (never persisted) — which recipe ids currently have a
+	// thumbnail-generation request in flight. See generateThumbnailForRecipe.
+	// Mirrored into a ref (updated synchronously, right alongside the state
+	// setter) so generateThumbnailForRecipe can check/mark "in flight" without
+	// depending on `generatingThumbnailIds` state itself — depending on that
+	// state would make generateThumbnailForRecipe's identity change every time
+	// a generation starts/stops, which would in turn change
+	// sweepMissingThumbnails/triggerThumbnailSweep's identity and re-fire the
+	// mount effect below (which lists triggerThumbnailSweep as a dependency)
+	// on every single generation, not just once on mount.
+	const [generatingThumbnailIds, setGeneratingThumbnailIds] = useState<
+		Set<string>
+	>(new Set());
+	const generatingThumbnailIdsRef = useRef<Set<string>>(new Set());
+
+	const isGeneratingThumbnail = useCallback(
+		(id: string) => generatingThumbnailIds.has(id),
+		[generatingThumbnailIds],
+	);
+
+	// The one place the 2-attempt cap is enforced — both the automatic
+	// trigger (right after creation) and the manual "Generate image" button
+	// call this, so neither can bypass it. A no-op if the passed recipe
+	// already has a thumbnail, is already at the cap, or a request for it is
+	// already in flight — callers don't need to check any of that themselves
+	// first, though the detail screen still does so it can hide the button
+	// entirely once the cap is reached rather than rendering a button that
+	// no-ops. Takes the full recipe rather than looking one up from `recipes`
+	// state so the creation-time caller can invoke this in the same tick as
+	// createRecipe without racing that state update's own re-render (a
+	// state-lookup version would still see the pre-creation array here).
+	const generateThumbnailForRecipe = useCallback(
+		(recipe: Recipe) => {
+			const id = recipe.id;
+			if (
+				recipe.thumbnailUrl ||
+				(recipe.thumbnailAttempts ?? 0) >= MAX_THUMBNAIL_ATTEMPTS ||
+				generatingThumbnailIdsRef.current.has(id)
+			) {
+				return;
+			}
+			const generating = new Set(generatingThumbnailIdsRef.current).add(id);
+			generatingThumbnailIdsRef.current = generating;
+			setGeneratingThumbnailIds(generating);
+			// Returned (rather than fire-and-forget) so sweepMissingThumbnails
+			// below can await each recipe in turn instead of firing a burst of
+			// concurrent DeepInfra requests — every other caller (the creation-time
+			// trigger, the detail screen's button) already ignores the return
+			// value, so this is additive, not a signature change for them.
+			return generateRecipeThumbnail({
+				data: { recipeId: id, title: recipe.title, overview: recipe.overview },
+			})
+				.then((result) => {
+					if (result.type === "success") {
+						setRecipes((current) =>
+							setRecipeThumbnail(current, id, result.url),
+						);
+					} else {
+						setRecipes((current) => recordThumbnailAttemptFailure(current, id));
+					}
+				})
+				.catch(() => {
+					setRecipes((current) => recordThumbnailAttemptFailure(current, id));
+				})
+				.finally(() => {
+					if (generatingThumbnailIdsRef.current.has(id)) {
+						const next = new Set(generatingThumbnailIdsRef.current);
+						next.delete(id);
+						generatingThumbnailIdsRef.current = next;
+						setGeneratingThumbnailIds(next);
+					}
+					scheduleSync(["recipes"]);
+				});
+		},
+		[scheduleSync],
+	);
+
+	// Kept in sync with `recipes` state purely so sweepMissingThumbnails below
+	// can read the latest list from a stable callback (not in its dependency
+	// array) without re-subscribing the mount/visibility/focus effects on
+	// every recipe edit — same reasoning as the other refs in this file
+	// (syncInFlightRef, lastForegroundSyncAtRef).
+	const recipesRef = useRef<Recipe[]>([]);
+	useEffect(() => {
+		recipesRef.current = recipes;
+	}, [recipes]);
+
+	const sweepingThumbnailsRef = useRef(false);
+
+	// Safety net for any recipe left without a thumbnail whose own creation
+	// path never called generateThumbnailForRecipe (e.g. a recipe created from
+	// a meal-plan build/swap, or forked via "Create as new recipe" during a
+	// modification — several call sites opt into the direct call, but this
+	// catches any that don't or ever won't), and for a request that was
+	// silently dropped mid-flight (a backgrounded mobile tab suspending the
+	// fetch — the same failure mode CLAUDE.md's migrations section documents
+	// for categorize-recipe-ingredients). Reruns on every mount/foreground
+	// trigger (see triggerThumbnailSweep below) rather than once ever like the
+	// generate-recipe-thumbnails migration, so it also catches recipes created
+	// *after* that one-time migration already ran on this browser. Processes
+	// candidates sequentially — one DeepInfra round trip at a time — same
+	// reasoning as that migration's own loop: gentle on the rate limit, no
+	// batching win to be had since each thumbnail is its own independent
+	// request. `sweepingThumbnailsRef` just prevents two overlapping sweeps
+	// (e.g. a mount sweep still running when a focus event fires); it isn't a
+	// cap on how often a sweep can start, since generateThumbnailForRecipe's
+	// own cap/in-flight checks make a redundant call a safe no-op regardless.
+	const sweepMissingThumbnails = useCallback(
+		async (recipesOverride?: Recipe[]) => {
+			if (sweepingThumbnailsRef.current) return;
+			sweepingThumbnailsRef.current = true;
+			try {
+				const source = recipesOverride ?? recipesRef.current;
+				const candidates = source.filter(
+					(recipe) =>
+						!recipe.thumbnailUrl &&
+						(recipe.thumbnailAttempts ?? 0) < MAX_THUMBNAIL_ATTEMPTS,
+				);
+				for (const recipe of candidates) {
+					await generateThumbnailForRecipe(recipe);
+				}
+			} finally {
+				sweepingThumbnailsRef.current = false;
+			}
+		},
+		[generateThumbnailForRecipe],
+	);
+
+	const triggerThumbnailSweep = useCallback(
+		(recipesOverride?: Recipe[]) => {
+			sweepMissingThumbnails(recipesOverride).catch((error) => {
+				console.error("Thumbnail sweep failed:", error);
+			});
+		},
+		[sweepMissingThumbnails],
+	);
+
 	useEffect(() => {
 		// Deliberately not awaited — see run-migrations.ts / CLAUDE.md's
 		// migrations section. A synchronous migration's localStorage writes
@@ -294,7 +431,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		runMigrations(MIGRATIONS).catch((error) => {
 			console.error("Migration run failed:", error);
 		});
-		setRecipes(loadRecipes());
+		const loadedRecipes = loadRecipes();
+		setRecipes(loadedRecipes);
 		setGroceryLists(loadGroceryLists());
 		setMealPlans(loadMealPlans());
 		setReady(true);
@@ -302,25 +440,40 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		// a no-op when this device has never started syncing (see
 		// sync-engine.ts's runSync).
 		triggerForegroundSync();
-	}, [triggerForegroundSync]);
+		// recipesRef (synced from `recipes` state below) hasn't caught up to
+		// loadedRecipes yet at this point in the same effect tick — pass it
+		// explicitly rather than let the sweep read the still-empty ref.
+		triggerThumbnailSweep(loadedRecipes);
+	}, [triggerForegroundSync, triggerThumbnailSweep]);
 
 	// Sync-on-open: re-sync whenever the tab regains focus/visibility, not
 	// just at mount — the whole point of "sync on open" is picking up changes
 	// another device made while this tab sat in the background. Goes through
 	// the foreground throttle above rather than triggerSync directly, so a
 	// visibilitychange immediately followed by a focus event (or rapid
-	// tab-switching) collapses into one sync instead of two.
+	// tab-switching) collapses into one sync instead of two. Also re-sweeps
+	// for any recipe still missing a thumbnail (see triggerThumbnailSweep) on
+	// the same "welcome back" moments — a browser tab backgrounded mid
+	// thumbnail-generation-request is the same class of dropped-request bug
+	// CLAUDE.md's migrations section documents for categorize-recipe-ingredients.
 	useEffect(() => {
 		function handleVisibilityChange() {
-			if (document.visibilityState === "visible") triggerForegroundSync();
+			if (document.visibilityState === "visible") {
+				triggerForegroundSync();
+				triggerThumbnailSweep();
+			}
+		}
+		function handleFocus() {
+			triggerForegroundSync();
+			triggerThumbnailSweep();
 		}
 		document.addEventListener("visibilitychange", handleVisibilityChange);
-		window.addEventListener("focus", triggerForegroundSync);
+		window.addEventListener("focus", handleFocus);
 		return () => {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
-			window.removeEventListener("focus", triggerForegroundSync);
+			window.removeEventListener("focus", handleFocus);
 		};
-	}, [triggerForegroundSync]);
+	}, [triggerForegroundSync, triggerThumbnailSweep]);
 
 	// Every paired device is a symmetric co-owner of a shared entity (see
 	// CLAUDE.md's "Sharing feature" / Ownership section) — any of them can
@@ -404,67 +557,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 			scheduleSync(["recipes"]);
 		},
 		[scheduleSync],
-	);
-
-	// Transient (never persisted) — which recipe ids currently have a
-	// thumbnail-generation request in flight. See generateThumbnailForRecipe.
-	const [generatingThumbnailIds, setGeneratingThumbnailIds] = useState<
-		Set<string>
-	>(new Set());
-
-	const isGeneratingThumbnail = useCallback(
-		(id: string) => generatingThumbnailIds.has(id),
-		[generatingThumbnailIds],
-	);
-
-	// The one place the 2-attempt cap is enforced — both the automatic
-	// trigger (right after creation) and the manual "Generate image" button
-	// call this, so neither can bypass it. A no-op if the passed recipe
-	// already has a thumbnail, is already at the cap, or a request for it is
-	// already in flight — callers don't need to check any of that themselves
-	// first, though the detail screen still does so it can hide the button
-	// entirely once the cap is reached rather than rendering a button that
-	// no-ops. Takes the full recipe rather than looking one up from `recipes`
-	// state so the creation-time caller can invoke this in the same tick as
-	// createRecipe without racing that state update's own re-render (a
-	// state-lookup version would still see the pre-creation array here).
-	const generateThumbnailForRecipe = useCallback(
-		(recipe: Recipe) => {
-			const id = recipe.id;
-			if (
-				recipe.thumbnailUrl ||
-				(recipe.thumbnailAttempts ?? 0) >= MAX_THUMBNAIL_ATTEMPTS ||
-				generatingThumbnailIds.has(id)
-			) {
-				return;
-			}
-			setGeneratingThumbnailIds((current) => new Set(current).add(id));
-			generateRecipeThumbnail({
-				data: { recipeId: id, title: recipe.title, overview: recipe.overview },
-			})
-				.then((result) => {
-					if (result.type === "success") {
-						setRecipes((current) =>
-							setRecipeThumbnail(current, id, result.url),
-						);
-					} else {
-						setRecipes((current) => recordThumbnailAttemptFailure(current, id));
-					}
-				})
-				.catch(() => {
-					setRecipes((current) => recordThumbnailAttemptFailure(current, id));
-				})
-				.finally(() => {
-					setGeneratingThumbnailIds((current) => {
-						if (!current.has(id)) return current;
-						const next = new Set(current);
-						next.delete(id);
-						return next;
-					});
-					scheduleSync(["recipes"]);
-				});
-		},
-		[generatingThumbnailIds, scheduleSync],
 	);
 
 	const handleDeleteGroceryList = useCallback(

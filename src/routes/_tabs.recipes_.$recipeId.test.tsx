@@ -362,27 +362,44 @@ describe("Recipe detail screen", () => {
 			).not.toBeInTheDocument();
 		});
 
-		it("offers a Generate image button when there's no thumbnail yet, and shows the result once it resolves", async () => {
+		it("automatically retries a missing thumbnail on mount (app-data-context.tsx's background sweep), and offers a manual Generate image button for a further retry that shows the result once it resolves", async () => {
+			// The mount-time sweep (see CLAUDE.md's "Recipe thumbnail images" /
+			// app-data-context.tsx's sweepMissingThumbnails) fires for any recipe
+			// missing a thumbnail below the attempt cap — no click needed to kick
+			// off this first attempt, so this is the request that consumes the
+			// queued error result below, not an explicit user action.
+			generateRecipeThumbnailMock.mockResolvedValueOnce({
+				type: "error",
+				message: "DeepInfra image generation failed: 500 Internal Server Error",
+			});
+			const recipe = seedRecipe({ thumbnailAttempts: 0 });
+			await renderApp(`/recipes/${recipe.id}`);
+
+			await waitFor(() => {
+				expect(generateRecipeThumbnailMock).toHaveBeenCalledWith({
+					data: expect.objectContaining({
+						recipeId: recipe.id,
+						title: recipe.title,
+						overview: recipe.overview,
+					}),
+				});
+			});
+
+			// The automatic attempt failed but left one retry under the cap (2
+			// total) — the manual button becomes available once it settles.
+			const button = await screen.findByRole("button", {
+				name: "Generate image",
+			});
 			let resolveThumbnail!: (value: unknown) => void;
 			generateRecipeThumbnailMock.mockReturnValueOnce(
 				new Promise((r) => {
 					resolveThumbnail = r;
 				}),
 			);
-			const recipe = seedRecipe({ thumbnailAttempts: 1 });
-			await renderApp(`/recipes/${recipe.id}`);
 			const user = userEvent.setup();
-
-			const button = screen.getByRole("button", { name: "Generate image" });
 			await user.click(button);
 
-			expect(generateRecipeThumbnailMock).toHaveBeenCalledWith({
-				data: expect.objectContaining({
-					recipeId: recipe.id,
-					title: recipe.title,
-					overview: recipe.overview,
-				}),
-			});
+			expect(generateRecipeThumbnailMock).toHaveBeenCalledTimes(2);
 			expect(
 				screen.queryByRole("button", { name: "Generate image" }),
 			).not.toBeInTheDocument();
