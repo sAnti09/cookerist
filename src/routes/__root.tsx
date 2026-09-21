@@ -132,13 +132,19 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 				href: SITE_URL,
 			},
 		],
-		scripts: [
-			{
-				type: "module",
-				src: "https://static.cloudflareinsights.com/beacon.min.js",
-				"data-cf-beacon": '{"token": "8f4009aedfcd4d4bb9069c55df8a9734"}',
-			},
-		],
+		// Cloudflare Web Analytics is scoped to the production domain and
+		// CORS-rejects beacon calls from any other origin (e.g. localhost) --
+		// only load it for a production build so local dev doesn't spam the
+		// console with failed https://cloudflareinsights.com/cdn-cgi/rum calls.
+		scripts: import.meta.env.PROD
+			? [
+					{
+						type: "module",
+						src: "https://static.cloudflareinsights.com/beacon.min.js",
+						"data-cf-beacon": '{"token": "8f4009aedfcd4d4bb9069c55df8a9734"}',
+					},
+				]
+			: [],
 	}),
 	shellComponent: RootDocument,
 });
