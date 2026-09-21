@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { RefreshCcw, Trash2 } from "lucide-react";
+import { Flame, RefreshCcw, Trash2 } from "lucide-react";
 import { MEAL_TYPE_LABELS, type MealPlanEntry } from "#/lib/meal-plan";
 import type { Recipe } from "#/lib/recipe";
 import { useSwipeRowActions } from "#/lib/use-swipe-row-actions";
@@ -58,26 +58,47 @@ export function MealPlanEntryRow({
 				// (position:absolute always paints above static siblings,
 				// regardless of DOM order) until the first touch interaction set
 				// an inline `transform` and created one implicitly.
-				className="card block translate-x-0 bg-card p-3.5 text-ink no-underline transition-transform duration-200"
+				className="card flex min-h-28 translate-x-0 items-stretch gap-3 overflow-hidden bg-card text-ink no-underline transition-transform duration-200"
 			>
-				<div className="flex items-start justify-between gap-2">
-					<span className="font-bold text-[10px] text-ink-dim uppercase tracking-wide">
-						{MEAL_TYPE_LABELS[entry.mealType]}
-					</span>
-					<span
-						className={cn(
-							"inline-flex w-fit shrink-0 items-center rounded-[10px] border px-2 py-0.5 text-[11px]",
-							edited
-								? "border-accent/40 bg-accent/10 font-semibold text-accent"
-								: "border-line text-ink-dim",
-						)}
+				{recipe.thumbnailUrl ? (
+					// Same full-bleed treatment as result-row.tsx's recipe list row —
+					// the card's own overflow-hidden + rounded-[18px] clips the outer
+					// corners, so no rounding needed on the image itself.
+					<img
+						src={recipe.thumbnailUrl}
+						alt=""
+						className="w-28 shrink-0 object-cover"
+					/>
+				) : (
+					<div
+						aria-hidden="true"
+						className="flex w-28 shrink-0 items-center justify-center bg-bg2"
 					>
-						Servings: {recipe.currentServings}
-						{edited ? " · edited" : ""}
-					</span>
+						<Flame className="size-5 text-ink-dim" aria-hidden="true" />
+					</div>
+				)}
+				<div className="flex min-w-0 flex-1 flex-col justify-center py-3.5 pr-3.5">
+					<div className="flex items-start justify-between gap-2">
+						<span className="font-bold text-[10px] text-ink-dim uppercase tracking-wide">
+							{MEAL_TYPE_LABELS[entry.mealType]}
+						</span>
+						<span
+							className={cn(
+								"inline-flex w-fit shrink-0 items-center rounded-[10px] border px-2 py-0.5 text-[11px]",
+								edited
+									? "border-accent/40 bg-accent/10 font-semibold text-accent"
+									: "border-line text-ink-dim",
+							)}
+						>
+							Servings: {recipe.currentServings}
+							{edited ? " · edited" : ""}
+						</span>
+					</div>
+					<p className="mt-1 truncate font-semibold text-sm">{recipe.title}</p>
+					<p className="mt-0.5 truncate text-ink-dim text-xs">
+						{recipe.overview}
+					</p>
 				</div>
-				<p className="mt-1 font-semibold text-sm">{recipe.title}</p>
-				<p className="mt-0.5 text-ink-dim text-xs">{recipe.overview}</p>
 			</Link>
 		</div>
 	);
