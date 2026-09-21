@@ -5,6 +5,14 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
   "vars": {
-    "AI_PROVIDER": "groq"
-  }
+    "AI_PROVIDER": "groq",
+    // The R2 bucket's public base URL (r2.dev subdomain or custom domain) --
+    // fill in after creating the "cookerist-thumbnails" bucket below and
+    // enabling its public access (see CLAUDE.md's "Recipe thumbnail images"
+    // manual one-time setup). Not sensitive, so a var, not a secret.
+    "R2_PUBLIC_URL_BASE": ""
+  },
+  "r2_buckets": [
+    { "binding": "THUMBNAILS", "bucket_name": "cookerist-thumbnails" }
+  ]
 }

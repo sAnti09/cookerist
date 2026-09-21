@@ -5,6 +5,7 @@ import type { GroceryList } from "#/lib/grocery-list";
 import { saveGroceryList } from "#/lib/grocery-storage";
 import type { MealPlan } from "#/lib/meal-plan";
 import { saveMealPlan } from "#/lib/meal-plan-storage";
+import { GENERATE_RECIPE_THUMBNAILS_MIGRATION_ID } from "#/lib/migrations/generate-recipe-thumbnails";
 import type { Recipe } from "#/lib/recipe";
 import { saveRecipe } from "#/lib/recipes-storage";
 import { AppDataProvider, useAppData } from "./app-data-context";
@@ -40,6 +41,14 @@ vi.mock("#/lib/identity/resource-sharing", () => ({
 	createShareCodeForResource: (...args: unknown[]) =>
 		createShareCodeForResourceMock(...args),
 	redeemShareCode: (...args: unknown[]) => redeemShareCodeClientMock(...args),
+}));
+
+const generateRecipeThumbnailMock = vi.fn();
+// A real (unmocked) request here would hit DeepInfra/R2 via cloudflare:workers
+// (unavailable outside a Workers/Miniflare runtime).
+vi.mock("#/server/generate-recipe-thumbnail", () => ({
+	generateRecipeThumbnail: (...args: unknown[]) =>
+		generateRecipeThumbnailMock(...args),
 }));
 
 function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
@@ -121,6 +130,8 @@ function Harness() {
 		isSharedWithMe,
 		shareResource,
 		redeemShareCode,
+		generateThumbnailForRecipe,
+		isGeneratingThumbnail,
 	} = useAppData();
 
 	if (!ready) return <div>loading</div>;
@@ -136,6 +147,21 @@ function Harness() {
 			<div data-testid="r1-shared">
 				{String(r1 ? isSharedWithMe(r1) : false)}
 			</div>
+			<div data-testid="r1-thumbnail-url">{r1?.thumbnailUrl ?? "null"}</div>
+			<div data-testid="r1-thumbnail-attempts">
+				{String(r1?.thumbnailAttempts ?? 0)}
+			</div>
+			<div data-testid="r1-generating-thumbnail">
+				{String(r1 ? isGeneratingThumbnail(r1.id) : false)}
+			</div>
+			<button
+				type="button"
+				onClick={() => {
+					if (r1) generateThumbnailForRecipe(r1);
+				}}
+			>
+				generate-thumbnail
+			</button>
 			<button type="button" onClick={() => deleteRecipe("r1")}>
 				delete-recipe
 			</button>
@@ -238,6 +264,15 @@ beforeEach(() => {
 	pushTombstoneMock.mockResolvedValue(undefined);
 	pushShareRevocationMock.mockResolvedValue(undefined);
 	runSyncMock.mockResolvedValue(null);
+	generateRecipeThumbnailMock.mockReset();
+	// Never resolves by default — harmless no-op for the backfill migration
+	// (see generate-recipe-thumbnails.ts), which any seeded recipe missing a
+	// thumbnail is a candidate for; tests that need a specific
+	// success/failure result mark that migration already-run first (see the
+	// "AppDataProvider thumbnail generation" describe block) so its own
+	// mount-time call doesn't consume a queued mockResolvedValueOnce/
+	// mockRejectedValueOnce meant for an explicit generate-thumbnail click.
+	generateRecipeThumbnailMock.mockReturnValue(new Promise(() => {}));
 });
 
 describe("AppDataProvider delete handlers", () => {
@@ -731,5 +766,150 @@ describe("AppDataProvider content-mutation sync debouncing", () => {
 		});
 
 		expect(runSyncMock).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("AppDataProvider thumbnail generation", () => {
+	beforeEach(() => {
+		// Every recipe seeded below starts without a thumbnail, which makes it
+		// a candidate for the generate-recipe-thumbnails backfill migration —
+		// mark it already-run so its own mount-time call doesn't consume a
+		// mockResolvedValueOnce/mockRejectedValueOnce meant for this block's
+		// explicit generate-thumbnail clicks (the migration gets its own
+		// dedicated test file).
+		window.localStorage.setItem(
+			"cookerist:completed-migrations",
+			JSON.stringify([GENERATE_RECIPE_THUMBNAILS_MIGRATION_ID]),
+		);
+	});
+
+	it("sets the thumbnail URL and clears the generating state on success", async () => {
+		let resolveRequest!: (value: unknown) => void;
+		generateRecipeThumbnailMock.mockReturnValueOnce(
+			new Promise((r) => {
+				resolveRequest = r;
+			}),
+		);
+		saveRecipe([], makeRecipe());
+		const user = userEvent.setup();
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+
+		await user.click(
+			screen.getByRole("button", { name: "generate-thumbnail" }),
+		);
+
+		expect(generateRecipeThumbnailMock).toHaveBeenCalledWith({
+			data: { recipeId: "r1", title: "Recipe", overview: "" },
+		});
+		expect(screen.getByTestId("r1-generating-thumbnail")).toHaveTextContent(
+			"true",
+		);
+
+		await act(async () => {
+			resolveRequest({ type: "success", url: "https://example.com/r1.png" });
+			await Promise.resolve();
+		});
+
+		await waitFor(() =>
+			expect(screen.getByTestId("r1-thumbnail-url")).toHaveTextContent(
+				"https://example.com/r1.png",
+			),
+		);
+		expect(screen.getByTestId("r1-generating-thumbnail")).toHaveTextContent(
+			"false",
+		);
+	});
+
+	it("increments thumbnailAttempts and clears the generating state on an error result", async () => {
+		generateRecipeThumbnailMock.mockResolvedValueOnce({
+			type: "error",
+			message: "DeepInfra image generation failed: 500 Internal Server Error",
+		});
+		saveRecipe([], makeRecipe());
+		const user = userEvent.setup();
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+
+		await user.click(
+			screen.getByRole("button", { name: "generate-thumbnail" }),
+		);
+
+		await waitFor(() =>
+			expect(screen.getByTestId("r1-thumbnail-attempts")).toHaveTextContent(
+				"1",
+			),
+		);
+		expect(screen.getByTestId("r1-thumbnail-url")).toHaveTextContent("null");
+		expect(screen.getByTestId("r1-generating-thumbnail")).toHaveTextContent(
+			"false",
+		);
+	});
+
+	it("increments thumbnailAttempts when the request rejects", async () => {
+		generateRecipeThumbnailMock.mockRejectedValueOnce(
+			new Error("network down"),
+		);
+		saveRecipe([], makeRecipe());
+		const user = userEvent.setup();
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+
+		await user.click(
+			screen.getByRole("button", { name: "generate-thumbnail" }),
+		);
+
+		await waitFor(() =>
+			expect(screen.getByTestId("r1-thumbnail-attempts")).toHaveTextContent(
+				"1",
+			),
+		);
+	});
+
+	it("is a no-op when the recipe already has a thumbnail", async () => {
+		saveRecipe(
+			[],
+			makeRecipe({ thumbnailUrl: "https://example.com/existing.png" }),
+		);
+		const user = userEvent.setup();
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+
+		await user.click(
+			screen.getByRole("button", { name: "generate-thumbnail" }),
+		);
+
+		expect(generateRecipeThumbnailMock).not.toHaveBeenCalled();
+	});
+
+	it("is a no-op once the attempt cap is reached", async () => {
+		// MAX_THUMBNAIL_ATTEMPTS is 2 (see src/lib/recipe.ts).
+		saveRecipe([], makeRecipe({ thumbnailAttempts: 2 }));
+		const user = userEvent.setup();
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+
+		await user.click(
+			screen.getByRole("button", { name: "generate-thumbnail" }),
+		);
+
+		expect(generateRecipeThumbnailMock).not.toHaveBeenCalled();
+	});
+
+	it("does not fire a second request while one is already in flight for the same recipe", async () => {
+		generateRecipeThumbnailMock.mockReturnValue(new Promise(() => {}));
+		saveRecipe([], makeRecipe());
+		const user = userEvent.setup();
+		renderHarness();
+		await screen.findByTestId("recipe-count");
+		const button = screen.getByRole("button", { name: "generate-thumbnail" });
+
+		await user.click(button);
+		expect(screen.getByTestId("r1-generating-thumbnail")).toHaveTextContent(
+			"true",
+		);
+		await user.click(button);
+
+		expect(generateRecipeThumbnailMock).toHaveBeenCalledTimes(1);
 	});
 });

@@ -3,8 +3,10 @@ import type { RecipeResponse } from "#/lib/groq/schema";
 import {
 	deleteRecipe,
 	loadRecipes,
+	recordThumbnailAttemptFailure,
 	saveRecipe,
 	setExpandedRecipe,
+	setRecipeThumbnail,
 	toggleFavoriteRecipe,
 	toStoredRecipe,
 	updateRecipe,
@@ -50,6 +52,8 @@ describe("toStoredRecipe", () => {
 		expect(recipe.favorite).toBe(false);
 		expect(recipe.truncated).toBe(false);
 		expect(recipe.modificationCount).toBe(0);
+		expect(recipe.thumbnailUrl).toBeNull();
+		expect(recipe.thumbnailAttempts).toBe(0);
 		expect(recipe.ingredients[0]).toMatchObject({
 			text: "shrimp",
 			baseName: "shrimp",
@@ -257,6 +261,22 @@ describe("loadRecipes / saveRecipe", () => {
 		expect(loaded).toHaveLength(1);
 		expect(loaded[0].modificationCount).toBe(0);
 	});
+
+	it("defaults thumbnailUrl to null and thumbnailAttempts to 0 for recipes saved before they existed", () => {
+		const legacyRecipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const { thumbnailUrl, thumbnailAttempts, ...withoutThumbnailFields } =
+			legacyRecipe;
+		window.localStorage.setItem(
+			"cookerist:recipes",
+			JSON.stringify([withoutThumbnailFields]),
+		);
+
+		const loaded = loadRecipes();
+
+		expect(loaded).toHaveLength(1);
+		expect(loaded[0].thumbnailUrl).toBeNull();
+		expect(loaded[0].thumbnailAttempts).toBe(0);
+	});
 });
 
 describe("deleteRecipe", () => {
@@ -433,6 +453,77 @@ describe("toggleFavoriteRecipe", () => {
 		const recipes = saveRecipe([], recipe);
 
 		expect(toggleFavoriteRecipe(recipes, "not-a-real-id")).toEqual([recipe]);
+	});
+});
+
+describe("setRecipeThumbnail", () => {
+	it("sets the matching recipe's thumbnailUrl and persists it", () => {
+		const first = toStoredRecipe("first prompt", recipeInput);
+		const second = toStoredRecipe("second prompt", recipeInput);
+		const afterFirst = saveRecipe([], first);
+		const afterSecond = saveRecipe(afterFirst, second);
+
+		const result = setRecipeThumbnail(
+			afterSecond,
+			first.id,
+			"https://example.com/r1.png",
+		);
+
+		expect(result.find((r) => r.id === first.id)?.thumbnailUrl).toBe(
+			"https://example.com/r1.png",
+		);
+		expect(result.find((r) => r.id === second.id)?.thumbnailUrl).toBeNull();
+		expect(loadRecipes()).toEqual(result);
+	});
+
+	it("is a no-op when the id isn't found", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const recipes = saveRecipe([], recipe);
+
+		expect(
+			setRecipeThumbnail(recipes, "not-a-real-id", "https://example.com/x.png"),
+		).toEqual([recipe]);
+	});
+});
+
+describe("recordThumbnailAttemptFailure", () => {
+	it("increments the matching recipe's thumbnailAttempts and persists it", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const recipes = saveRecipe([], recipe);
+
+		const result = recordThumbnailAttemptFailure(recipes, recipe.id);
+
+		expect(result[0].thumbnailAttempts).toBe(1);
+		expect(loadRecipes()).toEqual(result);
+	});
+
+	it("accumulates across repeated calls", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const recipes = saveRecipe([], recipe);
+
+		const once = recordThumbnailAttemptFailure(recipes, recipe.id);
+		const twice = recordThumbnailAttemptFailure(once, recipe.id);
+
+		expect(twice[0].thumbnailAttempts).toBe(2);
+	});
+
+	it("treats a missing thumbnailAttempts (pre-existing recipe) as starting from 0", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const { thumbnailAttempts, ...withoutAttempts } = recipe;
+		const recipes = saveRecipe([], withoutAttempts as typeof recipe);
+
+		const result = recordThumbnailAttemptFailure(recipes, recipe.id);
+
+		expect(result[0].thumbnailAttempts).toBe(1);
+	});
+
+	it("is a no-op when the id isn't found", () => {
+		const recipe = toStoredRecipe("shrimp pasta for 2", recipeInput);
+		const recipes = saveRecipe([], recipe);
+
+		expect(recordThumbnailAttemptFailure(recipes, "not-a-real-id")).toEqual([
+			recipe,
+		]);
 	});
 });
 

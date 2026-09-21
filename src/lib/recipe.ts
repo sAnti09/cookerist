@@ -95,6 +95,16 @@ export type PendingModification = {
 // `Recipe.modificationCount`, not `PendingModification.instructions.length`.
 export const MAX_MODIFICATIONS = 2;
 
+// A thumbnail is generated automatically once at creation time, plus at most
+// one manual retry via the detail screen's "Generate image" button — see
+// app-data-context.tsx's generateThumbnailForRecipe, which is the one place
+// this cap is enforced (both the automatic trigger and the manual button
+// route through it, and the backfill migration for older recipes respects it
+// too). Once this many attempts have failed with thumbnailUrl still null, the
+// detail screen shows an inline "couldn't be generated" message instead of
+// the button.
+export const MAX_THUMBNAIL_ATTEMPTS = 2;
+
 export type Recipe = {
 	id: string;
 	createdAt: string;
@@ -151,6 +161,19 @@ export type Recipe = {
 	// use isSharedWithMe (src/lib/sync/share-status.ts) rather than comparing
 	// this directly, so the "am I the owner" check lives in one place.
 	ownerId: string | null;
+	// URL of a generated thumbnail image (Cloudflare R2), set asynchronously
+	// after recipe creation — see src/server/generate-recipe-thumbnail.ts. Null
+	// while pending/unset (generation never blocks recipe creation itself).
+	// Optional: absent on recipes saved before this field existed — callers
+	// should treat that the same as null (see the generate-recipe-thumbnails
+	// migration for backfilling existing recipes).
+	thumbnailUrl?: string | null;
+	// Number of thumbnail-generation attempts made so far (the automatic one
+	// at creation/backfill time, plus any manual "Generate image" retry),
+	// capped at MAX_THUMBNAIL_ATTEMPTS. Only meaningful while thumbnailUrl is
+	// null. Optional: absent on recipes saved before this field existed —
+	// callers should treat that the same as 0.
+	thumbnailAttempts?: number;
 };
 
 export function formatEstimatedTime(minutes: number): string {

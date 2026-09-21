@@ -29,6 +29,8 @@ export function loadRecipes(): Recipe[] {
 			updatedAt: recipe.updatedAt ?? recipe.createdAt,
 			sharedAt: recipe.sharedAt ?? null,
 			ownerId: recipe.ownerId ?? null,
+			thumbnailUrl: recipe.thumbnailUrl ?? null,
+			thumbnailAttempts: recipe.thumbnailAttempts ?? 0,
 		}));
 	} catch {
 		return [];
@@ -146,6 +148,36 @@ export function toggleFavoriteRecipe(recipes: Recipe[], id: string): Recipe[] {
 	return next;
 }
 
+// Narrow mutators for the async thumbnail-generation flow (see
+// app-data-context.tsx's generateThumbnailForRecipe) — patch by id via
+// touch(), like toggleFavoriteRecipe, rather than requiring the caller to
+// pass a whole Recipe that could clobber a concurrent edit made while the
+// generation request was in flight.
+export function setRecipeThumbnail(
+	recipes: Recipe[],
+	id: string,
+	thumbnailUrl: string,
+): Recipe[] {
+	const next = recipes.map((r) =>
+		r.id === id ? touch({ ...r, thumbnailUrl }) : r,
+	);
+	persist(next);
+	return next;
+}
+
+export function recordThumbnailAttemptFailure(
+	recipes: Recipe[],
+	id: string,
+): Recipe[] {
+	const next = recipes.map((r) =>
+		r.id === id
+			? touch({ ...r, thumbnailAttempts: (r.thumbnailAttempts ?? 0) + 1 })
+			: r,
+	);
+	persist(next);
+	return next;
+}
+
 export function toStoredRecipe(
 	prompt: string,
 	input: RecipeResponse,
@@ -158,6 +190,8 @@ export function toStoredRecipe(
 		updatedAt: now,
 		sharedAt: null,
 		ownerId: null,
+		thumbnailUrl: null,
+		thumbnailAttempts: 0,
 		prompt,
 		title: input.title,
 		overview: input.overview,
