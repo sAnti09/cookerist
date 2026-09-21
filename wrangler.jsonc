@@ -7,10 +7,11 @@
   "vars": {
     "AI_PROVIDER": "groq",
     // The R2 bucket's public base URL (r2.dev subdomain or custom domain) --
-    // fill in after creating the "cookerist-thumbnails" bucket below and
-    // enabling its public access (see CLAUDE.md's "Recipe thumbnail images"
-    // manual one-time setup). Not sensitive, so a var, not a secret.
-    "R2_PUBLIC_URL_BASE": ""
+    // see CLAUDE.md's "Recipe thumbnail images" manual one-time setup. Not
+    // sensitive, so a var, not a secret -- must stay a plain var here (never
+    // `wrangler secret put`), since `vars` is pushed on every deploy and will
+    // silently blank out a same-named secret otherwise.
+    "R2_PUBLIC_URL_BASE": "https://pub-38cdfcc564164b3ebca3c3d500d87700.r2.dev"
   },
   "r2_buckets": [
     {
