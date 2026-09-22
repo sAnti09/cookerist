@@ -14,32 +14,28 @@ export type AiChatParams = Omit<
 	"model"
 >;
 
+// Groq's LPU inference is near-instant (typically 1-3 seconds for 120b, 20b, or
+// qwen). If a Groq call hasn't finished in 15 seconds, Groq is hanging or
+// severely degraded; fail over to OpenRouter quickly instead of keeping the
+// user waiting.
+const GROQ_TIMEOUT_MS = 15_000;
+
+// OpenRouter routes to various third-party upstreams that can queue under
+// heavy load or take longer on larger responses; give it generous room so
+// legitimately slow calls finish on their first attempt.
+const OPENROUTER_TIMEOUT_MS = 180_000;
+
 const PROVIDER_CONFIG: Record<
 	AiProvider,
-	{ apiKeyEnv: string; baseURL?: string }
+	{ apiKeyEnv: string; baseURL?: string; timeout: number }
 > = {
-	groq: { apiKeyEnv: "GROQ_API_KEY" },
+	groq: { apiKeyEnv: "GROQ_API_KEY", timeout: GROQ_TIMEOUT_MS },
 	openrouter: {
 		apiKeyEnv: "OPENROUTER_API_KEY",
 		baseURL: "https://openrouter.ai/api/v1",
+		timeout: OPENROUTER_TIMEOUT_MS,
 	},
 };
-
-// groq-sdk defaults to a 1-minute request timeout when none is given.
-// That was always the effective ceiling here too (getAiClient never
-// overrode it), but harmless as long as every response came back in a
-// handful of seconds — which stopped being true once OpenRouter's
-// `provider.sort` moved from "latency" (Cerebras, always fast) to "price"
-// (routinely 20-145s+ on the cheapest tier). Once real responses started
-// approaching/exceeding 60s, the SDK's own timeout began firing and
-// silently doubling latency via chatCompletion's cross-provider failover
-// (a full second ~60s-capped attempt on top of the first) — the actual
-// cause behind a wave of "Load failed" errors, since a real browser is far
-// more likely to abort a 60-145s in-flight request than my scripted test
-// was. A longer, explicit timeout gives a legitimately-slow-but-succeeding
-// call room to finish on its first attempt instead of being killed and
-// retried.
-const AI_REQUEST_TIMEOUT_MS = 180_000;
 
 export function getActiveProvider(): AiProvider {
 	return process.env.AI_PROVIDER === "openrouter" ? "openrouter" : "groq";
@@ -58,7 +54,7 @@ function hasCredentials(provider: AiProvider): boolean {
 // directly, so switching providers (the AI_PROVIDER env var) never means
 // touching a call site.
 export function getAiClient(provider: AiProvider = getActiveProvider()): Groq {
-	const { apiKeyEnv, baseURL } = PROVIDER_CONFIG[provider];
+	const { apiKeyEnv, baseURL, timeout } = PROVIDER_CONFIG[provider];
 	const apiKey = process.env[apiKeyEnv];
 	if (!apiKey) {
 		throw new Error(`${apiKeyEnv} is not set`);
@@ -66,7 +62,8 @@ export function getAiClient(provider: AiProvider = getActiveProvider()): Groq {
 	return new Groq({
 		apiKey,
 		baseURL,
-		timeout: AI_REQUEST_TIMEOUT_MS,
+		timeout,
+		maxRetries: 0,
 		defaultHeaders:
 			provider === "openrouter"
 				? {
@@ -134,6 +131,112 @@ function createChatCompletion(
 	return client.chat.completions.create(body);
 }
 
+// Per-provider, per-model rate limit cooldown tracker.
+// Cooldown expiration timestamp keyed by `${provider}:${model}`.
+// Isolates limits per model: e.g. qwen/qwen3.6-27b hitting its strict
+// output token/minute limit on Groq will NOT block openai/gpt-oss-120b
+// recipe generation on Groq, and a heavy 120b meal plan batch will not
+// block dish photo identification.
+const modelCooldowns = new Map<string, number>();
+
+export function isModelOnCooldown(
+	provider: AiProvider,
+	model: string,
+): boolean {
+	const blockedUntil = modelCooldowns.get(`${provider}:${model}`);
+	return Boolean(blockedUntil && Date.now() < blockedUntil);
+}
+
+export function setModelCooldown(
+	provider: AiProvider,
+	model: string,
+	durationMs: number,
+) {
+	modelCooldowns.set(`${provider}:${model}`, Date.now() + durationMs);
+}
+
+export function resetModelCooldowns() {
+	modelCooldowns.clear();
+}
+
+export function parseDurationToMs(duration: string | null | undefined): number {
+	if (!duration) return 60_000;
+	const trimmed = duration.trim();
+	const numeric = Number(trimmed);
+	if (!Number.isNaN(numeric) && numeric > 0) {
+		return Math.ceil(numeric * 1000);
+	}
+	let totalMs = 0;
+	const hours = trimmed.match(/(\d+(?:\.\d+)?)h/);
+	const minutes = trimmed.match(/(\d+(?:\.\d+)?)m(?!s)/);
+	const seconds = trimmed.match(/(\d+(?:\.\d+)?)s/);
+	const ms = trimmed.match(/(\d+(?:\.\d+)?)ms/);
+
+	if (hours) totalMs += Number(hours[1]) * 3_600_000;
+	if (minutes) totalMs += Number(minutes[1]) * 60_000;
+	if (seconds && !trimmed.includes("ms")) totalMs += Number(seconds[1]) * 1000;
+	if (ms) totalMs += Number(ms[1]);
+
+	return totalMs > 0 ? totalMs : 60_000;
+}
+
+export function isRateLimitError(error: unknown): boolean {
+	if (!error || typeof error !== "object") return false;
+	const err = error as { status?: number; name?: string; message?: string };
+	if (err.status === 429 || err.name === "RateLimitError") return true;
+	if (typeof err.message === "string" && /rate limit/i.test(err.message)) {
+		return true;
+	}
+	return false;
+}
+
+export function isTimeoutError(error: unknown): boolean {
+	if (!error || typeof error !== "object") return false;
+	const err = error as { name?: string; message?: string };
+	if (err.name === "APIConnectionTimeoutError") return true;
+	if (
+		typeof err.message === "string" &&
+		/timeout|timed out/i.test(err.message)
+	) {
+		return true;
+	}
+	return false;
+}
+
+export function extractCooldownMs(error: unknown): number {
+	if (error && typeof error === "object") {
+		const headers = (error as { headers?: Headers | Record<string, string> })
+			.headers;
+		if (headers) {
+			const getHeader = (name: string): string | null => {
+				if (typeof (headers as Headers).get === "function") {
+					return (headers as Headers).get(name);
+				}
+				const record = headers as Record<string, string>;
+				return record[name] ?? record[name.toLowerCase()] ?? null;
+			};
+
+			const retryAfter = getHeader("retry-after");
+			if (retryAfter) return parseDurationToMs(retryAfter);
+
+			const resetRequests = getHeader("x-ratelimit-reset-requests");
+			if (resetRequests) return parseDurationToMs(resetRequests);
+
+			const resetTokens = getHeader("x-ratelimit-reset-tokens");
+			if (resetTokens) return parseDurationToMs(resetTokens);
+		}
+
+		const message = (error as { message?: string }).message;
+		if (typeof message === "string") {
+			const match = message.match(/try again in ([0-9a-zA-Z.]+)/i);
+			if (match?.[1]) {
+				return parseDurationToMs(match[1]);
+			}
+		}
+	}
+	return 60_000;
+}
+
 // The single seam every recipe/meal-plan/dish call goes through. Resolves
 // the active provider's client + model and, if that call throws for any
 // reason (rate limit, timeout, outage), silently retries once against
@@ -141,6 +244,10 @@ function createChatCompletion(
 // the first failure. Only attempted when the other provider has credentials
 // set; otherwise the original error surfaces exactly as it did before this
 // existed (e.g. a bare AI_PROVIDER switch with no second key configured).
+//
+// If a model is currently in a 429 rate-limit cooldown for the primary
+// provider, it immediately routes to the fallback provider without wasting
+// a roundtrip.
 //
 // `options.provider` overrides the *starting* provider for this one call
 // only (e.g. a meal-plan build worker explicitly pinned to "openrouter" to
@@ -153,7 +260,18 @@ export async function chatCompletion(
 	contentParams: AiChatParams,
 	options?: { provider?: AiProvider },
 ) {
-	const primary = options?.provider ?? getActiveProvider();
+	const requestedPrimary = options?.provider ?? getActiveProvider();
+	const primaryModel = getModelFor(callType, requestedPrimary);
+	const fallback = otherProvider(requestedPrimary);
+
+	// If this model is currently in rate-limit cooldown on the requested
+	// primary, immediately switch to the fallback provider to avoid a
+	// wasted roundtrip on a known 429.
+	const primary =
+		isModelOnCooldown(requestedPrimary, primaryModel) &&
+		hasCredentials(fallback)
+			? fallback
+			: requestedPrimary;
 
 	try {
 		return await createChatCompletion(
@@ -163,13 +281,28 @@ export async function chatCompletion(
 			contentParams,
 		);
 	} catch (error) {
-		const fallback = otherProvider(primary);
-		if (!hasCredentials(fallback)) {
+		if (isRateLimitError(error)) {
+			const model = getModelFor(callType, primary);
+			const cooldownMs = extractCooldownMs(error);
+			setModelCooldown(primary, model, cooldownMs);
+		} else if (isTimeoutError(error)) {
+			// If the primary call timed out (e.g. Groq hanging for 15s), cool down
+			// this model on the primary provider for 60s so subsequent requests
+			// fail over immediately instead of each waiting 15s.
+			const model = getModelFor(callType, primary);
+			setModelCooldown(primary, model, 60_000);
+		}
+
+		const targetFallback = otherProvider(primary);
+		if (
+			!hasCredentials(targetFallback) ||
+			isModelOnCooldown(targetFallback, getModelFor(callType, targetFallback))
+		) {
 			throw error;
 		}
 		return await createChatCompletion(
-			getAiClient(fallback),
-			fallback,
+			getAiClient(targetFallback),
+			targetFallback,
 			callType,
 			contentParams,
 		);

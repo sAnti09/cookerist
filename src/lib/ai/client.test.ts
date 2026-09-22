@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { chatCompletion, getActiveProvider, getAiClient } from "./client";
+import {
+	chatCompletion,
+	getActiveProvider,
+	getAiClient,
+	isModelOnCooldown,
+	parseDurationToMs,
+	resetModelCooldowns,
+} from "./client";
 
 const groqConstructorMock = vi.fn();
 const groqCreateMock = vi.fn();
@@ -32,6 +39,7 @@ vi.mock("groq-sdk", () => ({
 const ORIGINAL_ENV = { ...process.env };
 
 beforeEach(() => {
+	resetModelCooldowns();
 	groqConstructorMock.mockReset();
 	groqCreateMock.mockReset();
 	openrouterPostMock.mockReset();
@@ -77,7 +85,8 @@ describe("getAiClient", () => {
 		expect(groqConstructorMock).toHaveBeenCalledWith({
 			apiKey: "groq-key",
 			baseURL: undefined,
-			timeout: 180_000,
+			timeout: 15_000,
+			maxRetries: 0,
 			defaultHeaders: undefined,
 		});
 	});
@@ -89,6 +98,7 @@ describe("getAiClient", () => {
 			apiKey: "or-key",
 			baseURL: "https://openrouter.ai/api/v1",
 			timeout: 180_000,
+			maxRetries: 0,
 			defaultHeaders: {
 				"HTTP-Referer": "https://cookerist.com",
 				"X-Title": "Cookerist",
@@ -96,14 +106,13 @@ describe("getAiClient", () => {
 		});
 	});
 
-	it("passes an explicit request timeout longer than groq-sdk's 1-minute default, for both providers", () => {
+	it("configures provider-specific timeouts: tight 15s for Groq, generous 180s for OpenRouter", () => {
 		process.env.GROQ_API_KEY = "groq-key";
 		process.env.OPENROUTER_API_KEY = "or-key";
 		getAiClient("groq");
 		getAiClient("openrouter");
-		for (const call of groqConstructorMock.mock.calls) {
-			expect(call[0].timeout).toBeGreaterThan(60_000);
-		}
+		expect(groqConstructorMock.mock.calls[0][0].timeout).toBe(15_000);
+		expect(groqConstructorMock.mock.calls[1][0].timeout).toBe(180_000);
 	});
 
 	it("defaults to the active provider (via AI_PROVIDER) when none is passed explicitly", () => {
@@ -245,5 +254,126 @@ describe("chatCompletion", () => {
 			}),
 		).rejects.toThrow("groq down");
 		expect(openrouterPostMock).not.toHaveBeenCalled();
+	});
+
+	it("isolates rate limits per model: a 429 on qwen/qwen3.6-27b puts only qwen on cooldown, keeping oss-120b on groq", async () => {
+		process.env.AI_PROVIDER = "groq";
+
+		// Step 1: identifyDish (qwen/qwen3.6-27b) hits a 429 rate limit
+		const rateLimitError = Object.assign(
+			new Error(
+				"Rate limit reached for model qwen/qwen3.6-27b on tokens per minute. Please try again in 30s.",
+			),
+			{ status: 429 },
+		);
+		groqCreateMock.mockRejectedValueOnce(rateLimitError);
+		openrouterPostMock.mockResolvedValueOnce({
+			choices: ["dish-from-openrouter"],
+		});
+
+		const firstResult = await chatCompletion("identifyDish", {
+			messages: [{ role: "user", content: "identify this" }],
+		});
+
+		expect(firstResult).toEqual({ choices: ["dish-from-openrouter"] });
+		expect(groqCreateMock).toHaveBeenCalledTimes(1);
+		expect(openrouterPostMock).toHaveBeenCalledTimes(1);
+		expect(isModelOnCooldown("groq", "qwen/qwen3.6-27b")).toBe(true);
+		expect(isModelOnCooldown("groq", "openai/gpt-oss-120b")).toBe(false);
+
+		// Step 2: Next identifyDish call immediately skips Groq and goes directly to OpenRouter
+		groqCreateMock.mockClear();
+		openrouterPostMock.mockClear();
+		openrouterPostMock.mockResolvedValueOnce({
+			choices: ["dish-bypassed-groq"],
+		});
+
+		const secondResult = await chatCompletion("identifyDish", {
+			messages: [{ role: "user", content: "identify another" }],
+		});
+
+		expect(secondResult).toEqual({ choices: ["dish-bypassed-groq"] });
+		expect(groqCreateMock).not.toHaveBeenCalled(); // Groq was never called!
+		expect(openrouterPostMock).toHaveBeenCalledTimes(1);
+
+		// Step 3: recipeGeneration (openai/gpt-oss-120b) still calls Groq since 120b is not on cooldown
+		groqCreateMock.mockClear();
+		openrouterPostMock.mockClear();
+		groqCreateMock.mockResolvedValueOnce({ choices: ["recipe-from-groq"] });
+
+		const recipeResult = await chatCompletion("recipeGeneration", {
+			messages: [{ role: "user", content: "generate recipe" }],
+		});
+
+		expect(recipeResult).toEqual({ choices: ["recipe-from-groq"] });
+		expect(groqCreateMock).toHaveBeenCalledTimes(1); // Groq handled it!
+		expect(openrouterPostMock).not.toHaveBeenCalled();
+	});
+
+	it("respects retry-after and reset header durations when calculating cooldown", async () => {
+		process.env.AI_PROVIDER = "groq";
+
+		const headers = new Headers();
+		headers.set("retry-after", "45");
+		const rateLimitError = Object.assign(new Error("Rate limit"), {
+			status: 429,
+			headers,
+		});
+
+		groqCreateMock.mockRejectedValueOnce(rateLimitError);
+		openrouterPostMock.mockResolvedValueOnce({ choices: ["fallback"] });
+
+		await chatCompletion("onTopicCheck", {
+			messages: [{ role: "user", content: "check" }],
+		});
+
+		expect(isModelOnCooldown("groq", "openai/gpt-oss-20b")).toBe(true);
+	});
+
+	it("silently fails over to OpenRouter and cools down Groq when a Groq request times out", async () => {
+		process.env.AI_PROVIDER = "groq";
+
+		const timeoutError = Object.assign(new Error("Request timed out."), {
+			name: "APIConnectionTimeoutError",
+		});
+		groqCreateMock.mockRejectedValueOnce(timeoutError);
+		openrouterPostMock.mockResolvedValueOnce({
+			choices: ["recovered-from-timeout"],
+		});
+
+		const result = await chatCompletion("recipeGeneration", {
+			messages: [{ role: "user", content: "recipe" }],
+		});
+
+		expect(result).toEqual({ choices: ["recovered-from-timeout"] });
+		expect(groqCreateMock).toHaveBeenCalledTimes(1);
+		expect(openrouterPostMock).toHaveBeenCalledTimes(1);
+		expect(isModelOnCooldown("groq", "openai/gpt-oss-120b")).toBe(true);
+
+		// Subsequent call skips Groq entirely due to cooldown
+		groqCreateMock.mockClear();
+		openrouterPostMock.mockClear();
+		openrouterPostMock.mockResolvedValueOnce({
+			choices: ["direct-openrouter"],
+		});
+
+		const secondResult = await chatCompletion("recipeGeneration", {
+			messages: [{ role: "user", content: "recipe 2" }],
+		});
+		expect(secondResult).toEqual({ choices: ["direct-openrouter"] });
+		expect(groqCreateMock).not.toHaveBeenCalled();
+		expect(openrouterPostMock).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("parseDurationToMs", () => {
+	it("parses seconds, minutes, hours, and plain numbers", () => {
+		expect(parseDurationToMs("45")).toBe(45_000);
+		expect(parseDurationToMs("30s")).toBe(30_000);
+		expect(parseDurationToMs("2.5s")).toBe(2500);
+		expect(parseDurationToMs("1m30s")).toBe(90_000);
+		expect(parseDurationToMs("2h")).toBe(7_200_000);
+		expect(parseDurationToMs("500ms")).toBe(500);
+		expect(parseDurationToMs(undefined)).toBe(60_000);
 	});
 });
