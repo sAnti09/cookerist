@@ -116,6 +116,10 @@ const UNIT_TABLE: Record<string, UnitDefinition> = {
 	dozen: { dimension: "count", toBase: 12 },
 	"half dozen": { dimension: "count", toBase: 6 },
 	"half-dozen": { dimension: "count", toBase: 6 },
+	sprig: { dimension: "count", toBase: 1 },
+	sprigs: { dimension: "count", toBase: 1 },
+	stalk: { dimension: "count", toBase: 1 },
+	stalks: { dimension: "count", toBase: 1 },
 };
 
 function normalizeUnitKey(unit: string): string {

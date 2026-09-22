@@ -198,6 +198,21 @@ function normalize(name: string): string {
 	return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function singularizeWord(word: string): string {
+	if (
+		word.endsWith("ches") ||
+		word.endsWith("shes") ||
+		word.endsWith("xes") ||
+		word.endsWith("zes") ||
+		word.endsWith("sses")
+	) {
+		return word.slice(0, -2);
+	}
+	if (word.endsWith("ss")) return word;
+	if (word.endsWith("s") && word.length > 1) return word.slice(0, -1);
+	return word;
+}
+
 // Looks up an approximate density for an ingredient name by trying
 // decreasing-length word suffixes against the table — e.g. for "extra virgin
 // olive oil" it tries "virgin olive oil" (no match), then "olive oil"
@@ -216,6 +231,21 @@ export function lookupIngredientDensity(name: string): number | null {
 		const phrase = words.slice(words.length - take).join(" ");
 		const density = DENSITY_TABLE[phrase];
 		if (density !== undefined) return density;
+
+		const wordsCopy = words.slice(words.length - take);
+		const lastWord = wordsCopy[wordsCopy.length - 1];
+		const singularLastWord = singularizeWord(lastWord);
+		if (singularLastWord !== lastWord) {
+			wordsCopy[wordsCopy.length - 1] = singularLastWord;
+			const singularPhrase = wordsCopy.join(" ");
+			const singularDensity = DENSITY_TABLE[singularPhrase];
+			if (singularDensity !== undefined) return singularDensity;
+		} else {
+			wordsCopy[wordsCopy.length - 1] = `${lastWord}s`;
+			const pluralPhrase = wordsCopy.join(" ");
+			const pluralDensity = DENSITY_TABLE[pluralPhrase];
+			if (pluralDensity !== undefined) return pluralDensity;
+		}
 	}
 	return null;
 }

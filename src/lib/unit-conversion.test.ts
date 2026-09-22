@@ -64,10 +64,14 @@ describe("resolveUnit / getUnitDimension", () => {
 		expect(getUnitDimension("egg")).toBe("count");
 		expect(getUnitDimension("head")).toBe("count");
 		expect(getUnitDimension("loaf")).toBe("count");
+		expect(getUnitDimension("sprig")).toBe("count");
+		expect(getUnitDimension("stalks")).toBe("count");
 		expect(convertToBase(1, "dozen")).toBe(12);
 		expect(convertToBase(1, "half dozen")).toBe(6);
 		expect(convertToBase(1, "half-dozen")).toBe(6);
 		expect(convertToBase(1, "piece")).toBe(1);
+		expect(convertToBase(1, "sprig")).toBe(1);
+		expect(convertToBase(1, "stalk")).toBe(1);
 	});
 
 	it("resolves an empty (unitless) string to the count dimension, same as 'whole'/'piece'", () => {

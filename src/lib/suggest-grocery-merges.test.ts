@@ -201,4 +201,41 @@ describe("rebuildGroceryListItems", () => {
 		expect(items).toHaveLength(1);
 		expect(items[0].id).toBe("onion-id");
 	});
+
+	it("preserves checked state of an already-merged item when fresh items are unmerged", () => {
+		const mergedOnion = makeItem({
+			id: "merged-onion-id",
+			text: "onion",
+			quantity: 800,
+			unit: "g",
+			checked: true,
+		});
+		const freshYellow = makeItem({
+			id: "fresh-yellow",
+			text: "yellow onion",
+			quantity: 500,
+			unit: "g",
+			checked: false,
+		});
+		const freshOnion = makeItem({
+			id: "fresh-onion",
+			text: "onion",
+			quantity: 300,
+			unit: "g",
+			checked: false,
+		});
+		const confirmedKey = suggestionKey({ a: freshYellow, b: freshOnion });
+
+		const items = rebuildGroceryListItems(
+			[mergedOnion],
+			[freshYellow, freshOnion],
+			[confirmedKey],
+		);
+
+		expect(items).toHaveLength(1);
+		expect(items[0].text).toBe("onion");
+		expect(items[0].quantity).toBe(800);
+		expect(items[0].checked).toBe(true);
+		expect(items[0].id).toBe("merged-onion-id");
+	});
 });

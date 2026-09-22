@@ -63,4 +63,15 @@ describe("lookupPieceRatio", () => {
 			containerUnitPlural: "loaves",
 		});
 	});
+
+	it("finds piece ratios for plural ingredient names", () => {
+		expect(lookupPieceRatio("green onions")).toMatchObject({
+			piecesPerContainer: 6,
+			containerUnitSingular: "bunch",
+		});
+		expect(lookupPieceRatio("scallions")).toMatchObject({
+			piecesPerContainer: 6,
+			containerUnitSingular: "bunch",
+		});
+	});
 });

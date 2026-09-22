@@ -42,6 +42,8 @@ export const COUNTABLE_UNITS: readonly string[] = [
 	"slices",
 	"can",
 	"cans",
+	"tin",
+	"tins",
 	"unit",
 	"units",
 	"whole",
@@ -59,6 +61,36 @@ export const COUNTABLE_UNITS: readonly string[] = [
 	"dozen",
 	"half dozen",
 	"half-dozen",
+	"box",
+	"boxes",
+	"jar",
+	"jars",
+	"bottle",
+	"bottles",
+	"packet",
+	"packets",
+	"package",
+	"packages",
+	"pack",
+	"packs",
+	"bag",
+	"bags",
+	"carton",
+	"cartons",
+	"tub",
+	"tubs",
+	"container",
+	"containers",
+	"pouch",
+	"pouches",
+	"sprig",
+	"sprigs",
+	"stalk",
+	"stalks",
+	"pinch",
+	"pinches",
+	"dash",
+	"dashes",
 ];
 
 export type CustomGroceryIngredient = {
@@ -76,22 +108,39 @@ function roundUpToMultiple(value: number, multiple: number): number {
 }
 
 export function isCountableUnit(unit: string): boolean {
-	return COUNTABLE_UNITS.includes(unit.trim().toLowerCase());
+	const normalized = unit.trim().toLowerCase();
+	return (
+		COUNTABLE_UNITS.includes(normalized) ||
+		COUNTABLE_UNITS.includes(canonicalizeUnitForMerging(normalized))
+	);
 }
 
 // An ingredient-agnostic unit the unit-conversion table doesn't recognize
 // (e.g. "can", "slice", "packet" — anything not in unit-conversion.ts or a
 // specific ingredient's ingredient-piece-ratio.ts entry) falls back to
 // matching on the literal unit string alone, since there's nothing else to
-// key on. Without folding a simple trailing-"s" plural first, "1 can" and
-// "2 cans" of the same ingredient would merge into two separate grocery-list
-// lines instead of one — not just a missing feature, an inconsistency with
-// COUNTABLE_UNITS already treating "can"/"cans" as equivalent for rounding.
-// Not a full pluralization rule (an "-es" plural like "box"/"boxes" won't
-// fold) — good enough for the common case without needing a dictionary.
+// key on. Folds trailing "-s" or "-es" plurals so e.g. "1 can" and "2 cans"
+// or "1 box" and "2 boxes" of the same ingredient merge into one grocery-list
+// line rather than two.
 export function canonicalizeUnitForMerging(unit: string): string {
-	const lower = unit.toLowerCase();
-	return lower.length > 1 && lower.endsWith("s") ? lower.slice(0, -1) : lower;
+	const lower = unit.trim().toLowerCase();
+	if (lower.length <= 2) return lower;
+	if (
+		lower.endsWith("ches") ||
+		lower.endsWith("shes") ||
+		lower.endsWith("xes") ||
+		lower.endsWith("zes") ||
+		lower.endsWith("sses")
+	) {
+		return lower.slice(0, -2);
+	}
+	if (lower.endsWith("ss")) {
+		return lower;
+	}
+	if (lower.endsWith("s")) {
+		return lower.slice(0, -1);
+	}
+	return lower;
 }
 
 export function roundGroceryQuantity(quantity: number, unit: string): number {
@@ -534,7 +583,15 @@ function checkedStateKey(item: GroceryListItem): string {
 	const isPieceRatioUnit =
 		pieceRatio?.containerUnits.includes(normalizedUnit) ||
 		pieceRatio?.pieceUnits.includes(normalizedUnit);
-	const dimension = isPieceRatioUnit ? "count" : getUnitDimension(item.unit);
+	const rawDimension = isPieceRatioUnit ? "count" : getUnitDimension(item.unit);
+	const isLiquidWithDensity =
+		isLiquidIngredient(item.text) &&
+		lookupIngredientDensity(item.text) !== null;
+	const dimension =
+		isLiquidWithDensity &&
+		(rawDimension === "mass" || rawDimension === "volume")
+			? "liquid"
+			: rawDimension;
 	return dimension
 		? `${normalizedText}::dim:${dimension}`
 		: `${normalizedText}::unit:${canonicalizeUnitForMerging(normalizedUnit)}`;
@@ -554,11 +611,20 @@ export function carryOverCheckedState(
 	previousItems: GroceryListItem[],
 	newItems: GroceryListItem[],
 ): GroceryListItem[] {
-	const previousByKey = new Map(
-		previousItems.map((item) => [checkedStateKey(item), item]),
-	);
+	const previousByKey = new Map<string, GroceryListItem[]>();
+	for (const item of previousItems) {
+		const key = checkedStateKey(item);
+		const list = previousByKey.get(key);
+		if (list) {
+			list.push(item);
+		} else {
+			previousByKey.set(key, [item]);
+		}
+	}
 	return newItems.map((item) => {
-		const previous = previousByKey.get(checkedStateKey(item));
+		const key = checkedStateKey(item);
+		const list = previousByKey.get(key);
+		const previous = list?.shift();
 		return {
 			...item,
 			id: previous?.id ?? item.id,

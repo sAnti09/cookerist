@@ -153,8 +153,10 @@ export function rebuildGroceryListItems(
 	freshItems: GroceryListItem[],
 	confirmedMergeKeys: readonly string[] | undefined,
 ): GroceryListItem[] {
-	return reapplyConfirmedMerges(
-		carryOverCheckedState(previousItems, freshItems),
+	const mergedFresh = reapplyConfirmedMerges(freshItems, confirmedMergeKeys);
+	const mergedPrevious = reapplyConfirmedMerges(
+		previousItems,
 		confirmedMergeKeys,
 	);
+	return carryOverCheckedState(mergedPrevious, mergedFresh);
 }

@@ -66,11 +66,30 @@ const DRY_FORM_WORDS: ReadonlySet<string> = new Set([
 	"powdered",
 ]);
 
+function singularizeWord(word: string): string {
+	if (
+		word.endsWith("ches") ||
+		word.endsWith("shes") ||
+		word.endsWith("xes") ||
+		word.endsWith("zes") ||
+		word.endsWith("sses")
+	) {
+		return word.slice(0, -2);
+	}
+	if (word.endsWith("ss")) return word;
+	if (word.endsWith("s") && word.length > 1) return word.slice(0, -1);
+	return word;
+}
+
 export function isLiquidIngredient(baseName: string): boolean {
 	const words = baseName.trim().toLowerCase().split(/\s+/).filter(Boolean);
 	if (words.length === 0) return false;
 	if (words.some((word) => DRY_FORM_WORDS.has(word))) return false;
 
 	const lastWord = words[words.length - 1];
-	return lastWord !== undefined && LIQUID_TERMINAL_WORDS.has(lastWord);
+	if (!lastWord) return false;
+	return (
+		LIQUID_TERMINAL_WORDS.has(lastWord) ||
+		LIQUID_TERMINAL_WORDS.has(singularizeWord(lastWord))
+	);
 }

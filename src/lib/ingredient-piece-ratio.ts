@@ -48,7 +48,21 @@ const PIECE_RATIO_TABLE: Record<string, PieceRatio> = {
 		containerUnitSingular: "bunch",
 		containerUnitPlural: "bunches",
 	},
+	"green onions": {
+		containerUnits: ["bunch", "bunches"],
+		pieceUnits: ["stalk", "stalks"],
+		piecesPerContainer: 6,
+		containerUnitSingular: "bunch",
+		containerUnitPlural: "bunches",
+	},
 	scallion: {
+		containerUnits: ["bunch", "bunches"],
+		pieceUnits: ["stalk", "stalks"],
+		piecesPerContainer: 6,
+		containerUnitSingular: "bunch",
+		containerUnitPlural: "bunches",
+	},
+	scallions: {
 		containerUnits: ["bunch", "bunches"],
 		pieceUnits: ["stalk", "stalks"],
 		piecesPerContainer: 6,
@@ -70,6 +84,21 @@ function normalize(name: string): string {
 	return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function singularizeWord(word: string): string {
+	if (
+		word.endsWith("ches") ||
+		word.endsWith("shes") ||
+		word.endsWith("xes") ||
+		word.endsWith("zes") ||
+		word.endsWith("sses")
+	) {
+		return word.slice(0, -2);
+	}
+	if (word.endsWith("ss")) return word;
+	if (word.endsWith("s") && word.length > 1) return word.slice(0, -1);
+	return word;
+}
+
 // Looks up a piece ratio for an ingredient name by trying decreasing-length
 // word suffixes against the table, same strategy as
 // ingredient-density.ts's lookupIngredientDensity — e.g. "fresh green onion"
@@ -85,6 +114,16 @@ export function lookupPieceRatio(name: string): PieceRatio | null {
 		const phrase = words.slice(words.length - take).join(" ");
 		const ratio = PIECE_RATIO_TABLE[phrase];
 		if (ratio !== undefined) return ratio;
+
+		const wordsCopy = words.slice(words.length - take);
+		const lastWord = wordsCopy[wordsCopy.length - 1];
+		const singularLastWord = singularizeWord(lastWord);
+		if (singularLastWord !== lastWord) {
+			wordsCopy[wordsCopy.length - 1] = singularLastWord;
+			const singularPhrase = wordsCopy.join(" ");
+			const singularRatio = PIECE_RATIO_TABLE[singularPhrase];
+			if (singularRatio !== undefined) return singularRatio;
+		}
 	}
 	return null;
 }

@@ -48,4 +48,10 @@ describe("isLiquidIngredient", () => {
 		expect(isLiquidIngredient("milk powder")).toBe(false);
 		expect(isLiquidIngredient("dried cranberries")).toBe(false);
 	});
+
+	it("recognizes plural forms of liquid words", () => {
+		expect(isLiquidIngredient("vegetable oils")).toBe(true);
+		expect(isLiquidIngredient("fruit juices")).toBe(true);
+		expect(isLiquidIngredient("dipping sauces")).toBe(true);
+	});
 });

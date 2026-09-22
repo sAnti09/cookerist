@@ -4,6 +4,7 @@ import type { Ingredient, Recipe } from "#/lib/recipe";
 import {
 	aggregateGroceryItems,
 	COUNTABLE_UNITS,
+	canonicalizeUnitForMerging,
 	carryOverCheckedState,
 	formatGroceryItemLine,
 	isCountableUnit,
@@ -71,6 +72,10 @@ describe("roundGroceryQuantity", () => {
 		expect(roundGroceryQuantity(3.5, "eggs")).toBe(4);
 		expect(roundGroceryQuantity(2.1, "cloves")).toBe(3);
 		expect(roundGroceryQuantity(1, "pieces")).toBe(1);
+		expect(roundGroceryQuantity(0.75, "jar")).toBe(1);
+		expect(roundGroceryQuantity(1.25, "boxes")).toBe(2);
+		expect(roundGroceryQuantity(0.5, "packet")).toBe(1);
+		expect(roundGroceryQuantity(1.5, "sprigs")).toBe(2);
 	});
 
 	it("treats countable units as case/whitespace-insensitive", () => {
@@ -85,11 +90,43 @@ describe("isCountableUnit", () => {
 		}
 	});
 
+	it("recognizes commercial containers and packaging units", () => {
+		expect(isCountableUnit("box")).toBe(true);
+		expect(isCountableUnit("boxes")).toBe(true);
+		expect(isCountableUnit("jar")).toBe(true);
+		expect(isCountableUnit("jars")).toBe(true);
+		expect(isCountableUnit("bottle")).toBe(true);
+		expect(isCountableUnit("bottles")).toBe(true);
+		expect(isCountableUnit("packet")).toBe(true);
+		expect(isCountableUnit("packets")).toBe(true);
+		expect(isCountableUnit("sprig")).toBe(true);
+		expect(isCountableUnit("sprigs")).toBe(true);
+	});
+
 	it("returns false for continuous units", () => {
 		expect(isCountableUnit("g")).toBe(false);
 		expect(isCountableUnit("kg")).toBe(false);
 		expect(isCountableUnit("ml")).toBe(false);
 		expect(isCountableUnit("cups")).toBe(false);
+	});
+});
+
+describe("canonicalizeUnitForMerging", () => {
+	it("canonicalizes simple -s plurals", () => {
+		expect(canonicalizeUnitForMerging("cans")).toBe("can");
+		expect(canonicalizeUnitForMerging("bottles")).toBe("bottle");
+		expect(canonicalizeUnitForMerging("slices")).toBe("slice");
+	});
+
+	it("canonicalizes -es plurals (boxes, bunches, pinches, glasses)", () => {
+		expect(canonicalizeUnitForMerging("boxes")).toBe("box");
+		expect(canonicalizeUnitForMerging("bunches")).toBe("bunch");
+		expect(canonicalizeUnitForMerging("pinches")).toBe("pinch");
+		expect(canonicalizeUnitForMerging("glasses")).toBe("glass");
+	});
+
+	it("preserves words ending in ss like glass", () => {
+		expect(canonicalizeUnitForMerging("glass")).toBe("glass");
 	});
 });
 
@@ -1437,6 +1474,40 @@ describe("aggregateGroceryItems", () => {
 		});
 	});
 
+	it("merges -es plural units (e.g. 'box'/'boxes')", () => {
+		const recipeA = makeRecipe({
+			id: "recipe-a",
+			ingredients: [
+				makeIngredient({
+					id: "ing-a",
+					baseName: "pasta",
+					quantity: 1,
+					unit: "box",
+				}),
+			],
+		});
+		const recipeB = makeRecipe({
+			id: "recipe-b",
+			ingredients: [
+				makeIngredient({
+					id: "ing-b",
+					baseName: "pasta",
+					quantity: 2,
+					unit: "boxes",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipeA, recipeB]);
+
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			text: "pasta",
+			quantity: 3,
+			unit: "box",
+		});
+	});
+
 	it("does not fold two genuinely different unrecognized units together", () => {
 		const recipeA = makeRecipe({
 			id: "recipe-a",
@@ -1827,6 +1898,50 @@ describe("carryOverCheckedState", () => {
 		const previous = [makeItem({ checked: true })];
 
 		expect(carryOverCheckedState(previous, [])).toEqual([]);
+	});
+
+	it("keeps the checked state of a recognized liquid with density across mass and volume units", () => {
+		const previous = [makeItem({ text: "milk", unit: "g", checked: true })];
+		const next = [makeItem({ text: "milk", unit: "ml", checked: false })];
+
+		const result = carryOverCheckedState(previous, next);
+
+		expect(result[0].checked).toBe(true);
+	});
+
+	it("assigns distinct IDs and checked states to duplicate items with the same key", () => {
+		const item1 = makeItem({
+			id: "id-1",
+			text: "eggs",
+			unit: "",
+			checked: true,
+		});
+		const item2 = makeItem({
+			id: "id-2",
+			text: "eggs",
+			unit: "",
+			checked: false,
+		});
+		const next1 = makeItem({
+			id: "fresh-1",
+			text: "eggs",
+			unit: "",
+			checked: false,
+		});
+		const next2 = makeItem({
+			id: "fresh-2",
+			text: "eggs",
+			unit: "",
+			checked: false,
+		});
+
+		const result = carryOverCheckedState([item1, item2], [next1, next2]);
+
+		expect(result).toHaveLength(2);
+		expect(result[0].id).toBe("id-1");
+		expect(result[0].checked).toBe(true);
+		expect(result[1].id).toBe("id-2");
+		expect(result[1].checked).toBe(false);
 	});
 });
 

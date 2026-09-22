@@ -98,4 +98,11 @@ describe("lookupIngredientDensity", () => {
 		// rather than a hardcoded special case.
 		expect(lookupIngredientDensity("half and half")).toBeCloseTo(1.023);
 	});
+
+	it("matches singular and plural forms of ingredients", () => {
+		expect(lookupIngredientDensity("almond")).toBeCloseTo(0.613);
+		expect(lookupIngredientDensity("chickpea")).toBeCloseTo(0.845);
+		expect(lookupIngredientDensity("raisin")).toBeCloseTo(0.697);
+		expect(lookupIngredientDensity("walnut")).toBeCloseTo(0.494);
+	});
 });
