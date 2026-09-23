@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { type Migration, runMigrations } from "./run-migrations";
+import {
+	getMigrationProgress,
+	initMigrationProgress,
+	type Migration,
+	runMigrations,
+} from "./run-migrations";
 
 const COMPLETED_KEY = "cookerist:completed-migrations";
 
@@ -200,5 +205,55 @@ describe("runMigrations", () => {
 		]);
 
 		expect(run2).toHaveBeenCalledTimes(1);
+	});
+
+	it("updates migration progress during and after run", async () => {
+		const progressSnapshots: unknown[] = [];
+		const run1 = vi.fn(async () => {
+			progressSnapshots.push({ ...getMigrationProgress() });
+		});
+		const run2 = vi.fn(async () => {
+			progressSnapshots.push({ ...getMigrationProgress() });
+		});
+
+		await runMigrations([
+			{ id: "p1", run: run1 },
+			{ id: "p2", run: run2 },
+		]);
+
+		expect(progressSnapshots[0]).toMatchObject({
+			total: 2,
+			completedCount: 0,
+			currentMigrationIndex: 1,
+			status: "running",
+		});
+		expect(progressSnapshots[1]).toMatchObject({
+			total: 2,
+			completedCount: 1,
+			currentMigrationIndex: 2,
+			status: "running",
+		});
+		expect(getMigrationProgress()).toMatchObject({
+			total: 2,
+			completedCount: 2,
+			currentMigrationIndex: null,
+			status: "completed",
+		});
+	});
+
+	it("initializes progress correctly via initMigrationProgress", () => {
+		window.localStorage.setItem(COMPLETED_KEY, JSON.stringify(["m1"]));
+
+		initMigrationProgress([
+			{ id: "m1", run: vi.fn() },
+			{ id: "m2", run: vi.fn() },
+		]);
+
+		expect(getMigrationProgress()).toMatchObject({
+			total: 2,
+			completedCount: 1,
+			currentMigrationIndex: null,
+			status: "idle",
+		});
 	});
 });

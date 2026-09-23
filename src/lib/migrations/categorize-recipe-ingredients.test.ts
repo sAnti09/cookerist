@@ -132,6 +132,39 @@ describe("categorizeRecipeIngredients", () => {
 		expect(recipe.ingredients[0].approxGramsPerUnit).toBe(150);
 	});
 
+	it("backfills scalingClass onto every matching occurrence", async () => {
+		saveRecipe(
+			[],
+			makeRecipe({
+				ingredients: [
+					makeIngredient({
+						baseName: "garlic",
+						description: "",
+						unit: "cloves",
+					}),
+				],
+			}),
+		);
+		categorizeIngredientsMock.mockResolvedValueOnce({
+			type: "success",
+			items: [
+				{
+					id: 0,
+					baseName: "garlic",
+					description: "",
+					category: "Produce",
+					approxGramsPerUnit: null,
+					scalingClass: "sublinear",
+				},
+			],
+		});
+
+		await categorizeRecipeIngredients();
+
+		const [recipe] = loadRecipes();
+		expect(recipe.ingredients[0].scalingClass).toBe("sublinear");
+	});
+
 	it("dedupes identical (baseName, description) pairs across recipes into one request item", async () => {
 		saveRecipe(
 			saveRecipe(

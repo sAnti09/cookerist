@@ -42,6 +42,13 @@ export const approxGramsPerUnitSchema = z
 	.nullable()
 	.catch(null);
 
+// `.catch("linear")` defaults to "linear" for missing or unrecognized values —
+// bulk ingredients (linear) are the safe default, so a missing or malformed
+// tag scales 1:1 rather than dampening unexpectedly.
+export const scalingClassSchema = z
+	.enum(["linear", "sublinear"])
+	.catch("linear");
+
 const ingredientItemSchema = z.object({
 	baseName: z.string().min(1),
 	description: z.string(),
@@ -49,6 +56,7 @@ const ingredientItemSchema = z.object({
 	unit: z.string(),
 	category: groceryCategorySchema,
 	approxGramsPerUnit: approxGramsPerUnitSchema,
+	scalingClass: scalingClassSchema,
 });
 
 const stepItemSchema = z.object({
@@ -99,6 +107,7 @@ export const categorizeIngredientsResponseSchema = z.object({
 			description: z.string(),
 			category: groceryCategorySchema,
 			approxGramsPerUnit: approxGramsPerUnitSchema,
+			scalingClass: scalingClassSchema,
 		}),
 	),
 });

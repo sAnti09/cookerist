@@ -19,6 +19,39 @@ describe("scaleQuantity", () => {
 		expect(scaleQuantity(10, 0, 5)).toBe(10);
 		expect(scaleQuantity(10, -1, 5)).toBe(10);
 	});
+
+	it("applies sub-linear dampened scaling when scalingClass is sublinear", () => {
+		// ratio = 4 / 2 = 2; 2^0.6 ≈ 1.5157
+		const scaled = scaleQuantity(1, 2, 4, "sublinear");
+		expect(scaled).toBeCloseTo(1.516, 2);
+	});
+
+	it("falls back to sub-linear scaling for common aromatics/seasonings when scalingClass is undefined", () => {
+		// 1 onion from 4 to 7 servings: ratio 1.75; 1.75^0.6 ≈ 1.398
+		const onion = scaleQuantity(1, 4, 7, undefined, "onion");
+		expect(onion).toBeCloseTo(1.398, 2);
+
+		// "yellow onion" (suffix match)
+		const yellowOnion = scaleQuantity(2, 4, 7, undefined, "yellow onion");
+		expect(yellowOnion).toBeCloseTo(2 * 1.398, 2);
+
+		// "salt"
+		const salt = scaleQuantity(1, 4, 10, undefined, "salt");
+		// ratio 2.5; 2.5^0.6 ≈ 1.733 (fits culinary 1.5x rule!)
+		expect(salt).toBeCloseTo(1.733, 2);
+	});
+
+	it("scales bulk ingredients linearly when scalingClass is undefined", () => {
+		// "pork ribs"
+		expect(scaleQuantity(800, 4, 7, undefined, "pork ribs")).toBe(1400);
+		// "potatoes"
+		expect(scaleQuantity(4, 4, 10, undefined, "potatoes")).toBe(10);
+	});
+
+	it("respects an explicit linear scalingClass even for an aromatic name (e.g. French onion soup)", () => {
+		const frenchOnions = scaleQuantity(4, 4, 7, "linear", "onion");
+		expect(frenchOnions).toBe(7);
+	});
 });
 
 describe("formatQuantity", () => {

@@ -30,6 +30,10 @@ export type Ingredient = {
 	// Optional: absent on ingredients saved before this field existed —
 	// callers should treat that the same as null (no estimate).
 	approxGramsPerUnit?: number | null;
+	// How this ingredient scales as recipe servings change:
+	// "linear" (default) for bulk mass/proteins/starches (1:1 with servings);
+	// "sublinear" for pan aromatics, spices, seasonings, and cooking fats.
+	scalingClass?: "linear" | "sublinear";
 };
 
 // Composes the full display name from a base name + optional description

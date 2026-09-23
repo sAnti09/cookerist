@@ -140,6 +140,7 @@ export function RecipeModificationDialog({
 								unit: ingredient.unit,
 								category: ingredient.category,
 								approxGramsPerUnit: ingredient.approxGramsPerUnit,
+								scalingClass: ingredient.scalingClass,
 								checked: false,
 							})),
 							steps: result.recipe.steps.map((step) => ({

@@ -1781,6 +1781,27 @@ describe("aggregateGroceryItems", () => {
 			currentServings: 4,
 			ingredients: [
 				makeIngredient({
+					text: "potato",
+					quantity: 1,
+					unit: "",
+					approxGramsPerUnit: 150,
+					scalingClass: "linear",
+				}),
+			],
+		});
+
+		const result = aggregateGroceryItems([recipe]);
+
+		// 1 piece scaled linearly to 2 pieces * 150 g = 300 g.
+		expect(result[0]).toMatchObject({ unit: "g", quantity: 300 });
+	});
+
+	it("scales sublinear ingredients with dampened scaling when aggregating", () => {
+		const recipe = makeRecipe({
+			baseServings: 2,
+			currentServings: 4,
+			ingredients: [
+				makeIngredient({
 					text: "onion",
 					quantity: 1,
 					unit: "",
@@ -1791,8 +1812,9 @@ describe("aggregateGroceryItems", () => {
 
 		const result = aggregateGroceryItems([recipe]);
 
-		// 1 onion scaled to 2 onions * 150 g = 300 g.
-		expect(result[0]).toMatchObject({ unit: "g", quantity: 300 });
+		// 1 onion scaled from 2 to 4 servings with ratio 2: 2^0.6 ≈ 1.516 * 150 g = 227.5 g
+		expect(result[0]?.unit).toBe("g");
+		expect(result[0]?.quantity).toBeCloseTo(227.5, 1);
 	});
 });
 

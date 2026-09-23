@@ -186,6 +186,7 @@ describe("RecipeModificationDialog", () => {
 				unit: "g",
 				category: "Other",
 				approxGramsPerUnit: null,
+				scalingClass: "linear",
 			},
 			{
 				baseName: "garlic",
@@ -194,6 +195,7 @@ describe("RecipeModificationDialog", () => {
 				unit: "cloves",
 				category: "Other",
 				approxGramsPerUnit: null,
+				scalingClass: "linear",
 			},
 		]);
 	});
@@ -425,6 +427,7 @@ describe("RecipeModificationDialog", () => {
 				unit: "g",
 				category: "Other",
 				approxGramsPerUnit: null,
+				scalingClass: "linear",
 			},
 		]);
 	});

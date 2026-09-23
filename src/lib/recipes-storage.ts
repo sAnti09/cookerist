@@ -209,6 +209,7 @@ export function toStoredRecipe(
 			unit: ingredient.unit,
 			category: ingredient.category,
 			approxGramsPerUnit: ingredient.approxGramsPerUnit,
+			scalingClass: ingredient.scalingClass,
 			checked: false,
 		})),
 		steps: input.steps.map((step) => ({

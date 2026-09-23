@@ -46,12 +46,13 @@ describe("categorizeIngredients", () => {
 					description: "",
 					category: "Meat & Seafood",
 					approxGramsPerUnit: null,
+					scalingClass: "linear",
 				},
 			],
 		});
 	});
 
-	it("passes an approxGramsPerUnit value through unchanged", async () => {
+	it("passes an approxGramsPerUnit and scalingClass value through unchanged", async () => {
 		createMock.mockResolvedValueOnce(
 			jsonResponse({
 				items: [
@@ -61,6 +62,7 @@ describe("categorizeIngredients", () => {
 						description: "",
 						category: "Produce",
 						approxGramsPerUnit: 150,
+						scalingClass: "sublinear",
 					},
 				],
 			}),
@@ -79,6 +81,7 @@ describe("categorizeIngredients", () => {
 					description: "",
 					category: "Produce",
 					approxGramsPerUnit: 150,
+					scalingClass: "sublinear",
 				},
 			],
 		});
@@ -106,6 +109,7 @@ describe("categorizeIngredients", () => {
 		expect(systemContent).toContain("baseName rule");
 		expect(systemContent).toContain("category rule");
 		expect(systemContent).toContain("approxGramsPerUnit rule");
+		expect(systemContent).toContain("scalingClass rule");
 		expect(systemContent).toContain("Meat & Seafood");
 	});
 
@@ -136,6 +140,7 @@ describe("categorizeIngredients", () => {
 					description: "",
 					category: "Other",
 					approxGramsPerUnit: null,
+					scalingClass: "linear",
 				},
 			],
 		});

@@ -1,10 +1,90 @@
+// Common aromatics, pungent seasonings, spices, and cooking fats that flavor
+// the pan rather than acting as bulk mass (meat, rice, potatoes). Used as a
+// fallback for legacy recipes saved before Groq started tagging scalingClass
+// ("linear" | "sublinear") directly on ingredients.
+export const LEGACY_SUBLINEAR_WORDS: ReadonlySet<string> = new Set([
+	"onion",
+	"onions",
+	"garlic",
+	"ginger",
+	"shallot",
+	"shallots",
+	"scallion",
+	"scallions",
+	"green onion",
+	"green onions",
+	"leek",
+	"leeks",
+	"chives",
+	"salt",
+	"pepper",
+	"black pepper",
+	"white pepper",
+	"cayenne",
+	"chili",
+	"chilies",
+	"chilli",
+	"chillies",
+	"chile",
+	"chiles",
+	"cumin",
+	"paprika",
+	"oregano",
+	"cinnamon",
+	"coriander",
+	"turmeric",
+	"bay leaf",
+	"bay leaves",
+	"rosemary",
+	"thyme",
+	"basil",
+	"parsley",
+	"cilantro",
+	"nutmeg",
+	"clove",
+	"cloves",
+	"cardamom",
+	"saffron",
+	"vanilla",
+	"soy sauce",
+	"fish sauce",
+	"oyster sauce",
+	"hot sauce",
+	"sriracha",
+	"vinegar",
+	"oil",
+	"cooking oil",
+	"olive oil",
+	"vegetable oil",
+	"canola oil",
+	"sesame oil",
+]);
+
+export function isLegacySublinear(baseName: string): boolean {
+	const normalized = baseName.trim().toLowerCase().replace(/\s+/g, " ");
+	if (!normalized) return false;
+	if (LEGACY_SUBLINEAR_WORDS.has(normalized)) return true;
+	const words = normalized.split(" ");
+	const lastWord = words[words.length - 1];
+	if (LEGACY_SUBLINEAR_WORDS.has(lastWord)) return true;
+	return false;
+}
+
 export function scaleQuantity(
 	baseQuantity: number,
 	baseServings: number,
 	currentServings: number,
+	scalingClass?: "linear" | "sublinear",
+	baseName?: string,
 ): number {
 	if (baseServings <= 0) return baseQuantity;
-	return (baseQuantity * currentServings) / baseServings;
+	const ratio = currentServings / baseServings;
+	const isSublinear =
+		scalingClass === "sublinear" ||
+		(!scalingClass && baseName ? isLegacySublinear(baseName) : false);
+
+	const factor = isSublinear ? ratio ** 0.6 : ratio;
+	return baseQuantity * factor;
 }
 
 export function formatQuantity(quantity: number): string {

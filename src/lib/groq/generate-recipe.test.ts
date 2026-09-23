@@ -47,6 +47,7 @@ const validRecipe: RecipeResponse = {
 			unit: "g",
 			category: "Meat & Seafood",
 			approxGramsPerUnit: null,
+			scalingClass: "linear",
 		},
 	],
 	steps: [{ section: null, text: "Cook the pasta." }],
@@ -104,6 +105,29 @@ describe("generateRecipe", () => {
 		expect(createMock).toHaveBeenCalledTimes(2);
 	});
 
+	it("parses explicit scalingClass from Groq response", async () => {
+		const recipeWithSublinear = {
+			...validRecipe,
+			ingredients: [
+				{
+					...validRecipe.ingredients[0],
+					scalingClass: "sublinear" as const,
+				},
+			],
+		};
+		createMock
+			.mockResolvedValueOnce(jsonResponse({ on_topic: true }))
+			.mockResolvedValueOnce(jsonResponse(recipeWithSublinear));
+
+		const result = await generateRecipe("shrimp pasta for 2");
+
+		expect(result).toEqual({
+			type: "success",
+			recipe: recipeWithSublinear,
+			truncated: false,
+		});
+	});
+
 	it("skips the on-topic classifier call entirely when skipOnTopicCheck is set", async () => {
 		createMock.mockResolvedValueOnce(jsonResponse(validRecipe));
 
@@ -155,6 +179,7 @@ describe("generateRecipe", () => {
 						unit: "",
 						category: "Other",
 						approxGramsPerUnit: null,
+						scalingClass: "linear",
 					},
 				],
 			},
@@ -300,6 +325,7 @@ describe("generateRecipe", () => {
 					unit: "g",
 					category: "Meat & Seafood",
 					approxGramsPerUnit: null,
+					scalingClass: "linear",
 				},
 				{
 					baseName: "garlic",
@@ -308,6 +334,7 @@ describe("generateRecipe", () => {
 					unit: "cloves",
 					category: "Produce",
 					approxGramsPerUnit: null,
+					scalingClass: "sublinear",
 				},
 			],
 			steps: [
@@ -524,6 +551,7 @@ describe("continueRecipe", () => {
 					unit: "g",
 					category: "Dairy & Eggs",
 					approxGramsPerUnit: null,
+					scalingClass: "linear",
 				},
 			],
 			steps: [{ section: null, text: "Plate and serve." }],
@@ -588,6 +616,7 @@ describe("continueRecipe", () => {
 					unit: "g",
 					category: "Dairy & Eggs",
 					approxGramsPerUnit: null,
+					scalingClass: "linear",
 				},
 			],
 			steps: [{ section: null, text: "Plate and serve." }],
@@ -639,6 +668,7 @@ describe("modifyRecipe", () => {
 					unit: "g",
 					category: "Meat & Seafood",
 					approxGramsPerUnit: null,
+					scalingClass: "linear",
 				},
 			],
 		};
@@ -684,6 +714,7 @@ describe("modifyRecipe", () => {
 					unit: "g",
 					category: "Meat & Seafood",
 					approxGramsPerUnit: null,
+					scalingClass: "linear",
 				},
 				{
 					baseName: "garlic",
@@ -692,6 +723,7 @@ describe("modifyRecipe", () => {
 					unit: "cloves",
 					category: "Produce",
 					approxGramsPerUnit: null,
+					scalingClass: "sublinear",
 				},
 			],
 			steps: [

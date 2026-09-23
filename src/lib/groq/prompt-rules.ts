@@ -18,3 +18,7 @@ export const GROCERY_CATEGORY_ENUM_LIST = GROCERY_CATEGORIES.map(
 export const CATEGORY_RULE = `category rule: pick whichever of the listed categories the ingredient would actually be shelved under at a grocery store (e.g. chicken breast -> "Meat & Seafood", milk -> "Dairy & Eggs", flour -> "Pantry", frozen peas -> "Frozen"). Use "Other" only when none of the rest genuinely fit.`;
 
 export const APPROX_WEIGHT_RULE = `approxGramsPerUnit rule: for a produce item or other ingredient a shopper could plausibly buy either by count or by weight (e.g. onion, potato, tomato, apple, lemon, bell pepper, avocado, zucchini), give the approximate weight in grams of ONE typical piece (e.g. one onion ≈ 150). Use null when the ingredient is conventionally bought/asked for strictly by count or by the dozen/pack, never meaningfully by weight (e.g. eggs, whole loaves of bread, bread rolls/buns, a dozen of something) — those should keep displaying as a plain piece count, not an invented weight.`;
+
+export const SCALING_CLASS_RULE = `scalingClass rule:
+- "linear" (default): bulk ingredients that feed diners directly (proteins/meat, poultry, seafood, tofu, eggs, rice, pasta, noodles, potatoes, main vegetables, beans/legumes, flours, bread, broth/stock).
+- "sublinear": aromatics, spices, herbs, salt, seasonings, or cooking fats that flavor the pan or dish and do not scale 1:1 with portion sizes (e.g. onion, garlic, ginger, shallot, scallion, chili, pepper, soy sauce, fish sauce, vinegar, bay leaf, cooking oil or butter for sautéing).`;

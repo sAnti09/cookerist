@@ -13,7 +13,66 @@
 // metric-grocery-units.ts for the shape), then add it to the `MIGRATIONS`
 // array in index.ts with its own permanent id.
 
+import { useSyncExternalStore } from "react";
+
 const COMPLETED_MIGRATIONS_STORAGE_KEY = "cookerist:completed-migrations";
+
+export type MigrationProgress = {
+	total: number;
+	completedCount: number;
+	currentMigrationIndex: number | null;
+	status: "idle" | "running" | "completed";
+};
+
+let currentProgress: MigrationProgress = {
+	total: 0,
+	completedCount: 0,
+	currentMigrationIndex: null,
+	status: "idle",
+};
+
+const listeners = new Set<(progress: MigrationProgress) => void>();
+
+function notifyProgress(next: MigrationProgress): void {
+	currentProgress = next;
+	for (const listener of listeners) {
+		listener(currentProgress);
+	}
+}
+
+export function getMigrationProgress(): MigrationProgress {
+	return currentProgress;
+}
+
+export function subscribeMigrationProgress(
+	listener: (progress: MigrationProgress) => void,
+): () => void {
+	listeners.add(listener);
+	return () => {
+		listeners.delete(listener);
+	};
+}
+
+export function initMigrationProgress(migrations: readonly Migration[]): void {
+	const completed = loadCompletedMigrationIds();
+	const total = migrations.length;
+	const completedCount = migrations.filter((m) => completed.has(m.id)).length;
+	const isAllDone = total > 0 && completedCount >= total;
+	notifyProgress({
+		total,
+		completedCount,
+		currentMigrationIndex: null,
+		status: isAllDone ? "completed" : "idle",
+	});
+}
+
+export function useMigrationProgress(): MigrationProgress {
+	return useSyncExternalStore(
+		subscribeMigrationProgress,
+		getMigrationProgress,
+		getMigrationProgress,
+	);
+}
 
 // A migration normally just returns void/undefined, which marks it
 // completed unconditionally (see runMigrations) — the right default for a
@@ -90,9 +149,35 @@ export async function runMigrations(
 	migrations: readonly Migration[],
 ): Promise<void> {
 	const completed = loadCompletedMigrationIds();
+	const total = migrations.length;
+	let completedCount = migrations.filter((m) => completed.has(m.id)).length;
 
-	for (const migration of migrations) {
+	if (total > 0 && completedCount >= total) {
+		notifyProgress({
+			total,
+			completedCount,
+			currentMigrationIndex: null,
+			status: "completed",
+		});
+		return;
+	}
+
+	notifyProgress({
+		total,
+		completedCount,
+		currentMigrationIndex: null,
+		status: "running",
+	});
+
+	for (let i = 0; i < migrations.length; i++) {
+		const migration = migrations[i];
 		if (completed.has(migration.id)) continue;
+		notifyProgress({
+			total,
+			completedCount,
+			currentMigrationIndex: i + 1,
+			status: "running",
+		});
 		let shouldRetry = false;
 		try {
 			const result = await migration.run();
@@ -103,5 +188,20 @@ export async function runMigrations(
 		if (shouldRetry) continue;
 		completed.add(migration.id);
 		persistCompletedMigrationIds(completed);
+		completedCount++;
+		notifyProgress({
+			total,
+			completedCount,
+			currentMigrationIndex: null,
+			status: "running",
+		});
 	}
+
+	const finalAllDone = total > 0 && completedCount >= total;
+	notifyProgress({
+		total,
+		completedCount,
+		currentMigrationIndex: null,
+		status: finalAllDone ? "completed" : "idle",
+	});
 }

@@ -7,6 +7,7 @@ import {
 	BASENAME_RULE,
 	CATEGORY_RULE,
 	GROCERY_CATEGORY_ENUM_LIST,
+	SCALING_CLASS_RULE,
 } from "./prompt-rules";
 import { portionSizeHint, regionHint } from "./region-hint";
 import type { RecipeContinuationResponse, RecipeResponse } from "./schema";
@@ -39,7 +40,7 @@ const RECIPE_SYSTEM_PROMPT = `You are a recipe generator. Given a user's request
   "difficulty": "quick_and_easy" | "intermediate" | "hard" (how difficult the dish is to make),
   "estimatedMinutes": number (total time to go from start to finished dish, in minutes),
   "caloriesPerServing": number (estimated calories in one serving of the finished dish, based on the ingredients and quantities),
-  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name, e.g. "minced", "chopped", "diced small"; use "" when there is no further detail), "quantity": number, "unit": string (the measure or container the quantity is in, e.g. "cloves", "g", "cups" — NEVER restate the ingredient's own name as its unit, e.g. for "egg" use unit "" not "egg"; use "" when there is genuinely no unit), "category": ${GROCERY_CATEGORY_ENUM_LIST} (see rule below), "approxGramsPerUnit": number | null (only relevant when unit is ""; see rule below) } ],
+  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name, e.g. "minced", "chopped", "diced small"; use "" when there is no further detail), "quantity": number, "unit": string (the measure or container the quantity is in, e.g. "cloves", "g", "cups" — NEVER restate the ingredient's own name as its unit, e.g. for "egg" use unit "" not "egg"; use "" when there is genuinely no unit), "category": ${GROCERY_CATEGORY_ENUM_LIST} (see rule below), "approxGramsPerUnit": number | null (only relevant when unit is ""; see rule below), "scalingClass": "linear" | "sublinear" (see rule below) } ],
   "steps": [ { "section": string | null (e.g. "Prep", "Cook", "Plate"; null if the recipe doesn't warrant grouping), "text": string, "estimatedMinutes": number | null (ONLY for a step that is inherently time-based, e.g. "simmer for 10 minutes", "bake for 25 minutes", "let rest for 5 minutes" — the number of minutes that step takes; use null for every other step, e.g. "mince the garlic", most steps should be null) } ]
 }
 
@@ -51,12 +52,14 @@ ${BASENAME_RULE}
 
 ${CATEGORY_RULE}
 
-${APPROX_WEIGHT_RULE}`;
+${APPROX_WEIGHT_RULE}
+
+${SCALING_CLASS_RULE}`;
 
 const RECIPE_CONTINUATION_SYSTEM_PROMPT = `You are continuing a recipe generation for a dish that got cut off before it was finished. You'll be given the original request plus the ingredients and steps already generated. Respond with ONLY a JSON object (no other text) matching exactly this shape:
 
 {
-  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name, e.g. "minced"; use "" when there is no further detail), "quantity": number, "unit": string (e.g. "cloves", "g", "cups"; use "" if unitless), "category": ${GROCERY_CATEGORY_ENUM_LIST} (see rule below), "approxGramsPerUnit": number | null (only relevant when unit is ""; see rule below) } ],
+  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name, e.g. "minced"; use "" when there is no further detail), "quantity": number, "unit": string (e.g. "cloves", "g", "cups"; use "" if unitless), "category": ${GROCERY_CATEGORY_ENUM_LIST} (see rule below), "approxGramsPerUnit": number | null (only relevant when unit is ""; see rule below), "scalingClass": "linear" | "sublinear" (see rule below) } ],
   "steps": [ { "section": string | null (e.g. "Prep", "Cook", "Plate"; null if the recipe doesn't warrant grouping), "text": string, "estimatedMinutes": number | null (ONLY for a step that is inherently time-based, e.g. "simmer for 10 minutes"; use null for every other step) } ]
 }
 
@@ -66,7 +69,9 @@ ${BASENAME_RULE}
 
 ${CATEGORY_RULE}
 
-${APPROX_WEIGHT_RULE}`;
+${APPROX_WEIGHT_RULE}
+
+${SCALING_CLASS_RULE}`;
 
 const RECIPE_MODIFICATION_SYSTEM_PROMPT = `You are modifying an existing recipe based on a user's instruction (e.g. "make it spicier", "swap shrimp for chicken", "make it vegetarian"). You'll be given the recipe's current title, overview, servings, difficulty, estimated time, ingredients, and steps, plus the requested change. Respond with ONLY a JSON object (no other text) matching exactly this shape:
 
@@ -77,7 +82,7 @@ const RECIPE_MODIFICATION_SYSTEM_PROMPT = `You are modifying an existing recipe 
   "difficulty": "quick_and_easy" | "intermediate" | "hard",
   "estimatedMinutes": number (total time to go from start to finished dish, in minutes),
   "caloriesPerServing": number (estimated calories in one serving of the finished dish, based on the ingredients and quantities),
-  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name; use "" when there is no further detail), "quantity": number, "unit": string (e.g. "cloves", "g", "cups"; use "" if unitless), "category": ${GROCERY_CATEGORY_ENUM_LIST} (see rule below), "approxGramsPerUnit": number | null (only relevant when unit is ""; see rule below) } ],
+  "ingredients": [ { "baseName": string (the grocery-shopping name for the ingredient — see rule below), "description": string (any descriptive/preparation detail separate from the base name; use "" when there is no further detail), "quantity": number, "unit": string (e.g. "cloves", "g", "cups"; use "" if unitless), "category": ${GROCERY_CATEGORY_ENUM_LIST} (see rule below), "approxGramsPerUnit": number | null (only relevant when unit is ""; see rule below), "scalingClass": "linear" | "sublinear" (see rule below) } ],
   "steps": [ { "section": string | null (e.g. "Prep", "Cook", "Plate"; null if the recipe doesn't warrant grouping), "text": string, "estimatedMinutes": number | null (ONLY for a step that is inherently time-based; use null for every other step) } ]
 }
 
@@ -87,7 +92,9 @@ ${BASENAME_RULE}
 
 ${CATEGORY_RULE}
 
-${APPROX_WEIGHT_RULE}`;
+${APPROX_WEIGHT_RULE}
+
+${SCALING_CLASS_RULE}`;
 
 export type GenerateRecipeResult =
 	| { type: "off_topic" }

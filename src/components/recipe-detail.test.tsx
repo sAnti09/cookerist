@@ -103,7 +103,7 @@ describe("RecipeDetail", () => {
 		);
 
 		expect(screen.getByText("450 g")).toBeInTheDocument();
-		expect(screen.getByText("6 cloves")).toBeInTheDocument();
+		expect(screen.getByText("5.1 cloves")).toBeInTheDocument();
 	});
 
 	it("does not decrease servings below 1", async () => {
@@ -257,6 +257,7 @@ describe("RecipeDetail", () => {
 				unit: "g",
 				category: "Other",
 				approxGramsPerUnit: null,
+				scalingClass: "linear",
 			},
 			{
 				baseName: "garlic",
@@ -265,6 +266,7 @@ describe("RecipeDetail", () => {
 				unit: "cloves",
 				category: "Other",
 				approxGramsPerUnit: null,
+				scalingClass: "linear",
 			},
 		]);
 	});

@@ -21,6 +21,7 @@ describe("toWireIngredient", () => {
 			unit: "cloves",
 			category: "Other",
 			approxGramsPerUnit: null,
+			scalingClass: "linear",
 		});
 	});
 
@@ -39,6 +40,21 @@ describe("toWireIngredient", () => {
 		expect(toWireIngredient(ingredient).category).toBe("Produce");
 	});
 
+	it("carries an explicit scalingClass through unchanged", () => {
+		const ingredient: Ingredient = {
+			id: "ing-1",
+			text: "garlic",
+			baseName: "garlic",
+			description: "",
+			quantity: 4,
+			unit: "cloves",
+			checked: false,
+			scalingClass: "sublinear",
+		};
+
+		expect(toWireIngredient(ingredient).scalingClass).toBe("sublinear");
+	});
+
 	it("falls back to text as baseName and empty description when both are absent (pre-TEST-255)", () => {
 		const ingredient: Ingredient = {
 			id: "ing-1",
@@ -55,6 +71,7 @@ describe("toWireIngredient", () => {
 			unit: "g",
 			category: "Other",
 			approxGramsPerUnit: null,
+			scalingClass: "linear",
 		});
 	});
 

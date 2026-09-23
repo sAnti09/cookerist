@@ -5,6 +5,7 @@ import {
 	BASENAME_RULE,
 	CATEGORY_RULE,
 	GROCERY_CATEGORY_ENUM_LIST,
+	SCALING_CLASS_RULE,
 } from "./prompt-rules";
 import {
 	type CategorizeIngredientsResponse,
@@ -21,6 +22,7 @@ const CATEGORIZE_INGREDIENTS_SYSTEM_PROMPT = `You clean up a batch of already-ge
 1. Check whether baseName/description already follow the rule below. If they already do, return them completely unchanged (byte-for-byte — do not rephrase for style, casing, or wording alone). If baseName violates it — e.g. it bakes in a preparation method that belongs in description, or lumps together what should be separate baseNames (different cuts/forms/products), or uses the wrong plurality — correct baseName and move any misplaced detail into description.
 2. Assign a "category" from the fixed list in the rule below.
 3. Give an "approxGramsPerUnit" per the rule below — this is a property of the ingredient itself (how much one whole piece weighs), independent of which unit any particular recipe happened to use it with.
+4. Assign a "scalingClass" ("linear" | "sublinear") per the rule below.
 
 ${BASENAME_RULE}
 
@@ -28,8 +30,10 @@ ${CATEGORY_RULE}
 
 ${APPROX_WEIGHT_RULE}
 
+${SCALING_CLASS_RULE}
+
 Respond with ONLY a JSON object (no other text) of the exact shape:
-{ "items": [ { "id": number (echo the input item's id exactly, unchanged), "baseName": string, "description": string, "category": ${GROCERY_CATEGORY_ENUM_LIST}, "approxGramsPerUnit": number | null } ] }
+{ "items": [ { "id": number (echo the input item's id exactly, unchanged), "baseName": string, "description": string, "category": ${GROCERY_CATEGORY_ENUM_LIST}, "approxGramsPerUnit": number | null, "scalingClass": "linear" | "sublinear" } ] }
 
 Return exactly one output item per input item — never merge, split, drop, or add items — matched back by id, in any order.`;
 

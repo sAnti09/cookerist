@@ -251,6 +251,8 @@ export function aggregateGroceryItems(
 				ingredient.quantity,
 				recipe.baseServings,
 				recipe.currentServings,
+				ingredient.scalingClass,
+				baseName,
 			);
 
 			// A mass unit always joins the mass bucket (grams). A volume or

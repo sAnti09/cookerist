@@ -5,6 +5,7 @@ import {
 import {
 	CATEGORIZE_RECIPE_INGREDIENTS_APPROX_WEIGHT_MIGRATION_ID,
 	CATEGORIZE_RECIPE_INGREDIENTS_MIGRATION_ID,
+	CATEGORIZE_RECIPE_INGREDIENTS_SCALING_CLASS_MIGRATION_ID,
 	categorizeRecipeIngredients,
 } from "./categorize-recipe-ingredients";
 import {
@@ -21,11 +22,17 @@ import {
 	REAGGREGATE_GROCERY_LISTS_LIQUID_HYBRID_FIX_MIGRATION_ID,
 	REAGGREGATE_GROCERY_LISTS_LIQUID_PRIORITY_FIX_MIGRATION_ID,
 	REAGGREGATE_GROCERY_LISTS_MIGRATION_ID,
+	REAGGREGATE_GROCERY_LISTS_SCALING_CLASS_MIGRATION_ID,
 	reaggregateGroceryLists,
 } from "./reaggregate-grocery-lists";
-import type { Migration } from "./run-migrations";
+import { initMigrationProgress, type Migration } from "./run-migrations";
 
-export { runMigrations } from "./run-migrations";
+export {
+	initMigrationProgress,
+	type MigrationProgress,
+	runMigrations,
+	useMigrationProgress,
+} from "./run-migrations";
 
 // Every migration Cookerist has ever shipped, in the order they should run.
 // Add new ones to the end — never remove or reorder an existing entry, since
@@ -96,4 +103,19 @@ export const MIGRATIONS: readonly Migration[] = [
 		id: GENERATE_RECIPE_THUMBNAILS_MIGRATION_ID,
 		run: generateRecipeThumbnails,
 	},
+	// Re-runs categorizeRecipeIngredients now that it also asks Groq for
+	// scalingClass ("linear" | "sublinear") to enable sub-linear scaling for
+	// pan aromatics, spices, and cooking fats on already-saved recipes.
+	{
+		id: CATEGORIZE_RECIPE_INGREDIENTS_SCALING_CLASS_MIGRATION_ID,
+		run: categorizeRecipeIngredients,
+	},
+	// Re-runs re-aggregation to recalculate grocery lists with the new sub-linear
+	// scaling applied to aromatics and seasonings.
+	{
+		id: REAGGREGATE_GROCERY_LISTS_SCALING_CLASS_MIGRATION_ID,
+		run: reaggregateGroceryLists,
+	},
 ];
+
+initMigrationProgress(MIGRATIONS);

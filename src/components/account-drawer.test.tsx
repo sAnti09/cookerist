@@ -13,6 +13,11 @@ vi.mock("#/lib/app-data-context", () => ({
 	useAppData: () => useAppDataMock(),
 }));
 
+const useMigrationProgressMock = vi.fn();
+vi.mock("#/lib/migrations", () => ({
+	useMigrationProgress: () => useMigrationProgressMock(),
+}));
+
 const createPairingCodeMock = vi.fn();
 const linkDeviceMock = vi.fn();
 const syncNowMock = vi.fn();
@@ -30,6 +35,12 @@ beforeEach(() => {
 		linkDevice: linkDeviceMock,
 		syncNow: syncNowMock,
 		redeemShareCode: redeemShareCodeMock,
+	});
+	useMigrationProgressMock.mockReturnValue({
+		total: 12,
+		completedCount: 12,
+		currentMigrationIndex: null,
+		status: "completed",
 	});
 });
 
@@ -339,5 +350,39 @@ describe("AccountDrawer", () => {
 		);
 
 		expect(onClose).toHaveBeenCalled();
+	});
+
+	it("renders all migrations done in the footer when migrations are completed", () => {
+		render(<AccountDrawer open={true} onClose={vi.fn()} />);
+
+		expect(
+			screen.getByText(/v(dev|[0-9a-f]+) · all migrations done/i),
+		).toBeInTheDocument();
+	});
+
+	it("renders running migration progress when status is running", () => {
+		useMigrationProgressMock.mockReturnValue({
+			total: 12,
+			completedCount: 3,
+			currentMigrationIndex: 4,
+			status: "running",
+		});
+
+		render(<AccountDrawer open={true} onClose={vi.fn()} />);
+
+		expect(screen.getByText(/running migration 4 of 12/i)).toBeInTheDocument();
+	});
+
+	it("renders pending count when migrations are incomplete", () => {
+		useMigrationProgressMock.mockReturnValue({
+			total: 12,
+			completedCount: 5,
+			currentMigrationIndex: null,
+			status: "idle",
+		});
+
+		render(<AccountDrawer open={true} onClose={vi.fn()} />);
+
+		expect(screen.getByText(/5 of 12 migrations done/i)).toBeInTheDocument();
 	});
 });

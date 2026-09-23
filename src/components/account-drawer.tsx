@@ -15,10 +15,12 @@ import { useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Wordmark } from "#/components/wordmark";
 import { useAppData } from "#/lib/app-data-context";
+import { useMigrationProgress } from "#/lib/migrations";
 import { canShareNatively, shareNatively } from "#/lib/share-native";
 import { RESOURCE_TABLE_LABEL } from "#/lib/sync/share-status";
 import type { SyncTable } from "#/lib/sync/sync-client";
 import { useBodyScrollLock } from "#/lib/use-body-scroll-lock";
+import { APP_VERSION } from "#/lib/version";
 
 type AccountDrawerProps = {
 	open: boolean;
@@ -51,6 +53,7 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 		syncNow,
 		redeemShareCode,
 	} = useAppData();
+	const migrationProgress = useMigrationProgress();
 	const [openRow, setOpenRow] = useState<RowKey | null>(null);
 	const [pairingCode, setPairingCode] = useState<{
 		code: string;
@@ -395,6 +398,34 @@ export function AccountDrawer({ open, onClose }: AccountDrawerProps) {
 						) : null}
 					</AccordionRow>
 				</div>
+
+				<footer className="mt-auto border-t border-line/60 pt-4 pb-1 text-center text-xs text-ink-dim">
+					{migrationProgress.status === "running" ? (
+						<span className="inline-flex items-center gap-1.5">
+							<RefreshCw
+								className="size-3 animate-spin text-accent"
+								aria-hidden="true"
+							/>
+							{APP_VERSION} · Running migration{" "}
+							{migrationProgress.currentMigrationIndex ??
+								migrationProgress.completedCount + 1}{" "}
+							of {migrationProgress.total}…
+						</span>
+					) : migrationProgress.total > 0 &&
+						migrationProgress.completedCount >= migrationProgress.total ? (
+						<span>
+							{APP_VERSION} · All migrations done ({migrationProgress.total}/
+							{migrationProgress.total})
+						</span>
+					) : migrationProgress.total > 0 ? (
+						<span>
+							{APP_VERSION} · {migrationProgress.completedCount} of{" "}
+							{migrationProgress.total} migrations done
+						</span>
+					) : (
+						<span>{APP_VERSION}</span>
+					)}
+				</footer>
 			</div>
 		</div>
 	);

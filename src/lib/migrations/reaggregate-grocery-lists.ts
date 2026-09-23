@@ -51,6 +51,13 @@ export const REAGGREGATE_GROCERY_LISTS_LIQUID_PRIORITY_FIX_MIGRATION_ID =
 export const REAGGREGATE_GROCERY_LISTS_LIQUID_HYBRID_FIX_MIGRATION_ID =
 	"reaggregate-grocery-lists-liquid-hybrid-fix";
 
+// A sixth id: needed after sub-linear scaling for aromatics, spices, and
+// cooking fats was introduced (see CATEGORIZE_RECIPE_INGREDIENTS_SCALING_CLASS_MIGRATION_ID)
+// — a stored list won't reflect the new sub-linear ingredient quantities
+// until it's re-aggregated against that newly-scaled data.
+export const REAGGREGATE_GROCERY_LISTS_SCALING_CLASS_MIGRATION_ID =
+	"reaggregate-grocery-lists-sublinear-scaling";
+
 // A GroceryList's items are computed once (by aggregateGroceryItems) and
 // persisted as-is (see grocery-list.ts) — never re-derived from its recipes
 // on an ordinary page load, only when the user re-opens the list via "Edit"
