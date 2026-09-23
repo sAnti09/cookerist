@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	applyMealPlanDateRange,
+	canonicalDishTitle,
 	cycleSlot,
 	DEFAULT_ENABLED_MEAL_TYPES,
 	defaultSlots,
@@ -368,6 +369,39 @@ function makeDraftLikeEntry(
 	};
 }
 
+describe("canonicalDishTitle", () => {
+	it("normalizes case and collapses extra whitespace", () => {
+		expect(canonicalDishTitle("  Sinigang   na  Baboy  ")).toBe(
+			"sinigang na baboy",
+		);
+	});
+
+	it("strips parenthetical translations or descriptions", () => {
+		expect(
+			canonicalDishTitle("Sinigang na Baboy (Pork in Tamarind Broth)"),
+		).toBe("sinigang na baboy");
+	});
+
+	it("strips subtitle suffixes after dash, colon, or em-dash", () => {
+		expect(canonicalDishTitle("Sinigang na Baboy - Filipino Sour Soup")).toBe(
+			"sinigang na baboy",
+		);
+		expect(canonicalDishTitle("Sinigang na Baboy: Classic Pork Stew")).toBe(
+			"sinigang na baboy",
+		);
+		expect(canonicalDishTitle("Sinigang na Baboy — Pork Tamarind Soup")).toBe(
+			"sinigang na baboy",
+		);
+	});
+
+	it("strips punctuation while preserving letters with accents", () => {
+		expect(canonicalDishTitle("Piña Colada!")).toBe("piña colada");
+		expect(canonicalDishTitle("Pork & Chicken Adobo")).toBe(
+			"pork chicken adobo",
+		);
+	});
+});
+
 describe("diffMealPlanEntries", () => {
 	it("marks a same-slot entry with identical title/overview as unchanged", () => {
 		const entry = makeDraftLikeEntry();
@@ -377,7 +411,37 @@ describe("diffMealPlanEntries", () => {
 		expect(diffs).toEqual([{ ...entry, status: "unchanged" }]);
 	});
 
-	it("marks a same-slot entry with a different title or overview as edited, keeping the before values", () => {
+	it("marks a same-slot entry with identical title but rephrased overview as unchanged", () => {
+		const before = makeDraftLikeEntry({
+			title: "Sinigang na Baboy",
+			overview: "Classic pork tamarind soup with kangkong.",
+		});
+		const after = makeDraftLikeEntry({
+			title: "Sinigang na Baboy",
+			overview: "Savory sour broth with tender pork.",
+		});
+
+		const diffs = diffMealPlanEntries([before], [after]);
+
+		expect(diffs).toEqual([{ ...after, status: "unchanged" }]);
+	});
+
+	it("marks a same-slot entry with canonical title match as unchanged (ignoring parentheticals)", () => {
+		const before = makeDraftLikeEntry({
+			title: "Sinigang na Baboy",
+			overview: "Classic pork soup.",
+		});
+		const after = makeDraftLikeEntry({
+			title: "Sinigang na Baboy (Pork Tamarind Soup)",
+			overview: "A sour broth.",
+		});
+
+		const diffs = diffMealPlanEntries([before], [after]);
+
+		expect(diffs).toEqual([{ ...after, status: "unchanged" }]);
+	});
+
+	it("marks a same-slot entry with a different title as edited, keeping the before values", () => {
 		const before = makeDraftLikeEntry({ title: "Overnight Oats" });
 		const after = makeDraftLikeEntry({ title: "Tofu Scramble" });
 

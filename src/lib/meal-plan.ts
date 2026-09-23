@@ -478,6 +478,22 @@ export function mealPlanSlotKey(entry: {
 	return `${entry.day}|${entry.mealType}|${entry.slotIndex}`;
 }
 
+// Canonicalizes a dish title for comparison across meal-plan drafts and
+// cookbook matches. Strips parenthetical translations/notes (e.g. "(Pork Tamarind Soup)"),
+// subtitle suffixes (e.g. " - Filipino Style", ": Classic Stew"), punctuation,
+// and collapses whitespace, so minor phrasing differences in the AI's title
+// don't break reuse or falsely mark an entry as edited.
+export function canonicalDishTitle(title: string): string {
+	const cleaned = title
+		.toLowerCase()
+		.replace(/\s*\([^)]*\)/g, "")
+		.replace(/\s*[-—:].*$/, "")
+		.replace(/[^\p{L}\p{N}\s]/gu, "")
+		.replace(/\s+/g, " ")
+		.trim();
+	return cleaned || title.trim().toLowerCase();
+}
+
 // Compares a refine call's before/after entry lists to classify every slot
 // as carried over unchanged, edited in place, newly inserted, or dropped —
 // drives the draft screen's diff-indicator styling once a refine completes.
@@ -485,6 +501,12 @@ export function mealPlanSlotKey(entry: {
 // regenerated fresh on every refine (see meal-plan-draft.tsx), so the slot
 // triple Groq echoes back is the only stable correlation key across a
 // refine round.
+//
+// Dish equality compares canonical titles ONLY (not description/overview):
+// a recipe's identity is defined by what dish it is, not whether the AI
+// subtly rephrased its 1-sentence overview when echoing the plan back.
+// Matching solely on title prevents unchanged dishes from being marked
+// "edited" (which would wipe their recipeId and trigger duplicate generation).
 export function diffMealPlanEntries(
 	previous: MealPlanDraftLikeEntry[],
 	next: MealPlanDraftLikeEntry[],
@@ -497,7 +519,9 @@ export function diffMealPlanEntries(
 	const diffs: MealPlanEntryDiff[] = next.map((entry) => {
 		const before = previousByKey.get(mealPlanSlotKey(entry));
 		if (!before) return { ...entry, status: "inserted" };
-		if (before.title !== entry.title || before.overview !== entry.overview) {
+		const sameDish =
+			canonicalDishTitle(before.title) === canonicalDishTitle(entry.title);
+		if (!sameDish) {
 			return {
 				...entry,
 				status: "edited",

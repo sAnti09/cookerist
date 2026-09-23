@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { AiProvider } from "#/lib/ai/client";
-import type { MealPlan, MealPlanEntry } from "#/lib/meal-plan";
+import {
+	canonicalDishTitle,
+	type MealPlan,
+	type MealPlanEntry,
+} from "#/lib/meal-plan";
 import type { Recipe } from "#/lib/recipe";
 import { toStoredRecipe } from "#/lib/recipes-storage";
 import { getUserTimezone } from "#/lib/user-region";
@@ -62,16 +66,23 @@ function findExistingRecipe(
 	suggestedTitle: string,
 ): Recipe | undefined {
 	const normalized = suggestedTitle.trim().toLowerCase();
-	return recipes.find(
+	const exactMatch = recipes.find(
 		(recipe) => recipe.title.trim().toLowerCase() === normalized,
+	);
+	if (exactMatch) return exactMatch;
+
+	const targetCanonical = canonicalDishTitle(suggestedTitle);
+	if (!targetCanonical) return undefined;
+
+	return recipes.find(
+		(recipe) => canonicalDishTitle(recipe.title) === targetCanonical,
 	);
 }
 
 // Resolves one entry: reuse an existing saved recipe whose title matches
-// (case-insensitive, trimmed exact match — "no entry beats a wrong guess",
-// same philosophy as ingredient-density.ts), or generate a brand-new one via
-// the normal recipe pipeline. Never throws — a Groq failure becomes a
-// "failed" entry with buildError set, same shape as the caller expects for
+// (case-insensitive exact or canonical title match), or generate a brand-new
+// one via the normal recipe pipeline. Never throws — a Groq failure becomes
+// a "failed" entry with buildError set, same shape as the caller expects for
 // a real off-topic/malformed-response result.
 async function resolveEntry(
 	entry: MealPlanEntry,
@@ -81,6 +92,29 @@ async function resolveEntry(
 	onUpdateRecipe: (recipe: Recipe) => void,
 	provider: AiProvider,
 ): Promise<MealPlanEntry> {
+	if (entry.recipeId) {
+		const existingById = recipes.find((recipe) => recipe.id === entry.recipeId);
+		if (
+			existingById &&
+			canonicalDishTitle(existingById.title) ===
+				canonicalDishTitle(entry.suggestedTitle)
+		) {
+			if (existingById.currentServings !== plan.defaultServings) {
+				onUpdateRecipe({
+					...existingById,
+					currentServings: plan.defaultServings,
+				});
+			}
+			return {
+				...entry,
+				status: "ready",
+				recipeId: existingById.id,
+				reused: true,
+				buildError: undefined,
+			};
+		}
+	}
+
 	const existing = findExistingRecipe(recipes, entry.suggestedTitle);
 	if (existing) {
 		if (existing.currentServings !== plan.defaultServings) {

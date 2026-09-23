@@ -165,6 +165,42 @@ describe("useBuildMealPlan", () => {
 		});
 	});
 
+	it("reuses an existing recipe when the suggested title matches canonically", async () => {
+		const existing = makeRecipe({
+			id: "existing-recipe",
+			title: "Sinigang na Baboy",
+			currentServings: 4,
+		});
+		const plan = makePlan({
+			entries: [
+				makeEntry({
+					suggestedTitle: "Sinigang na Baboy (Pork Tamarind Soup)",
+					suggestedOverview: "A savory sour soup.",
+				}),
+			],
+		});
+		const onUpdatePlan = vi.fn();
+
+		renderHook(() =>
+			useBuildMealPlan(plan, {
+				recipes: [existing],
+				onUpdatePlan,
+				onCreateRecipe: vi.fn(),
+				onUpdateRecipe: vi.fn(),
+			}),
+		);
+
+		await waitFor(() => expect(onUpdatePlan).toHaveBeenCalled());
+
+		expect(generateRecipeMock).not.toHaveBeenCalled();
+		const finalPlan = onUpdatePlan.mock.calls.at(-1)?.[0] as MealPlan;
+		expect(finalPlan.entries[0]).toMatchObject({
+			status: "ready",
+			recipeId: "existing-recipe",
+			reused: true,
+		});
+	});
+
 	it("rescales a reused recipe's servings to the plan default", async () => {
 		const existing = makeRecipe({ id: "existing-recipe", currentServings: 2 });
 		const plan = makePlan({ defaultServings: 6 });
