@@ -15,7 +15,10 @@
   // just "absent = enabled" like it was before `routes` existed.
   "workers_dev": true,
   "vars": {
-    "AI_PROVIDER": "groq",
+    // Temporarily routing everything to OpenRouter -- flip back to "groq"
+    // when done. Failover in src/lib/ai/client.ts would still fall back to
+    // Groq on an OpenRouter error as long as GROQ_API_KEY stays configured.
+    "AI_PROVIDER": "openrouter",
     // The R2 bucket's public base URL (r2.dev subdomain or custom domain) --
     // see CLAUDE.md's "Recipe thumbnail images" manual one-time setup. Not
     // sensitive, so a var, not a secret -- must stay a plain var here (never
