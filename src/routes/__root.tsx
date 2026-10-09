@@ -20,6 +20,12 @@ const SITE_DESCRIPTION =
 	"Type a dish — or the ingredients you have — and get a full recipe in seconds. Ingredients, steps, and a grocery list, saved right in your browser.";
 const OG_IMAGE_URL = `${SITE_URL}/og-image.png`;
 
+// Meta Pixel ID -- public (visible in every page's source/network tab
+// regardless), same "not a secret" treatment as the Cloudflare beacon token
+// below. Also used by src/lib/meta-pixel.ts's trackMetaPixelEvent for custom
+// conversion events (e.g. recipe generation).
+export const META_PIXEL_ID = "1986812921987752";
+
 export const Route = createRootRouteWithContext<MyRouterContext>()({
 	head: () => ({
 		meta: [
@@ -53,6 +59,13 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 			{
 				name: "apple-mobile-web-app-title",
 				content: "Cookerist",
+			},
+			// Proves domain ownership to Meta Business Settings -> Brand
+			// Safety -> Domains, needed for Advantage+ audiences and
+			// aggregated event measurement on the Meta Pixel.
+			{
+				name: "facebook-domain-verification",
+				content: "ak2bp6eghj6j6mzhzply5ue7c8rclg",
 			},
 			// Open Graph (Facebook, LinkedIn, Discord, iMessage, etc.)
 			{
@@ -137,12 +150,26 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 		// CORS-rejects beacon calls from any other origin (e.g. localhost) --
 		// only load it for a production build so local dev doesn't spam the
 		// console with failed https://cloudflareinsights.com/cdn-cgi/rum calls.
+		// The Meta Pixel has no such CORS rejection, but is gated the same way
+		// regardless -- no reason to send dev/localhost traffic to Meta at all.
 		scripts: import.meta.env.PROD
 			? [
 					{
 						type: "module",
 						src: "https://static.cloudflareinsights.com/beacon.min.js",
 						"data-cf-beacon": '{"token": "8f4009aedfcd4d4bb9069c55df8a9734"}',
+					},
+					{
+						children: `!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window, document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '${META_PIXEL_ID}');
+fbq('track', 'PageView');`,
 					},
 				]
 			: [],
@@ -166,6 +193,17 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 				/>
 			</head>
 			<body>
+				{import.meta.env.PROD && (
+					<noscript>
+						<img
+							height="1"
+							width="1"
+							style={{ display: "none" }}
+							src={`https://www.facebook.com/tr?id=${META_PIXEL_ID}&ev=PageView&noscript=1`}
+							alt=""
+						/>
+					</noscript>
+				)}
 				<QueryClientProvider client={queryClient}>
 					{children}
 					<TanStackDevtools

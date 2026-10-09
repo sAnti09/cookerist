@@ -33,6 +33,7 @@ import {
 	updateMealPlan,
 	upsertMealPlans,
 } from "#/lib/meal-plan-storage";
+import { trackMetaPixelEvent } from "#/lib/meta-pixel";
 import { MIGRATIONS, runMigrations } from "#/lib/migrations";
 import { MAX_THUMBNAIL_ATTEMPTS, type Recipe } from "#/lib/recipe";
 import {
@@ -555,6 +556,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 		(recipe: Recipe) => {
 			setRecipes((current) => saveRecipe(current, recipe));
 			scheduleSync(["recipes"]);
+			// Single choke point every "a recipe was actually generated" path
+			// (prompt submit, modification, meal-plan entry) funnels through --
+			// the one conversion signal that matters for judging ad spend.
+			trackMetaPixelEvent("RecipeGenerated");
 		},
 		[scheduleSync],
 	);
